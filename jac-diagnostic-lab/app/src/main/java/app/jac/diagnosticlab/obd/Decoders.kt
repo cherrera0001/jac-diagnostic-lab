@@ -171,37 +171,54 @@ data class PidReading(
     val valid: Boolean,
     val suspect: Boolean,
     val note: String,
+    val standardName: String = name,
+    val interpretationStatus: InterpretationStatus = InterpretationStatus.SUPPORTED,
+    val physicalSignal: String = name,
 )
 
 object PidDecoder {
     private data class Spec(
         val pid: Int,
         val name: String,
+        val standardName: String,
+        val physicalSignal: String,
         val size: Int,
         val unit: String,
         val scale: (List<Int>) -> Double,
         val suspect: (Double) -> Boolean = { false },
+        val interpretationStatus: InterpretationStatus = InterpretationStatus.SUPPORTED,
     )
 
     private val specs = listOf(
-        Spec(0x04, "Carga calculada", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
-        Spec(0x05, "Temperatura del refrigerante", 1, "°C", { it[0] - 40.0 }, { it < -40 || it > 150 }),
-        Spec(0x06, "Ajuste de combustible a corto plazo", 1, "%", { (it[0] - 128) * 100.0 / 128.0 }),
-        Spec(0x07, "Ajuste de combustible a largo plazo", 1, "%", { (it[0] - 128) * 100.0 / 128.0 }),
-        Spec(0x0B, "Presión del colector", 1, "kPa", { it[0].toDouble() }, { it > 255 }),
-        Spec(0x0C, "Régimen del motor", 2, "rpm", { (it[0] * 256 + it[1]) / 4.0 }, { it > 8000 }),
-        Spec(0x0D, "Velocidad", 1, "km/h", { it[0].toDouble() }),
-        Spec(0x0E, "Avance de encendido", 1, "°", { it[0] / 2.0 - 64.0 }),
-        Spec(0x0F, "Temperatura de admisión", 1, "°C", { it[0] - 40.0 }),
-        Spec(0x10, "Flujo de aire", 2, "g/s", { (it[0] * 256 + it[1]) / 100.0 }),
-        Spec(0x11, "Posición del acelerador", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
-        Spec(0x1F, "Tiempo de marcha", 2, "s", { (it[0] * 256 + it[1]).toDouble() }),
-        Spec(0x21, "Distancia con MIL", 2, "km", { (it[0] * 256 + it[1]).toDouble() }),
-        Spec(0x2F, "Nivel de combustible", 1, "%", { it[0] * 100.0 / 255.0 }),
-        Spec(0x33, "Presión barométrica", 1, "kPa", { it[0].toDouble() }),
-        Spec(0x42, "Tensión del módulo", 2, "V", { (it[0] * 256 + it[1]) / 1000.0 }, { it < 6 || it > 18 }),
-        Spec(0x46, "Temperatura ambiente", 1, "°C", { it[0] - 40.0 }),
-        Spec(0x5C, "Temperatura de aceite", 1, "°C", { it[0] - 40.0 }),
+        Spec(0x04, "Carga calculada", "Calculated Load Value", "Carga calculada del motor", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
+        Spec(0x05, "Temperatura del refrigerante", "Engine Coolant Temperature", "Temperatura del refrigerante", 1, "°C", { it[0] - 40.0 }, { it < -40 || it > 150 }),
+        Spec(0x06, "Ajuste de combustible a corto plazo", "Short Term Fuel Trim", "STFT", 1, "%", { (it[0] - 128) * 100.0 / 128.0 }),
+        Spec(0x07, "Ajuste de combustible a largo plazo", "Long Term Fuel Trim", "LTFT", 1, "%", { (it[0] - 128) * 100.0 / 128.0 }),
+        Spec(0x0B, "Presión del colector", "Intake Manifold Absolute Pressure", "MAP", 1, "kPa", { it[0].toDouble() }, { it > 255 }),
+        Spec(0x0C, "Régimen del motor", "Engine RPM", "RPM", 2, "rpm", { (it[0] * 256 + it[1]) / 4.0 }, { it > 8000 }),
+        Spec(0x0D, "Velocidad", "Vehicle Speed", "Velocidad del vehículo", 1, "km/h", { it[0].toDouble() }),
+        Spec(0x0E, "Avance de encendido", "Timing Advance", "Avance de encendido", 1, "°", { it[0] / 2.0 - 64.0 }),
+        Spec(0x0F, "Temperatura de admisión", "Intake Air Temperature", "IAT", 1, "°C", { it[0] - 40.0 }),
+        Spec(0x10, "Flujo de aire", "MAF Air Flow Rate", "MAF", 2, "g/s", { (it[0] * 256 + it[1]) / 100.0 }),
+        // DIAG-001: SAE J1979 PID 0x11 = Absolute Throttle Position (mariposa), NO Accelerator Pedal Position.
+        Spec(
+            0x11,
+            "Posición absoluta de mariposa",
+            "Absolute Throttle Position",
+            "Posición de mariposa (Throttle Position Sensor), no pedal de acelerador",
+            1,
+            "%",
+            { it[0] * 100.0 / 255.0 },
+            { it < 0 || it > 100 },
+            InterpretationStatus.SUPPORTED,
+        ),
+        Spec(0x1F, "Tiempo de marcha", "Run Time Since Engine Start", "Tiempo desde arranque", 2, "s", { (it[0] * 256 + it[1]).toDouble() }),
+        Spec(0x21, "Distancia con MIL", "Distance Traveled with MIL On", "Distancia con MIL", 2, "km", { (it[0] * 256 + it[1]).toDouble() }),
+        Spec(0x2F, "Nivel de combustible", "Fuel Tank Level Input", "Nivel de combustible", 1, "%", { it[0] * 100.0 / 255.0 }),
+        Spec(0x33, "Presión barométrica", "Absolute Barometric Pressure", "Baro", 1, "kPa", { it[0].toDouble() }),
+        Spec(0x42, "Tensión del módulo", "Control Module Voltage", "Tensión módulo", 2, "V", { (it[0] * 256 + it[1]) / 1000.0 }, { it < 6 || it > 18 }),
+        Spec(0x46, "Temperatura ambiente", "Ambient Air Temperature", "Ambiente", 1, "°C", { it[0] - 40.0 }),
+        Spec(0x5C, "Temperatura de aceite", "Engine Oil Temperature", "Aceite", 1, "°C", { it[0] - 40.0 }),
     ).associateBy { it.pid }
 
     fun supported(base: Int, data: List<Int>): Set<Int> {
@@ -219,32 +236,47 @@ object PidDecoder {
     fun decode(pid: Int, exchange: Exchange): PidReading {
         val spec = specs[pid]
         val name = spec?.name ?: "PID %02X".format(pid)
+        val standard = spec?.standardName ?: name
+        val physical = spec?.physicalSignal ?: name
+        val status = spec?.interpretationStatus ?: InterpretationStatus.UNKNOWN
         if (exchange.kind == ResponseKind.NO_DATA) {
-            return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, "NO DATA. No se usa cero como valor.")
+            return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, "NO DATA. No se usa cero como valor.", standard, InterpretationStatus.INCONCLUSIVE, physical)
         }
         if (exchange.kind != ResponseKind.OBD_DATA) {
-            return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, exchange.detail)
+            return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, exchange.detail, standard, InterpretationStatus.INCONCLUSIVE, physical)
         }
         val payload = exchange.frames.firstOrNull { it.payload.size >= 2 && it.payload[0] == 0x41 && it.payload[1] == pid }?.payload
-            ?: return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, "La respuesta no contiene 41 %02X.".format(pid))
+            ?: return PidReading(pid, name, emptyList(), null, spec?.unit, false, false, "La respuesta no contiene 41 %02X.".format(pid), standard, InterpretationStatus.INCONCLUSIVE, physical)
         val data = payload.drop(2)
         if (pid == 0x00 || pid == 0x20 || pid == 0x40 || pid == 0x60 || pid == 0x80 || pid == 0xA0 || pid == 0xC0) {
             if (data.size < 4) return PidReading(pid, "PIDs soportados", data, null, null, false, false, "Faltan bytes del mapa.")
             return PidReading(pid, "PIDs soportados", data.take(4), null, null, true, false, "Mapa de soporte, no es una medición física.")
         }
         if (spec == null) {
-            return PidReading(pid, name, data, null, null, false, false, "Bytes originales conservados. Fórmula SAE J1979 no incluida para este PID.")
+            return PidReading(pid, name, data, null, null, false, false, "Bytes originales conservados. Fórmula SAE J1979 no incluida para este PID.", name, InterpretationStatus.UNKNOWN, name)
         }
         if (data.size < spec.size) {
-            return PidReading(pid, name, data, null, spec.unit, false, false, "Faltan bytes. No se calculó un valor.")
+            return PidReading(pid, name, data, null, spec.unit, false, false, "Faltan bytes. No se calculó un valor.", standard, InterpretationStatus.INCONCLUSIVE, physical)
         }
         val slice = data.take(spec.size)
         val value = spec.scale(slice)
         val suspect = spec.suspect(value)
-        return PidReading(
-            pid, name, slice, value, spec.unit, true, suspect,
-            if (suspect) "Valor fuera del rango habitual. Se muestra igual, no se reemplaza por cero." else "Fórmula SAE J1979.",
-        )
+        val baseNote = if (suspect) {
+            "Valor fuera del rango habitual. Se muestra igual, no se reemplaza por cero."
+        } else {
+            "Fórmula SAE J1979. Señal: $physical."
+        }
+        return PidReading(pid, name, slice, value, spec.unit, true, suspect, baseNote, standard, status, physical)
+    }
+
+    /** DIAG-002: nota contextual; no condena falla. */
+    fun plausibilityNote(pid: Int, value: Double?, rpm: Double?, speedKmh: Double?): String? {
+        if (pid != 0x11 || value == null) return null
+        if (rpm != null && rpm in 500.0..1200.0 && (speedKmh == null || speedKmh == 0.0) && value >= 70.0) {
+            return "Nota de plausibilidad contextual (DIAG-002): PID 0x11 (posición absoluta de mariposa) ≈ %.1f %% con ~%.0f rpm y 0 km/h. " +
+                "No se clasifica automáticamente como falla. Revisar mapeo de señal, ECU origen y convención del vehículo.".format(value, rpm)
+        }
+        return null
     }
 }
 

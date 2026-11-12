@@ -232,6 +232,8 @@ data class ReadingFacts(
     val storedCodes: List<String>,
     val ecuTalking: Boolean,
     val bleValidated: Boolean = false,
+    val declaredModel: String = "",
+    val declaredYear: String = "",
 )
 
 data class ReadingReportDocument(
@@ -291,39 +293,75 @@ fun payloadHasContent(
     }
 }
 
+fun interpretationLines(codes: List<String>, model: String, year: String): List<String> {
+    val unique = codes.map { it.trim().uppercase() }.filter { it.isNotBlank() }.distinct()
+    val vehicle = when {
+        model.isNotBlank() && year.isNotBlank() -> "${model.trim()}, año ${year.trim()}"
+        model.isNotBlank() -> model.trim()
+        year.isNotBlank() -> "año ${year.trim()}"
+        else -> ""
+    }
+    return buildList {
+        add("Los números salen de la camioneta. Las palabras no.")
+        add("Esta aplicación no se conecta a internet para buscarlos. Usa una ficha local: la definición pública de esos números, y lo que se pudo abrir de JAC el 11-11-2026. Si el número no está en la ficha, no se inventa la frase.")
+        if (vehicle.isNotBlank()) {
+            add("Declaraste $vehicle. Ese dato tampoco salió de la computadora. Las fuentes abiertas revisadas no traen el texto de estos números para esa unidad.")
+        }
+        if (unique.isEmpty()) {
+            add("En esta copia no hay avisos guardados que interpretar. Eso no significa que la camioneta esté bien.")
+            return@buildList
+        }
+        val pair = "P0579" in unique && "P2299" in unique
+        if (pair) {
+            add("La computadora guardó dos avisos a la vez: P0579 y P2299.")
+            add("P2299, en la definición pública, quiere decir que el freno y el acelerador quedaron en desacuerdo. Vio el freno pisado mientras el acelerador también estaba abierto, o una de esas señales no volvió a su sitio.")
+            add("P0579, en esa misma definición pública, apunta a la entrada del crucero. Muchas veces esa entrada es el interruptor que el freno corta al pisarlo.")
+            add("Leídos juntos, la frase que encaja es esta: al frenar, la señal del freno y la del acelerador no coinciden, y el corte del crucero entra en la misma discusión. Encaja con una luz EPC y con una baja de potencia al frenar. No demuestra que esa sea la causa.")
+            add("No dice qué pieza cambiar. No pide cambiar el pedal, el interruptor ni el acelerador.")
+            add("JAC, en lo que se pudo abrir, no publica ese texto para la T8. Un PDF del dominio JAC habla de otros números de pedal, P2123, P2127, P2128, P3004 y P3005. No son los que contestó esta camioneta.")
+            add("El manual diésel de la N56 sí define P2299 y cita 750 mV en el acelerador. Es otro modelo. Ese valor no se usa aquí.")
+            add("Si el escáner de la marca muestra otro número, o no muestra estos, manda ese escáner. Hay que pedirlo sin borrar.")
+        }
+        unique.filter { it != "P0579" && it != "P2299" || !pair }.forEach { code ->
+            if (pair && (code == "P0579" || code == "P2299")) return@forEach
+            val sentence = when (code) {
+                "P0579" -> "P0579, en la definición pública, apunta a la entrada del crucero. Muchas veces es el interruptor que el freno corta. No dice qué pieza cambiar. JAC no publicó ese texto para esta T8."
+                "P2299" -> "P2299, en la definición pública, quiere decir que el freno y el acelerador quedaron en desacuerdo. No dice qué pieza cambiar. El valor de la N56 no se usa."
+                else -> "$code. Número anotado por la computadora. No está en la ficha local. No traduzco la pieza y no invento el significado. El texto del escáner JAC manda."
+            }
+            add(sentence)
+        }
+        add("En el taller, con la camioneta quieta y sin borrar: que lean estos mismos números y digan el texto de su escáner; que midan el interruptor del freno suelto y pisado; que midan las dos señales del acelerador sin pisar y pisando. No probar el corte de potencia en la calle.")
+    }
+}
+
 fun readingReport(facts: ReadingFacts): ReadingReportDocument {
     val codes = facts.storedCodes.map { it.trim().uppercase() }.filter { it.isNotBlank() }.distinct()
-    val gloss = mapOf(
-        "P0579" to "Definición genérica, no de JAC: la entrada del crucero no responde como la computadora espera. A menudo entra el interruptor que el freno corta.",
-        "P2299" to "Definición genérica, no de JAC: la computadora vio el freno y el acelerador en desacuerdo. No dice qué pieza cambiar.",
-    )
     val body = buildList {
         add("Documento local. No es una certificación y no autoriza a circular.")
         add("No indica qué pieza cambiar. No borra los avisos.")
         add("")
-        add("1. Quién hace qué")
-        StreetGuide.steps.forEach { step ->
-            add("${step.number}. ${step.role}: ${step.title}. ${step.detail}")
-        }
-        add("El revisor no es la lectora. Su trabajo es impedir que estos números se cierren como causa o como ataque.")
+        add("1. Qué significa")
+        interpretationLines(codes, facts.declaredModel, facts.declaredYear).forEach { add(it) }
         add("")
         add("2. Qué contestó la computadora")
         add("Sesión ${facts.sessionId.ifBlank { "sin número" }}.")
+        val declared = listOf(facts.declaredModel.trim(), facts.declaredYear.trim()).filter { it.isNotBlank() }
+        if (declared.isNotEmpty()) {
+            val spoken = if (facts.declaredModel.isNotBlank() && facts.declaredYear.isNotBlank()) {
+                "${facts.declaredModel.trim()}, año ${facts.declaredYear.trim()}"
+            } else {
+                declared.joinToString(", ")
+            }
+            add("Vehículo declarado por el dueño: $spoken. No salió de la computadora.")
+        }
         if (facts.ecuTalking) add("La computadora del motor contestó.") else add("En esta copia no quedó constancia de que la computadora contestara.")
         if (facts.adapterId.isNotBlank()) add("El aparato se identificó como «${facts.adapterId}». Ese texto se puede copiar. No prueba que el aparato sea original.")
         val protocol = listOf(facts.protocolNumber, facts.protocolText).filter { it.isNotBlank() }.joinToString(" ")
         if (protocol.isNotBlank()) add("Protocolo informado: $protocol.")
         if (facts.voltageText.isNotBlank()) add("El aparato estimó ${facts.voltageText}. Eso no es una medición de batería. Hace falta un multímetro.")
-        if (codes.isEmpty()) {
-            add("No quedó ningún aviso guardado en esta copia. Eso no significa que la camioneta esté bien.")
-        } else {
-            add("Avisos guardados, sin borrar: ${codes.joinToString(", ")}.")
-            codes.forEach { code ->
-                add("$code. ${gloss[code] ?: "Número anotado. No traduzco la pieza y no invento el significado."}")
-            }
-        }
+        add("Avisos guardados, sin borrar: ${if (codes.isEmpty()) "ninguno en esta copia" else codes.joinToString(", ")}.")
         add("La luz EPC del tablero no es la luz genérica de falla. Que la luz genérica esté apagada no explica el EPC.")
-        add("JAC no publicó, en las fuentes abiertas revisadas, el texto de estos números para esta T8. Si el escáner de la marca muestra otro número, manda ese escáner.")
         add("")
         add("3. Qué hacer con el papel")
         add("1. Sacar el aparato del enchufe cuando no se esté leyendo.")
@@ -333,9 +371,15 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("5. No probar el corte de potencia en la calle.")
         add("6. No cambiar piezas por esta hoja.")
         add("")
-        add("4. Validación de seguridad")
+        add("4. Quién hace qué")
+        StreetGuide.steps.forEach { step ->
+            add("${step.number}. ${step.role}: ${step.title}. ${step.detail}")
+        }
+        add("El revisor no es la lectora. Su trabajo es impedir que estos números se cierren como causa o como ataque.")
+        add("")
+        add("5. Validación de seguridad")
         add("No hay un porcentaje. Comprobado significa que esta aplicación lo revisó. No significa que la camioneta esté segura.")
-        SecurityGuide.checks(facts.adapterId, facts.ecuTalking, codes, facts.bleValidated).forEach { check ->
+        SecurityGuide.checks(facts.adapterId, facts.ecuTalking, codes, facts.bleValidated, facts.declaredModel, facts.declaredYear).forEach { check ->
             add("${check.number}. ${check.title}. ${check.result}. ${check.detail}")
         }
     }

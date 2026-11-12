@@ -42,6 +42,10 @@ import app.jac.diagnosticlab.obd.PidDecoder
 import app.jac.diagnosticlab.obd.parseAdapterVoltage
 import app.jac.diagnosticlab.security.SecurityAssessment
 import app.jac.diagnosticlab.security.SecurityDashboard
+import app.jac.diagnosticlab.obd.OperationalState
+import app.jac.diagnosticlab.obd.VoltageAssessment
+import app.jac.diagnosticlab.obd.assessAdapterVoltage
+import app.jac.diagnosticlab.obd.SessionTimeMetrics
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,6 +71,10 @@ data class LabState(
     val protocolText: String = "",
     val protocolNumber: String = "",
     val voltageText: String = "",
+    val voltageAssessment: VoltageAssessment? = null,
+    val operationalState: OperationalState = OperationalState.UNKNOWN,
+    val sampleWindowMs: Long = 0L,
+    val sampleEffectiveHz: Double = 0.0,
     val ecuTalking: Boolean = false,
     val dtcs: List<DtcReadResult> = emptyList(),
     val supported: Set<Int> = emptySet(),
@@ -92,6 +100,8 @@ data class LabState(
     val protocol: String = "0",
     val simulated: Boolean = false,
     val security: SecurityDashboard? = null,
+    val declaredModel: String = "",
+    val declaredYear: String = "",
 )
 
 class LabController(private val app: Application) {
@@ -115,8 +125,16 @@ class LabController(private val app: Application) {
             "Los cinco síntomas marcados son el reporte del conductor del 11-11-2026, no mediciones."
 
     init {
+        if (!prefs.contains("declaredModel")) {
+            prefs.edit().putString("declaredModel", "JAC T8").putString("declaredYear", "2023").apply()
+        }
         refresh()
         recompute()
+    }
+
+    fun declareVehicle(model: String, year: String) {
+        prefs.edit().putString("declaredModel", model).putString("declaredYear", year).apply()
+        state.update { it.copy(declaredModel = model, declaredYear = year) }
     }
 
     fun refresh() {
@@ -126,6 +144,8 @@ class LabController(private val app: Application) {
                 bluetoothOn = repo.isEnabled(),
                 devices = if (missing.isEmpty()) merge(repo.bonded(), it.devices) else it.devices,
                 selectedAddress = it.selectedAddress ?: prefs.getString("address", null),
+                declaredModel = if (prefs.contains("declaredModel")) prefs.getString("declaredModel", "").orEmpty() else it.declaredModel,
+                declaredYear = if (prefs.contains("declaredYear")) prefs.getString("declaredYear", "").orEmpty() else it.declaredYear,
                 error = if (missing.isEmpty()) it.error else "Faltan permisos de Bluetooth: ${missing.joinToString()}.",
                 recovery = if (missing.isEmpty()) it.recovery else "Conceda los permisos de dispositivos cercanos y vuelva a buscar.",
             )
@@ -532,6 +552,9 @@ class LabController(private val app: Application) {
                 ecuAnswered0100 = current.ecuTalking,
             ),
         )
+        val voltAssess = assessAdapterVoltage(current.voltageText)
+        val opState = OperationalState.fromHints(rpm = rpm, speedKmh = current.samples.lastOrNull { it.pid == 0x0D && it.valid }?.value, declared = null)
+        val timeMetrics = SessionTimeMetrics.fromTimestamps(current.samples.filter { it.pid > 0 }.map { it.atEpochMs })
         val stored = dtcReads
             .filter { it.category == DtcCategory.STORED }
             .flatMap { it.codes.map { code -> code.code } }
@@ -549,7 +572,16 @@ class LabController(private val app: Application) {
             transportKind = current.transportKind,
             commands = current.exchanges.map { it.command },
         )
-        state.update { it.copy(analysis = report, security = security) }
+        state.update {
+            it.copy(
+                analysis = report,
+                security = security,
+                voltageAssessment = voltAssess,
+                operationalState = opState,
+                sampleWindowMs = timeMetrics.windowMs,
+                sampleEffectiveHz = timeMetrics.effectiveHz,
+            )
+        }
     }
 
     private fun buildRecord(): SessionRecord {

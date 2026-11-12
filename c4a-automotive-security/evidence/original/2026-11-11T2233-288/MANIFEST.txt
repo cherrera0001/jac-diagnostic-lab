@@ -1,0 +1,10 @@
+﻿session_id: 2026-11-11T2233-288
+file: JAC-lectura-2026-11-11T2233-288.pdf
+sha256: 0a7872d6704d35b712fd60cd6a1de492524a57a3aa3c648829e5f8e3a6676828
+verified_at_utc: 2026-11-12T02:05:00Z
+tool: Get-FileHash -Algorithm SHA256
+match_sidecar: true
+note: Integridad del archivo PDF. No prueba autenticidad de datos del vehículo.
+csv: jac-sensores.csv
+json_session: 2026-11-11T2233-288.json
+environment: REAL_VEHICLE_READ_ONLY (según informe de la app; tramas crudas completas pendientes de auditoría independiente)

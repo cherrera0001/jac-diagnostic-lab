@@ -454,9 +454,16 @@ data class SecurityCheck(
 )
 
 object SecurityGuide {
-    val results = setOf("Comprobado", "Te toca a ti", "Sin comprobar")
+    val results = setOf("Comprobado", "Te toca a ti", "Sin comprobar", "Declarado por ti")
 
-    fun checks(adapterId: String, ecuTalking: Boolean, codes: List<String>, bleValidated: Boolean): List<SecurityCheck> {
+    fun checks(
+        adapterId: String,
+        ecuTalking: Boolean,
+        codes: List<String>,
+        bleValidated: Boolean,
+        declaredModel: String = "",
+        declaredYear: String = "",
+    ): List<SecurityCheck> {
         val knownCodes = codes.map { it.trim() }.filter { it.isNotBlank() }
         val identity = when {
             adapterId.isBlank() -> SecurityCheck(
@@ -546,18 +553,37 @@ object SecurityGuide {
                 "El teléfono no ve si el aparato sigue enchufado. Si se queda puesto, quien ya esté emparejado puede volver a hablar con la camioneta.",
             ),
             fault,
-            SecurityCheck(
-                8,
-                "Año, programa y compuerta de esta camioneta",
-                "Sin comprobar",
-                "No se leyó el año, ni el programa de la computadora, ni si esta unidad trae una compuerta de seguridad. No se afirma.",
-            ),
+            declaredVehicle(declaredModel, declaredYear),
             SecurityCheck(
                 9,
                 "Pruebas que no se hacen en la camioneta",
                 "Sin comprobar",
                 "No se probó un segundo teléfono y no se lanzó ninguna prueba de ataque contra el vehículo. Si esas pruebas se hacen, van en un aparato aparte.",
             ),
+        )
+    }
+
+    private fun declaredVehicle(model: String, year: String): SecurityCheck {
+        val written = model.trim()
+        val typedYear = year.trim()
+        if (written.isBlank() && typedYear.isBlank()) {
+            return SecurityCheck(
+                8,
+                "Modelo y año",
+                "Sin comprobar",
+                "Ingresa el modelo y el año en Hoy. No salen de la computadora. El programa y la compuerta de esta unidad siguen sin comprobar.",
+            )
+        }
+        val spoken = when {
+            written.isNotBlank() && typedYear.isNotBlank() -> "$written, año $typedYear"
+            written.isNotBlank() -> written
+            else -> "año $typedYear"
+        }
+        return SecurityCheck(
+            8,
+            "Modelo y año",
+            "Declarado por ti",
+            "Declaraste $spoken. No salió de la computadora. El programa y la compuerta de esta unidad siguen sin comprobar.",
         )
     }
 }

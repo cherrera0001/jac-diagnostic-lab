@@ -129,7 +129,11 @@ class SecurityPolicyTest {
         assertFalse(text.contains("reemplaza", true))
         val unknown = readingReport(ReadingFacts("s", "", "", "", "", listOf("P0999"), true))
         assertTrue(unknown.lines.any { it.contains("P0999") && it.contains("No traduzco") })
-        assertTrue(text.contains("4. Validación de seguridad"))
+        assertTrue(text.contains("5. Validación de seguridad"))
+        assertTrue(text.contains("no se conecta a internet"))
+        assertTrue(text.contains("ficha local"))
+        assertTrue(text.contains("N56"))
+        assertTrue(text.contains("no se usa"))
         assertFalse(text.contains("%"))
     }
 
@@ -147,6 +151,19 @@ class SecurityPolicyTest {
         assertTrue(read.first { it.number == 7 }.detail.contains("no demuestra"))
         assertFalse(read.joinToString { it.detail + it.title }.contains("%"))
         assertFalse(read.joinToString { it.detail }.contains("reemplaza", ignoreCase = true))
+    }
+
+    @Test
+    fun r4_typedYearStaysDeclaredAndDoesNotVerifyTheGateway() {
+        val declared = SecurityGuide.checks("", false, emptyList(), false, "JAC T8", "2023").first { it.number == 8 }
+        assertEquals("Declarado por ti", declared.result)
+        assertTrue(declared.detail.contains("2023"))
+        assertTrue(declared.detail.contains("No salió de la computadora"))
+        assertTrue(declared.detail.contains("compuerta"))
+        assertFalse(declared.detail.contains("verificad", ignoreCase = true))
+        val missing = SecurityGuide.checks("", false, emptyList(), false, "", "")
+        assertEquals("Sin comprobar", missing.first { it.number == 8 }.result)
+        assertTrue(missing.first { it.number == 8 }.detail.contains("Ingresa"))
     }
 
     @Test

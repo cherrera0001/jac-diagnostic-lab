@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
@@ -67,6 +68,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
+import app.jac.diagnosticlab.evidence.interpretationLines
 import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import app.jac.diagnosticlab.evidence.sha256Hex
@@ -111,6 +113,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun exportBytes(uri: Uri, bytes: ByteArray, refusal: String?) = lab.exportBytes(uri, bytes, refusal)
     fun disconnect() = lab.disconnect()
     fun startAutodiag() = lab.startAutodiag()
+    fun declareVehicle(model: String, year: String) = lab.declareVehicle(model, year)
 }
 
 class MainActivity : ComponentActivity() {
@@ -214,11 +217,31 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
     val step = StreetGuide.current(doneThrough, state.busy, hasReading, pdfHash.isNotBlank())
     val current = StreetGuide.steps.first { it.number == step }
     val reading = PlainReadingWriter.explain(state.busy, ecuTalking, codes, adapterId, if (hasReading) null else state.error)
+    Text("Tu camioneta, escrita por ti. La computadora no dice el modelo ni el año.")
+    OutlinedTextField(
+        value = state.declaredModel,
+        onValueChange = { model.declareVehicle(it, state.declaredYear) },
+        label = { Text("Modelo") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = state.declaredYear,
+        onValueChange = { typed ->
+            if (typed.length <= 4 && typed.all { it.isDigit() }) model.declareVehicle(state.declaredModel, typed)
+        },
+        label = { Text("Año") },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth(),
+    )
     Text("Paso $step de 8", style = MaterialTheme.typography.labelLarge, color = Color(0xFFF5C16C))
     Text(current.title, style = MaterialTheme.typography.headlineSmall)
     Text("Lo hace: ${current.role}", color = Color(0xFFF5C16C))
     Text(if (step == 6) reading.title else current.detail)
-    if (step == 6) reading.lines.forEach { Text(it) }
+    if (step == 6) {
+        reading.lines.forEach { Text(it) }
+        interpretationLines(codes, state.declaredModel, state.declaredYear).forEach { Text(it) }
+    }
     if (saved != null && liveCodes.isEmpty() && step >= 6) {
         Text("Esta es la lectura ya guardada en el teléfono, sesión ${saved.sessionId}. No hace falta enchufar de nuevo para armar el informe.")
     }
@@ -250,6 +273,8 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
                     storedCodes = codes,
                     ecuTalking = ecuTalking,
                     bleValidated = state.bleValidated,
+                    declaredModel = state.declaredModel,
+                    declaredYear = state.declaredYear,
                 )
                 val document = readingReport(facts)
                 val pdf = renderReadingPdf(document.title, document.lines)
@@ -290,7 +315,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             }
         }
     }
-    Text("Versión 0.6.0. El PDF, el JSON, el TXT y el CSV se arman en Copia, al pulsar. La seguridad está en su pestaña.")
+    Text("Versión 0.8.0. El significado está en el paso 6 y en el PDF de Copia. El teléfono no busca los códigos en internet.")
 }
 
 @Composable
@@ -325,6 +350,11 @@ private fun LinkScreen(state: LabState, model: DiagnosticViewModel, requestPermi
     Text("Adaptador: ${state.adapterId.ifBlank { "sin ATI todavía" }}")
     Text("Protocolo: ${state.protocolNumber.ifBlank { "sin ATDPN" }} ${state.protocolText}")
     Text("Tensión estimada por el adaptador: ${state.voltageText.ifBlank { "sin ATRV" }}")
+    state.voltageAssessment?.let { Text(it.note, fontSize = 12.sp) }
+    Text("Estado operacional: ${state.operationalState.reportLabel}", fontSize = 12.sp)
+    if (state.sampleWindowMs > 0) {
+        Text("Muestreo sensores: ventana ${state.sampleWindowMs} ms · ≈${"%.2f".format(state.sampleEffectiveHz)} Hz efectivo", fontSize = 12.sp)
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = requestPermissions, enabled = !state.busy) { Text("Permisos") }
         Button(onClick = { model.scan() }, enabled = !state.busy) { Text("Buscar") }
@@ -390,7 +420,12 @@ private fun LinkScreen(state: LabState, model: DiagnosticViewModel, requestPermi
 
 @Composable
 private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
-    Text("Los códigos salen de los bytes recibidos. Si no hay una definición del SAE J2012-DA, no se inventa un texto de falla.")
+    Text("Los números salen de la camioneta. Las palabras salen de una ficha local. Esta aplicación no se conecta a internet para buscarlos. Si el número no está en la ficha, no se inventa la frase.")
+    interpretationLines(
+        state.dtcs.flatMap { it.codes.map { code -> code.code } },
+        state.declaredModel,
+        state.declaredYear,
+    ).forEach { Text(it) }
     Button(onClick = { model.readDtcs() }, enabled = !state.busy) { Text("Leer almacenados, pendientes y permanentes") }
     Button(onClick = { model.readFreeze() }, enabled = !state.busy) { Text("Leer freeze frame") }
     Row {
@@ -423,7 +458,7 @@ private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
 private fun SensorScreen(state: LabState, model: DiagnosticViewModel) {
     Text("Primero se consultan los PID soportados. El pedal de freno no se asume en un PID genérico. ATRV es la estimación del adaptador.")
     Button(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Consultar PID soportados") }
-    val names = mapOf(0x0C to "RPM", 0x05 to "Refrigerante", 0x04 to "Carga", 0x0D to "Velocidad", 0x11 to "Acelerador", 0x0B to "Colector")
+    val names = mapOf(0x0C to "RPM", 0x05 to "Refrigerante", 0x04 to "Carga", 0x0D to "Velocidad", 0x11 to "Mariposa (0x11)", 0x0B to "Colector")
     Text(if (state.supported.isEmpty()) "Aún no hay mapa de soporte." else "Soportados en el rango leído: ${state.supported.map { "%02X".format(it) }.joinToString()}")
     names.forEach { (pid, label) ->
         Text("$label: ${if (pid in state.supported) "el mapa lo incluye" else "no aparece en el mapa leído"}")
@@ -487,7 +522,7 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
     val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val facts = if (pdfFromSaved && saved != null) {
-            saved
+            saved.copy(declaredModel = state.declaredModel, declaredYear = state.declaredYear)
         } else {
             ReadingFacts(
                 sessionId = state.sessionId,
@@ -498,6 +533,8 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
                 storedCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } },
                 ecuTalking = state.ecuTalking,
                 bleValidated = state.bleValidated,
+                declaredModel = state.declaredModel,
+                declaredYear = state.declaredYear,
             )
         }
         val refusal = payloadHasContent(
@@ -593,17 +630,21 @@ private fun SecurityGuideScreen(state: LabState) {
         ecuTalking = state.ecuTalking || saved?.ecuTalking == true,
         codes = codes,
         bleValidated = state.bleValidated,
+        declaredModel = state.declaredModel,
+        declaredYear = state.declaredYear,
     )
     val checked = checks.count { it.result == "Comprobado" }
+    val declared = checks.count { it.result == "Declarado por ti" }
     val yours = checks.count { it.result == "Te toca a ti" }
     val open = checks.count { it.result == "Sin comprobar" }
     var detail by remember { mutableStateOf(false) }
     Text("Validación de seguridad", style = MaterialTheme.typography.headlineSmall)
-    Text("9 pasos. $checked comprobados en esta aplicación. $yours te toca a ti. $open sin comprobar.")
+    Text("9 pasos. $checked comprobados en esta aplicación. $declared declarados por ti. $yours te toca a ti. $open sin comprobar.")
     Text("Comprobado no significa que la camioneta esté segura. No hay un porcentaje.", color = Color(0xFFF5C16C))
     checks.forEach { check ->
         val mark = when (check.result) {
             "Comprobado" -> Color(0xFF9DCC8A)
+            "Declarado por ti" -> Color(0xFF8EB4E8)
             "Te toca a ti" -> Color(0xFFF5C16C)
             else -> Color(0xFF9AA3AD)
         }
@@ -646,7 +687,13 @@ private fun SecurityScreen(state: LabState) {
     )
     Text("Inventario", style = MaterialTheme.typography.titleMedium)
     dash.inventory.forEach { row ->
-        Text("${row.label}: ${row.value ?: "DESCONOCIDO"} [${row.status}] conf=${row.confidence ?: "-"}", fontSize = 12.sp)
+        val shown = when (row.id) {
+            "year" -> if (state.declaredYear.isBlank()) "DESCONOCIDO" else "${state.declaredYear} declarado por el dueño, no leído"
+            "make_model" -> if (state.declaredModel.isBlank()) row.value ?: "DESCONOCIDO" else "${state.declaredModel} declarado por el dueño, no leído"
+            else -> row.value ?: "DESCONOCIDO"
+        }
+        val status = if (row.id == "year" && state.declaredYear.isNotBlank() || row.id == "make_model" && state.declaredModel.isNotBlank()) "DECLARADO" else row.status
+        Text("${row.label}: $shown [$status]", fontSize = 12.sp)
     }
     Text("Hallazgos", style = MaterialTheme.typography.titleMedium)
     dash.findings.forEach { f ->
@@ -791,7 +838,7 @@ private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
     var canvas = page.canvas
     var y = margin
     fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab 0.6.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText("JAC Diagnostic Lab 0.8.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
         canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
         document.finishPage(page)
     }

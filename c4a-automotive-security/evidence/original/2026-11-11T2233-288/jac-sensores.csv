@@ -1,0 +1,7 @@
+timestamp_ms,pid,nombre,valor,unidad,valido,sospechoso,raw
+1794447222457,12,Régimen del motor,786.75,rpm,true,false,0C 4B
+1794447222606,5,Temperatura del refrigerante,53.0,°C,true,false,5D
+1794447222790,4,Carga calculada,23.529411764705884,%,true,false,3C
+1794447222911,13,Velocidad,0.0,km/h,true,false,00
+1794447223092,17,Posición del acelerador,89.80392156862744,%,true,false,E5
+1794447223212,11,Presión del colector,102.0,kPa,true,false,66

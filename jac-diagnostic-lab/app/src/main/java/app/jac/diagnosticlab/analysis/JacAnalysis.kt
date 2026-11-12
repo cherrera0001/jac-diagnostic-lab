@@ -94,11 +94,11 @@ object JacAnalysis {
         val h2 = hypothesis(
             id = "H2",
             title = "Relación entre pedal de freno y acelerador electrónico",
-            supporting = listOfNotNull(if (brakeSymptom && input.throttleSupported) "Hay síntoma de freno y el PID de acelerador está soportado, pero no se midió al mismo tiempo que el pedal de freno." else null),
+            supporting = listOfNotNull(if (brakeSymptom && input.throttleSupported) "Hay síntoma de freno y el PID 0x11 (posición absoluta de mariposa) está soportado; no es el pedal de acelerador ni se midió junto al freno." else null),
             contrary = emptyList(),
             missing = listOf(
                 "No existe un PID genérico que cruce el freno con el pedal del acelerador.",
-                if (!input.throttleSupported) "El PID de posición de acelerador no se confirmó como soportado." else "Una lectura de acelerador con el vehículo quieto no relaciona el freno.",
+                if (!input.throttleSupported) "El PID 0x11 (mariposa) no se confirmó como soportado." else "Una lectura de mariposa (0x11) con el vehículo quieto no demuestra el pedal ni el freno.",
             ),
             next = listOf("Comparar, en taller y sin una prueba de conducción lanzada por esta app, la señal de freno y la del acelerador con herramienta del fabricante."),
             scanner = true,
