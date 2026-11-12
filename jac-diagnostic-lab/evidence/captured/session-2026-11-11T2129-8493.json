@@ -54,7 +54,7 @@
       "elapsedMs": 150,
       "promptSeen": true,
       "detail": "La respuesta no es hexadecimal interpretable. No se inventaron códigos.",
-      "raw": "014\r\n0: 49 02 01 4C 4A 31 \r\n1: 31 50 41 42 44 38 50 \r\n2: 43 30 39 31 34 35 30 \r\n\r\n",
+      "raw": "014\r\n0: 49 02 01 XX XX XX \r\n1: XX XX XX XX XX XX XX \r\n2: XX XX XX XX XX XX XX \r\n\r\n",
       "frames": []
     }
   ],
