@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.3.0 — Matriz «Qué puede leer» (SPEC-022)
+
+- **Tag:** `v1.3.0`
+- **versionCode:** 14
+- **Fecha:** 2026-11-12
+- **APK:** `jac-diagnostic-lab-1.3.0-debug.apk`
+- **Auditoría:** `docs/audits/current-codebase-assessment.md` @ `6b6470c` → este release
+
+`ObdCapabilityDiscoveryEngine` + pestaña **Capacidad** con motivos de ausencia. Bitmaps Mode 01 encadenados 0x00…0xC0. Tests CAP-001…004.
+
 ## v1.2.0 — Aislamiento lab + cierre DIAG P0
 
 - **Tag:** `v1.2.0`

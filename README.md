@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.2.0.** APK para dueño o mecánico: [release v1.2.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.2.0) (`jac-diagnostic-lab-1.2.0-debug.apk`). Sin ELM327 no hay lectura nueva; sí sirve el ciclo de taller y un PDF ya guardado. El único issue abierto de producto es **SAFE-001** (confirmación de taller).
+**App actual: JAC Diagnostic Lab 1.3.0.** APK: [release v1.3.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.3.0). Pestaña **Capacidad** explica qué se puede leer y por qué falta cada señal. Auditoría: `jac-diagnostic-lab/docs/audits/current-codebase-assessment.md`. Issue abierto: **SAFE-001**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 

@@ -34,14 +34,17 @@ import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.toCsv
 import app.jac.diagnosticlab.evidence.toJson
 import app.jac.diagnosticlab.evidence.toTxt
+import app.jac.diagnosticlab.obd.CapabilitySnapshot
 import app.jac.diagnosticlab.obd.DtcCategory
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.obd.FreezeNote
+import app.jac.diagnosticlab.obd.ObdCapabilityDiscoveryEngine
 import app.jac.diagnosticlab.obd.decodeFreeze
 import app.jac.diagnosticlab.obd.decodeVin
 import app.jac.diagnosticlab.obd.milFromPayload
 import app.jac.diagnosticlab.elm.InitReport
 import app.jac.diagnosticlab.obd.PidDecoder
+import app.jac.diagnosticlab.obd.PidReading
 import app.jac.diagnosticlab.obd.parseAdapterVoltage
 import app.jac.diagnosticlab.security.SecurityAssessment
 import app.jac.diagnosticlab.security.SecurityDashboard
@@ -108,6 +111,8 @@ data class LabState(
     val declaredYear: String = "",
     val beforeSnapshot: SnapshotReading? = null,
     val afterSnapshot: SnapshotReading? = null,
+    val capabilities: CapabilitySnapshot? = null,
+    val bitmapRead: Boolean = false,
 )
 
 class LabController(private val app: Application) {
@@ -567,17 +572,56 @@ class LabController(private val app: Application) {
 
     private suspend fun readSupportedInternal() {
         val current = session ?: return
-        val first = current.readPid(0x00)
-        var supported = if (first.valid) PidDecoder.supported(0x00, first.raw) else emptySet()
-        if (0x20 in supported) {
-            val next = current.readPid(0x20)
-            if (next.valid) supported = supported + PidDecoder.supported(0x20, next.raw)
+        var supported = emptySet<Int>()
+        var bitmapRead = false
+        for (page in ObdCapabilityDiscoveryEngine.supportPages) {
+            if (page != 0x00 && page !in supported) break
+            val reading = current.readPid(page)
+            if (!reading.valid) {
+                if (page == 0x00) break
+                continue
+            }
+            bitmapRead = true
+            supported = supported + PidDecoder.supported(page, reading.raw)
         }
-        if (0x40 in supported) {
-            val next = current.readPid(0x40)
-            if (next.valid) supported = supported + PidDecoder.supported(0x40, next.raw)
+        state.update {
+            it.copy(
+                supported = supported,
+                bitmapRead = bitmapRead,
+                exchanges = current.exchanges.toList(),
+                statusLine = if (bitmapRead) "PIDs soportados en mapa: ${supported.size}." else "No se pudo leer el mapa de PIDs.",
+            )
         }
-        state.update { it.copy(supported = supported, exchanges = current.exchanges.toList(), statusLine = "PIDs soportados: ${supported.size}.") }
+        refreshCapabilities()
+    }
+
+    fun refreshCapabilities() {
+        val current = state.value
+        val linked = current.link.contains("Conect", ignoreCase = true) || current.adapterId.isNotBlank() || current.transportKind.isNotBlank()
+        val readings = linkedMapOf<Int, PidReading>()
+        // Última muestra válida por PID se convierte en PidReading sintético mínimo para la matriz.
+        current.samples.groupBy { it.pid }.forEach { (pid, list) ->
+            val last = list.lastOrNull { it.value != null } ?: return@forEach
+            readings[pid] = PidReading(
+                pid = pid,
+                name = last.name,
+                raw = last.raw.split(' ').mapNotNull { it.toIntOrNull(16) },
+                value = last.value,
+                unit = last.unit,
+                valid = last.valid,
+                suspect = last.suspect,
+                note = if (last.valid) "Sonda de sesión." else "Muestra no válida.",
+            )
+        }
+        val snap = ObdCapabilityDiscoveryEngine.build(
+            supportedBitmap = current.supported,
+            bitmapRead = current.bitmapRead,
+            ecuTalking = current.ecuTalking,
+            adapterConnected = linked,
+            sourceEcu = if (current.ecuTalking) "ECU Mode01" else null,
+            readings = readings,
+        )
+        state.update { it.copy(capabilities = snap) }
     }
 
     private fun openSession(kind: String) {
@@ -598,6 +642,7 @@ class LabController(private val app: Application) {
                 voltageText = report.voltageText,
                 ecuTalking = report.ecuTalking,
                 supported = report.supportedPids,
+                bitmapRead = report.supportedPids.isNotEmpty(),
                 exchanges = report.exchanges,
                 statusLine = report.stoppedBecause ?: if (report.ecuTalking) "La ECU respondió a 0100." else "El adaptador contestó, pero 0100 no trajo datos de la ECU.",
                 error = report.stoppedBecause,
@@ -605,6 +650,7 @@ class LabController(private val app: Application) {
             )
         }
         if (report.stoppedBecause != null) errors += report.stoppedBecause
+        refreshCapabilities()
         recompute()
     }
 

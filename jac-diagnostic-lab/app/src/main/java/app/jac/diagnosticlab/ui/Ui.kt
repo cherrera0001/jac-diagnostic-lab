@@ -73,7 +73,9 @@ import app.jac.diagnosticlab.evidence.interpretationLines
 import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.obd.AbsenceReason
 import app.jac.diagnosticlab.obd.FaultIdentification
+import app.jac.diagnosticlab.obd.SupportStatus
 import app.jac.diagnosticlab.security.SecurityGuide
 import app.jac.diagnosticlab.ui.LiveGaugeCard
 import app.jac.diagnosticlab.ui.SnapshotDeltaStrip
@@ -110,6 +112,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun startOrderedMonitor() = lab.startOrderedMonitor()
     fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
     fun clearSnapshots() = lab.clearSnapshots()
+    fun refreshCapabilities() = lab.refreshCapabilities()
     fun setSymptom(symptom: Symptom, enabled: Boolean) = lab.setSymptom(symptom, enabled)
     fun setProtocol(code: String) = lab.setProtocol(code)
     fun setInterval(ms: Long) = lab.setInterval(ms)
@@ -162,7 +165,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Hoy", "Monitor", "Taller", "Avisos", "Copia").forEachIndexed { index, label ->
+                listOf("Hoy", "Monitor", "Capacidad", "Taller", "Copia").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -210,13 +213,14 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             when (tab) {
                 0 -> TodayScreen(state, model, permissions)
                 1 -> MonitorScreen(state, model, permissions)
-                2 -> WorkshopScreen(state, model)
-                3 -> {
+                2 -> CapabilityScreen(state, model)
+                3 -> WorkshopScreen(state, model)
+                else -> {
+                    EvidenceScreen(state, model)
                     CodeScreen(state, model)
                     AnalysisScreen(state, model)
                     SecurityGuideScreen(state)
                 }
-                else -> EvidenceScreen(state, model)
             }
         }
     }
@@ -584,6 +588,72 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
     }
     Text("Si no hay enlace: pestaña Hoy → autodiagnóstico, o Conexión vía permisos + OBDBLE. GATT 133 es radio, no la UI.", fontSize = 12.sp, color = Color(0xFF9AA3AD))
     LinkScreen(state, model, requestPermissions)
+}
+
+@Composable
+private fun CapabilityScreen(state: LabState, model: DiagnosticViewModel) {
+    val snap = state.capabilities
+    Text("¿QUÉ PUEDE LEER MI VEHÍCULO?", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
+    Text(
+        "Inventario Mode 01 + huecos conocidos. No inventa OEM. «Sin valor» no significa falla del auto.",
+        fontSize = 13.sp,
+        color = Color(0xFFB0B8C0),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Leer mapa PID") }
+        OutlinedButton(onClick = { model.refreshCapabilities() }) { Text("Actualizar matriz") }
+    }
+    if (snap == null) {
+        Text("Aún no hay matriz. Conecte, lea el mapa, o pulse Actualizar para ver motivos de ausencia.")
+        return
+    }
+    Text(
+        "ECU habla: ${if (snap.ecuTalking) "sí" else "no"} · Bitmap leído: ${if (snap.bitmapRead) "sí" else "no"} · PIDs en mapa: ${snap.supportedCount}",
+        fontSize = 12.sp,
+    )
+    @Composable
+    fun CapabilityGroup(title: String, items: List<app.jac.diagnosticlab.obd.PidCapability>) {
+        if (items.isEmpty()) return
+        Text(title, color = Color(0xFFF5C16C), style = MaterialTheme.typography.titleMedium)
+        items.forEach { cap ->
+            val value = when {
+                cap.lastValue != null -> "%.2f %s".format(cap.lastValue, cap.unit.orEmpty())
+                else -> "—"
+            }
+            Text("${cap.displayName} (${cap.key}) · ${cap.supportStatus} · $value", fontSize = 13.sp)
+            Text(
+                if (cap.absenceReason == AbsenceReason.NONE) cap.note else "${cap.absenceReason}: ${cap.note}",
+                fontSize = 11.sp,
+                color = Color(0xFF9AA3AD),
+            )
+        }
+    }
+    CapabilityGroup(
+        "Disponible / leído",
+        snap.entries.filter {
+            it.supportStatus == SupportStatus.READ_OK || it.supportStatus == SupportStatus.DECLARED_SUPPORTED
+        },
+    )
+    CapabilityGroup(
+        "No soportado por bitmap",
+        snap.entries.filter { it.supportStatus == SupportStatus.DECLARED_UNSUPPORTED },
+    )
+    CapabilityGroup(
+        "No evaluado / comunicación",
+        snap.entries.filter {
+            it.supportStatus == SupportStatus.NOT_EVALUATED ||
+                it.supportStatus == SupportStatus.NO_DATA ||
+                it.supportStatus == SupportStatus.MALFORMED
+        },
+    )
+    CapabilityGroup(
+        "Requiere otro hardware / escáner",
+        snap.entries.filter {
+            it.supportStatus == SupportStatus.REQUIRES_DIFFERENT_HARDWARE ||
+                it.supportStatus == SupportStatus.FORMULA_UNKNOWN
+        },
+    )
+    Text("Avisos DTC y seguridad siguen en Copia / autodiag. Mode 04 bloqueado.", fontSize = 12.sp, color = Color(0xFF9AA3AD))
 }
 
 @Composable
