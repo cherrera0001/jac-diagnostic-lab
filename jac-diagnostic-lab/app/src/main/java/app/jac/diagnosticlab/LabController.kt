@@ -24,6 +24,7 @@ import app.jac.diagnosticlab.elm.ElmSession
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ObdTransport
 import app.jac.diagnosticlab.elm.ResponseKind
+import app.jac.diagnosticlab.lab.TransportIsolation
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
 import app.jac.diagnosticlab.evidence.SnapshotReading
@@ -199,7 +200,7 @@ class LabController(private val app: Application) {
         try {
             state.update { it.copy(busy = true, statusLine = "Validando BLE con ATI…") }
             val raw = inspector.selectAndValidate(writeUuid, notifyUuid)
-            transport = inspector
+            bindProductionTransport(inspector)
             openSession(inspector.name)
             state.update { it.copy(bleValidated = true, busy = false, statusLine = "BLE validado.", error = null) }
             trace("ATI de validación BLE:\n$raw")
@@ -458,7 +459,7 @@ class LabController(private val app: Application) {
                     val inspector = ble ?: break
                     try {
                         val raw = inspector.selectAndValidate(write, notify)
-                        transport = inspector
+                        bindProductionTransport(inspector)
                         openSession(inspector.name)
                         state.update { it.copy(bleValidated = true, error = null, statusLine = "BLE validado con ATI.") }
                         trace("ATI de validación BLE:\n$raw")
@@ -535,7 +536,7 @@ class LabController(private val app: Application) {
         val classic = ClassicElmTransport(device, adapter, ::trace)
         return try {
             classic.connect()
-            transport = classic
+            bindProductionTransport(classic)
             promote()
             openSession(classic.name)
             true
@@ -797,6 +798,11 @@ class LabController(private val app: Application) {
         } catch (error: Exception) {
             trace("Servicio en primer plano no disponible: ${error.message}. La sesión sigue en la aplicación.")
         }
+    }
+
+    private fun bindProductionTransport(candidate: ObdTransport) {
+        TransportIsolation.assertProductionOnly(candidate)
+        transport = candidate
     }
 
     private suspend fun disconnectQuiet() {

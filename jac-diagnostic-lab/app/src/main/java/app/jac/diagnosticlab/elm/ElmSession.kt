@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 
 interface ObdTransport {
     val name: String
+    val kind: TransportKind
     val connected: Boolean
     suspend fun connect()
     suspend fun disconnect()

@@ -25,6 +25,7 @@ import androidx.core.app.NotificationCompat
 import app.jac.diagnosticlab.elm.ObdTransport
 import app.jac.diagnosticlab.elm.ReadOnlyGate
 import app.jac.diagnosticlab.elm.ResponseAssembler
+import app.jac.diagnosticlab.elm.TransportKind
 import app.jac.diagnosticlab.elm.TransportResult
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -144,6 +145,7 @@ class ClassicElmTransport(
     private val log: (String) -> Unit,
 ) : ObdTransport {
     override val name: String = "Bluetooth clásico RFCOMM"
+    override val kind: TransportKind = TransportKind.ProductionVehicle
     private var socket: android.bluetooth.BluetoothSocket? = null
     private val mutex = Mutex()
     override val connected: Boolean get() = socket?.isConnected == true
@@ -239,6 +241,7 @@ class BleInspector(
     private val log: (String) -> Unit,
 ) : ObdTransport {
     override val name: String = "Bluetooth LE GATT"
+    override val kind: TransportKind = TransportKind.ProductionVehicle
     private var gatt: BluetoothGatt? = null
     private val incoming = Channel<ByteArray>(capacity = 64)
     private var writeChar: BluetoothGattCharacteristic? = null

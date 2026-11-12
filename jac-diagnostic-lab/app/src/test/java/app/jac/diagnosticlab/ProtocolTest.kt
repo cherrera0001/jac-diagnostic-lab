@@ -8,6 +8,7 @@ import app.jac.diagnosticlab.elm.ElmParser
 import app.jac.diagnosticlab.elm.ElmSession
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ObdTransport
+import app.jac.diagnosticlab.elm.TransportKind
 import app.jac.diagnosticlab.elm.ReadOnlyGate
 import app.jac.diagnosticlab.elm.ReadOnlyViolation
 import app.jac.diagnosticlab.elm.ResponseAssembler
@@ -34,6 +35,7 @@ class FakeObdTransport(
     var disconnectOn: String? = null
     var timeoutOn: String? = null
     override val name = "simulado"
+    override val kind = TransportKind.ResearchLab
     override var connected = true
     override suspend fun connect() { connected = true }
     override suspend fun disconnect() { connected = false }
