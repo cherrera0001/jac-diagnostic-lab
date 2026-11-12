@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.5.0** (`versionCode` 16) — 12-11-2026.
+**Versión actual: 1.6.0** (`versionCode` 17) — 12-11-2026. Monitor con franja «Qué ocurre», STALE/ERROR y sensores faltantes.
 
 Auditoría Sprint 0: [docs/audits/current-codebase-assessment.md](docs/audits/current-codebase-assessment.md).
 
@@ -51,7 +51,7 @@ adb install -r jac-diagnostic-lab-1.1.0-debug.apk
 | Pestaña | Para qué sirve | Qué no hace |
 | --- | --- | --- |
 | **Hoy** | Ocho pasos del dueño, lectura en palabras, PDF + huella | No recomienda piezas |
-| **Monitor** | Medidores ordenados + capturas antes/después + enlace | No inventa PID de freno |
+| **Monitor** | «Qué ocurre» + medidores VIVO/STALE + capturas + enlace | No inventa PID de freno |
 | **Taller** | Guía del mecánico y ficha de falla | No borra DTC ni prueba el corte en marcha |
 | **Avisos** | Códigos, análisis y validaciones de seguridad | No da un % de “seguridad del vehículo” |
 | **Copia** | PDF / JSON / TXT / CSV (solo si hay contenido) | No sube nada a internet |

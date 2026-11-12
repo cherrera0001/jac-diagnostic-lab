@@ -65,6 +65,8 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import app.jac.diagnosticlab.analysis.GaugeFreshness
+import app.jac.diagnosticlab.analysis.LiveSituationEngine
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
@@ -78,6 +80,8 @@ import app.jac.diagnosticlab.obd.FaultIdentification
 import app.jac.diagnosticlab.obd.SupportStatus
 import app.jac.diagnosticlab.security.SecurityGuide
 import app.jac.diagnosticlab.ui.LiveGaugeCard
+import app.jac.diagnosticlab.ui.MechanicSituationCard
+import app.jac.diagnosticlab.ui.MissingSensorBanner
 import app.jac.diagnosticlab.ui.SnapshotDeltaStrip
 import android.Manifest
 import org.json.JSONObject
@@ -503,17 +507,91 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
         ch.pid to state.samples.lastOrNull { it.pid == ch.pid }
     }
     val hz = state.sampleEffectiveHz
+    val powerLoss = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms
+    val codes = state.dtcs.flatMap { it.codes }.map { it.code }.distinct()
+    val freezeDtc = state.freeze.mapNotNull { it.dtc }.firstOrNull()
+    fun pidValue(pid: Int): Double? = live[pid]?.takeIf { it.valid }?.value
+        ?: state.samples.lastOrNull { it.pid == pid && it.valid }?.value
+    val situation = remember(
+        state.dtcs, state.freeze, state.samples, state.supported, state.bitmapRead,
+        state.linkPhase, state.polling, state.channelStats, state.symptoms, state.voltageAssessment,
+    ) {
+        LiveSituationEngine.report(
+            codes = codes,
+            freezeDtc = freezeDtc,
+            rpm = pidValue(0x0C),
+            speed = pidValue(0x0D),
+            throttleAbs = pidValue(0x11),
+            load = pidValue(0x04),
+            coolant = pidValue(0x05),
+            appD = pidValue(0x49),
+            appE = pidValue(0x4A),
+            atrv = state.voltageAssessment?.valueVolts ?: pidValue(-1),
+            supported = state.supported,
+            bitmapRead = state.bitmapRead || state.supported.isNotEmpty(),
+            powerLossOnBrake = powerLoss,
+            linkPhase = state.linkPhase,
+            polling = state.polling,
+            channelStats = state.channelStats,
+        )
+    }
+    val missingLines = buildList {
+        add("Interruptor de freno: sin PID OBD genérico — medir ON/suelto/pisado en banco.")
+        if (state.bitmapRead || state.supported.isNotEmpty()) {
+            listOf(0x49 to "APP D (0x49)", 0x4A to "APP E (0x4A)", 0x4B to "APP F (0x4B)").forEach { (pid, label) ->
+                if (pid !in state.supported) add("$label: no declarado en mapa Mode 01 — multímetro / escáner JAC.")
+            }
+            if (0x11 !in state.supported) add("Mariposa 0x11: no declarada — no confundir con pedal.")
+        } else {
+            add("Mapa PID pendiente: aún no se sabe qué APP/mariposa declara la ECU.")
+        }
+    }
+    val qualityCounts = WorkshopGuide.monitorOrder.map { channel ->
+        val sample = live[channel.pid]
+        val supported = when {
+            channel.pid < 0 -> true
+            state.supported.isEmpty() -> null
+            else -> channel.pid in state.supported
+        }
+        val stats = state.channelStats[channel.pid]
+        LiveSituationEngine.freshness(
+            pid = channel.pid,
+            supported = supported,
+            hasValue = sample?.value != null,
+            sampleValid = sample?.valid,
+            ageMs = stats?.ageMs,
+            targetIntervalMs = stats?.targetIntervalMs,
+            failCount = stats?.failCount ?: 0,
+            sampleCount = stats?.sampleCount ?: 0,
+        )
+    }
+    val liveN = qualityCounts.count { it == GaugeFreshness.LIVE }
+    val staleN = qualityCounts.count { it == GaugeFreshness.STALE }
+    val errN = qualityCounts.count { it == GaugeFreshness.READ_ERROR || it == GaugeFreshness.UNSUPPORTED }
+
     Text("MONITOR VIVO", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
     Text(
         if (state.polling) {
-            "Scheduler 1 comando · base %d ms · Hz sesión ≈%.2f (medido). FAST/MEDIUM/SLOW por PID.".format(state.intervalMs, hz)
+            "Scheduler 1 comando · base %d ms · Hz sesión ≈%.2f (medido). Calidad: %d VIVO · %d STALE · %d hueco/error.".format(
+                state.intervalMs, hz, liveN, staleN, errN,
+            )
         } else {
-            "Detenido. Camioneta quieta. Pedal de freno: no hay PID genérico. SAFE-001: sin prueba en movimiento."
+            "Detenido. Camioneta quieta. Lea «Qué ocurre» antes de tocar piezas. SAFE-001: sin prueba en movimiento."
         },
         color = Color(0xFFB0B8C0),
         fontSize = 13.sp,
     )
-    Text("Enlace: ${state.link.ifBlank { "sin enlace" }} · ${state.statusLine}", fontSize = 12.sp)
+    Text("Enlace: ${state.linkPhase.label} · ${state.link.ifBlank { "sin enlace" }} · ${state.statusLine}", fontSize = 12.sp)
+
+    MechanicSituationCard(
+        headline = situation.headline,
+        operational = situation.operational,
+        sensors = situation.sensorLines,
+        hypotheses = situation.hypotheses.map { it.title to it.status },
+        actions = situation.nextActions,
+    )
+    MissingSensorBanner(missingLines)
+
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = requestPermissions) { Text("Permisos") }
         OutlinedButton(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Mapa PID") }
@@ -562,6 +640,7 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
             color = Color(0xFFB0B8C0),
         )
     }
+    Text("MEDIDORES (siempre visibles, incluso si no soportados)", color = Color(0xFFF5C16C), fontSize = 14.sp)
     WorkshopGuide.monitorOrder.forEach { channel ->
         val sample = live[channel.pid]
         val supported = when {
@@ -569,10 +648,19 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
             state.supported.isEmpty() -> null
             else -> channel.pid in state.supported
         }
-        if (supported == false && sample == null) return@forEach
         val stats = state.channelStats[channel.pid]
+        val freshness = LiveSituationEngine.freshness(
+            pid = channel.pid,
+            supported = supported,
+            hasValue = sample?.value != null,
+            sampleValid = sample?.valid,
+            ageMs = stats?.ageMs,
+            targetIntervalMs = stats?.targetIntervalMs,
+            failCount = stats?.failCount ?: 0,
+            sampleCount = stats?.sampleCount ?: 0,
+        )
         val statsHint = stats?.let {
-            "%s · objetivo %d ms · %.2f Hz medido · lat %s ms · edad %s ms · ok %d / fail %d".format(
+            "%s · objetivo %d ms · %.2f Hz · lat %s ms · edad %s ms · ok %d / fail %d".format(
                 it.band,
                 it.targetIntervalMs,
                 it.effectiveHz,
@@ -589,6 +677,8 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
             statsHint = statsHint,
             baseline = state.beforeSnapshot?.values?.get(channel.pid),
             supported = supported,
+            freshness = freshness,
+            mechanicNote = LiveSituationEngine.mechanicNote(freshness, channel.shortLabel, channel.pid),
         )
     }
     val series = state.samples.filter { it.pid == 0x0C && it.value != null }.takeLast(48).map { it.value!! }

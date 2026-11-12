@@ -2,6 +2,14 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.6.0 — Monitor «Qué ocurre» (mecánico)
+
+- **Tag:** `v1.6.0`
+- **versionCode:** 17
+- **Fecha:** 2026-11-12
+
+`LiveSituationEngine`: franja de situación, hipótesis H1–H4 abiertas, medidores siempre visibles con VIVO/STALE/ERROR/NO SOPORTADO, banner de sensores que la app no lee (freno, APP fuera de mapa). Tests SIT-001…007. No inventa PID OEM ni recomienda piezas.
+
 ## v1.5.0 — Persistencia telemetría + LinkPhase (SPEC-024/027)
 
 - **Tag:** `v1.5.0`
