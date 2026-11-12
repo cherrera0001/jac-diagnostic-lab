@@ -370,16 +370,24 @@ class LabController(private val app: Application) {
         scan()
         delay(8_000)
         stopScan()
+        // Los emparejados OBDII/OBDBLE a veces no anuncian; hay que reinyectarlos tras el escaneo.
+        val bonded = repo.bonded()
+        state.update { it.copy(devices = merge(it.devices, bonded)) }
         val devices = state.value.devices
         trace("DISPOSITIVOS ${devices.joinToString { "${it.name} ${it.address} ${it.typeLabel} candidato=${it.candidate}" }}")
+        trace("EMPAREJADOS ${bonded.joinToString { "${it.name} ${it.address} primary=${it.primary}" }}")
         if (devices.isEmpty()) {
             explain("No apareció ningún dispositivo Bluetooth.")
             persist()
             return
         }
+        val remembered = prefs.getString("address", null)
         val classic = devices.firstOrNull { it.name.equals("OBDII", true) }
             ?: devices.firstOrNull { it.primary && !it.name.equals("OBDBLE", true) }
+            ?: devices.firstOrNull { remembered != null && it.address.equals(remembered, true) && !it.name.equals("OBDBLE", true) }
         val lowEnergy = devices.firstOrNull { it.name.equals("OBDBLE", true) }
+            ?: devices.firstOrNull { remembered != null && it.address.equals(remembered, true) && it.name.contains("BLE", true) }
+            ?: bonded.firstOrNull { it.name.equals("OBDBLE", true) }
         var talked = false
         if (classic != null) {
             val device = repo.device(classic.address)
