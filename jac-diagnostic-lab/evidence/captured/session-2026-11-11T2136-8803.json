@@ -9,7 +9,7 @@
   "connectionType": "Bluetooth LE GATT",
   "connectionState": "Conectado",
   "adapterName": "OBDBLE",
-  "adapterAddress": "81:23:45:67:89:BA",
+  "adapterAddress": "xx:xx:xx:xx:xx:xx",
   "adapterIdentity": "ELM327 v2.1",
   "protocolText": "AUTO,ISO 15765-4 (CAN 11/500)",
   "protocolNumber": "A6",

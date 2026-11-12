@@ -9,7 +9,7 @@
   "connectionType": "Bluetooth LE GATT",
   "connectionState": "Conectado",
   "adapterName": "OBDBLE",
-  "adapterAddress": "81:23:45:67:89:BA",
+  "adapterAddress": "xx:xx:xx:xx:xx:xx",
   "adapterIdentity": "",
   "protocolText": "",
   "protocolNumber": "",

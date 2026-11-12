@@ -29,8 +29,8 @@ Comandos OBD
 - No hay respuesta capturada del adaptador.
 - Este archivo no afirma que la camioneta esté sin fallas ni que el enlace Bluetooth funcione.
 
-Siguiente paso bloqueado
-- Desbloquear el teléfono y aceptar la instalación por USB de HyperOS.
-- Repetir adb install y abrir MainActivity con el extra autodiag true.
+Siguiente paso (completado más tarde el mismo día)
+- Teléfono desbloqueado, paquete instalado, autodiag forzado.
+- Resultado medido: evidence/captured/intento-2026-11-11-autodiag.txt y session-2026-11-11T2136-8803.*
 
-Detalle del log: instalacion-usb-log.txt
+Detalle del log de instalación fallida: instalacion-usb-log.txt

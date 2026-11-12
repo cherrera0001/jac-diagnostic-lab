@@ -136,7 +136,7 @@ object ElmParser {
             }
             return ParsedResponse(command, raw, ResponseKind.RECOGNIZED, body, emptyList(), "Comando AT aceptado por el adaptador.")
         }
-        val frames = assemble(body)
+        val frames = assemble(normalizeIndexedDump(body))
         if (frames.isEmpty()) {
             return ParsedResponse(
                 command, raw, ResponseKind.MALFORMED, body, emptyList(),
@@ -173,6 +173,39 @@ object ElmParser {
             .split('\r', '\n')
             .map { it.trim() }
             .filter { it.isNotEmpty() }
+
+    /**
+     * Algunos clones ELM parten un volcado largo en "014" + "0: …" / "1: …" / "2: …".
+     * Eso no es PCI ISO-TP: hay que concatenar el hex antes de clasificar tramas.
+     */
+    private fun normalizeIndexedDump(lines: List<String>): List<String> {
+        val indexed = Regex("^([0-9A-F]+):\\s*(.*)$", RegexOption.IGNORE_CASE)
+        val bareLength = Regex("^[0-9A-F]{1,3}$", RegexOption.IGNORE_CASE)
+        val out = mutableListOf<String>()
+        val chunks = mutableListOf<String>()
+        fun flush() {
+            if (chunks.isNotEmpty()) {
+                out += chunks.joinToString(" ")
+                chunks.clear()
+            }
+        }
+        for (line in lines) {
+            val match = indexed.matchEntire(line)
+            when {
+                match != null -> {
+                    val rest = match.groupValues[2].trim()
+                    if (rest.isNotEmpty()) chunks += rest
+                }
+                bareLength.matches(line) && chunks.isEmpty() -> Unit
+                else -> {
+                    flush()
+                    out += line
+                }
+            }
+        }
+        flush()
+        return out
+    }
 
     private fun stripEcho(command: String, lines: List<String>): List<String> {
         if (lines.isEmpty()) return lines

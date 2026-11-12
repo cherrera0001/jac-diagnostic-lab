@@ -104,10 +104,16 @@ Los archivos de `evidence\samples\` son transcripciones simuladas para las prueb
 
 Intento del 11 de noviembre de 2026, con la camioneta descrita como JAC T8 encendida y estacionada y el ELM327 Mini Bluetooth en el puerto OBD-II.
 
-El proyecto compiló. `testDebugUnitTest` ejecutó 14 pruebas y ninguna falló. La APK debug quedó en `dist\jac-diagnostic-lab-debug.apk` (11 942 827 bytes, SHA-256 `CE0F84A1C36CAB036D06D24CF5B4FD4223B4B43F97E9037AD81773F446EBD081`).
+Primero falló la instalación por USB con el teléfono bloqueado (`INSTALL_FAILED_USER_RESTRICTED`). Después, con el teléfono desbloqueado, el paquete `app.jac.diagnosticlab` quedó instalado y se forzó `MainActivity` con `autodiag=true`.
 
-El teléfono Xiaomi 2512BPNDAG seguía en ADB como `device`. `adb install` no instaló el paquete: HyperOS abrió `AdbInstallActivity` con la pantalla bloqueada (`isKeyguardLocked:true`, actividad no visible) y PackageManager cerró la sesión con `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. `pm path app.jac.diagnosticlab` no encontró la aplicación.
+Sesión autodiag `2026-11-11T2136-8803` (evidencia en `evidence\captured\`):
 
-Antes de ese intento, `settings get global bluetooth_on` devolvía 0. Se ejecutó `svc bluetooth enable` y el valor pasó a 1. No hubo escaneo OBDII/OBDBLE, ni ATZ, ni 0100, ni lectura de DTC, porque la aplicación no llegó a abrirse. No hay respuesta del adaptador. Eso no dice nada sobre fallas de la camioneta.
+- Enlace por **OBDBLE** (GATT `fff1`/`fff2`). No apareció el nombre `OBDII` en ese escaneo.
+- Adaptador: `ELM327 v2.1`. Protocolo tras `0100`: `A6` / ISO 15765-4 CAN 11/500.
+- `ATRV` 16.9 V (estimación del adaptador).
+- ECU respondió a `0100`. Stored: **P0579**, **P2299**. Pending vacío. Permanent: `7F 0A 13`.
+- `0101`: MIL genérico apagado. No explica un testigo EPC.
+- No se envió el servicio `04`. Una conexión exitosa no autoriza a circular.
+- Hallazgos H1–H4 siguen en datos insuficientes; H6 toma apoyo de los DTC presentes, sin texto J2012-DA.
 
-Para continuar hace falta desbloquear el teléfono, aceptar en HyperOS la instalación por USB y volver a lanzar la actividad con el extra `autodiag`. La transcripción de este intento está en `evidence\captured\`.
+Detalle: `evidence\captured\intento-2026-11-11-autodiag.txt` y `session-2026-11-11T2136-8803.*`.
