@@ -10,7 +10,7 @@
       "method": "Entrevista / contexto de sesión",
       "confidence": "HIGH",
       "date": "2026-11-11",
-      "evidence": ["jac-diagnostic-lab/evidence/captured/sesion-real-2026-11-11-latest.txt"]
+      "evidence": ["jac-diagnostic-lab/evidence/captured/session-2026-11-11T2136-8803.txt"]
     },
     {
       "id": "year",
@@ -49,16 +49,19 @@
     },
     {
       "id": "security_gateway",
-      "value": null,
-      "status": "UNKNOWN",
-      "method": "No se realizó descubrimiento invasivo de redes internas",
-      "evidence": []
+      "value": "Independent Gateway / GW aparece en documentación de línea T8 (2018-2022) y listas de diagnóstico; NO verificado en esta unidad",
+      "status": "DOCUMENTARY_LINE_UNKNOWN_UNIT",
+      "source": "research/manufacturer-evidence/sources.md (S-02, S-03)",
+      "method": "Revisión documental; sin medición en vehículo",
+      "confidence": "LOW_FOR_THIS_UNIT",
+      "date": "2026-11-11",
+      "evidence": ["manufacturer-evidence/sources.md"]
     },
     {
       "id": "infotainment_telematics",
       "value": null,
       "status": "UNKNOWN",
-      "note": "Dispositivo Bluetooth 'JAC SMART' visto emparejado en el teléfono; relación con el vehículo no verificada en esta sesión.",
+      "note": "Dispositivo Bluetooth 'JAC SMART' visto emparejado en el teléfono; relación con el vehículo no verificada.",
       "evidence": ["live-transcript sesión OBDBLE"]
     },
     {
@@ -77,6 +80,16 @@
       "method": "BLE GATT FFF2/FFF1",
       "confidence": "MEDIUM",
       "note": "La cadena ATI es imitable; no prueba autenticidad de un ELM Electronics original.",
+      "date": "2026-11-11",
+      "evidence": ["session-2026-11-11T2136-8803"]
+    },
+    {
+      "id": "stored_dtc",
+      "value": ["P0579", "P2299"],
+      "source": "Modo 03",
+      "method": "Solo lectura Nivel A",
+      "confidence": "HIGH",
+      "note": "Falla técnica; no atribuir causa cibernética sin evidencia.",
       "date": "2026-11-11",
       "evidence": ["session-2026-11-11T2136-8803"]
     },

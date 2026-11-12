@@ -1,0 +1,16 @@
+{
+  "finding_id": "C4A-AUTO-2026-006",
+  "component": "Vehicle architecture",
+  "title": "Gateway/telemática/firmware de ESTA unidad no verificados; línea T8 documenta Independent Gateway",
+  "status": "INCONCLUSIVE",
+  "severity": null,
+  "confidence": "LOW_FOR_THIS_UNIT",
+  "evidence_ids": ["manufacturer-evidence/sources.md"],
+  "evidence_kind": "DOCUMENTARY",
+  "impact": "No se puede afirmar filtrado OBD ni SecOC en esta camioneta.",
+  "recommendation": "Confirmar año/VIN; no barrido CAN; lab C para políticas simuladas.",
+  "validation_method": "Fuentes manufacturer-evidence + inventario",
+  "residual_risk": "UNKNOWN",
+  "threat_ids": ["T-010"],
+  "date": "2026-11-11"
+}

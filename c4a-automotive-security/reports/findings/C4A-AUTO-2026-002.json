@@ -6,8 +6,11 @@
   "severity": "LOW",
   "confidence": "HIGH",
   "evidence_ids": ["ATI"],
-  "impact": "No se puede usar ATI como control de autenticidad.",
-  "recommendation": "Tratar como genérico/probable clon hasta prueba de procedencia.",
-  "validation_method": "Comparar datasheet ELM Electronics vs respuesta ATI",
-  "residual_risk": "Aceptado mientras se use dongle genérico"
+  "evidence_kind": "DIRECT",
+  "impact": "No se puede confiar en ATI como control de autenticidad.",
+  "recommendation": "Tratar como clon/probable genérico hasta prueba de procedencia.",
+  "validation_method": "Comparar documentación ELM Electronics vs respuesta ATI",
+  "residual_risk": "Aceptado mientras se use dongle genérico",
+  "threat_ids": ["T-002", "T-007"],
+  "date": "2026-11-11"
 }

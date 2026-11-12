@@ -6,8 +6,11 @@
   "severity": "MEDIUM",
   "confidence": "HIGH",
   "evidence_ids": ["ObdCommandPolicy.kt"],
-  "impact": "Otra app OBD podría enviar el servicio 04 u operaciones no allowlisted al mismo adaptador.",
-  "recommendation": "Desemparejar tras uso; no dejar el dongle montado; revisar apps con Bluetooth.",
+  "evidence_kind": "DOCUMENTARY",
+  "impact": "Otra app OBD podría enviar 04 u otros comandos al mismo adaptador.",
+  "recommendation": "Control operativo del emparejamiento; no dejar dongle siempre montado.",
   "validation_method": "Revisión de arquitectura + Nivel B",
-  "residual_risk": "Inherent al dongle Bluetooth abierto"
+  "residual_risk": "Inherent al diseño del dongle Bluetooth abierto",
+  "threat_ids": ["T-003"],
+  "date": "2026-11-11"
 }

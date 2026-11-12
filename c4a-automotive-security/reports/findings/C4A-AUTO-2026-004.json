@@ -1,0 +1,16 @@
+{
+  "finding_id": "C4A-AUTO-2026-004",
+  "component": "OBD-II path",
+  "title": "Camino diagnóstico OBD-II genérico alcanzable desde el adaptador Bluetooth",
+  "status": "VERIFIED",
+  "severity": "INFO",
+  "confidence": "HIGH",
+  "evidence_ids": ["0100", "03"],
+  "evidence_kind": "DIRECT",
+  "impact": "Lectura de PIDs/DTC estándar posible; alcance a buses propietarios no medido en esta unidad.",
+  "recommendation": "Mantener solo lectura; gateway de esta unidad = UNKNOWN.",
+  "validation_method": "0100/03 vehículo estacionado",
+  "residual_risk": "UNKNOWN respecto de redes internas de esta unidad",
+  "threat_ids": ["T-008", "T-005", "T-010"],
+  "date": "2026-11-11"
+}

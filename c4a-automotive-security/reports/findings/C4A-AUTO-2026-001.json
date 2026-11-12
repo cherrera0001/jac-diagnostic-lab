@@ -5,9 +5,12 @@
   "status": "VERIFIED",
   "severity": "MEDIUM",
   "confidence": "HIGH",
-  "evidence_ids": ["session-2026-11-11T2136-8803", "live-transcript"],
-  "impact": "Un dispositivo o app capaz de abrir el GATT puede hablar con el intérprete ELM.",
-  "recommendation": "Retirar el dongle cuando no se use; restringir apps Bluetooth; evaluar adaptador con autenticación documentada.",
-  "validation_method": "Nivel A: NOTIFY FFF1 + WRITE FFF2 + ATI",
-  "residual_risk": "Persiste mientras el adaptador esté expuesto y emparejado"
+  "evidence_ids": ["session-2026-11-11T2136-8803", "live-transcript-autodiag2"],
+  "evidence_kind": "DIRECT",
+  "impact": "Un dispositivo/app capaz de abrir el GATT puede hablar con el intérprete ELM.",
+  "recommendation": "Retirar dongle cuando no se use; restringir apps Bluetooth; evaluar dongle con autenticación.",
+  "validation_method": "Nivel A: subscribe FFF1 + write FFF2 + ATI",
+  "residual_risk": "Persiste mientras el adaptador esté expuesto y emparejado",
+  "threat_ids": ["T-001", "T-003"],
+  "date": "2026-11-11"
 }

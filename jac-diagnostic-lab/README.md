@@ -2,6 +2,8 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una JAC T8 con adaptador ELM327 Mini Bluetooth. No borra códigos, no reprograma la ECU y no ejecuta actuadores.
 
+La auditoría de ciberseguridad (TARA, hallazgos C4A-AUTO-*, lab aislado) vive en [`../c4a-automotive-security`](../c4a-automotive-security). En la APK, la pestaña **Seguridad** muestra inventario, hallazgos y amenazas solo con evidencia.
+
 Una conexión exitosa no significa que el vehículo sea seguro para circular. Las comprobaciones iniciales se hacen con el vehículo estacionado y el contacto en ON.
 
 ## Entorno comprobado el 11-11-2026

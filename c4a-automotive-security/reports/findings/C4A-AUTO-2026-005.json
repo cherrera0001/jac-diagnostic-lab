@@ -1,0 +1,16 @@
+{
+  "finding_id": "C4A-AUTO-2026-005",
+  "component": "Vehicle fault (non-cyber unless proven)",
+  "title": "DTC stored presentes: P0579, P2299",
+  "status": "VERIFIED",
+  "severity": "INFO",
+  "confidence": "HIGH",
+  "evidence_ids": ["mode 03", "session-2026-11-11T2136-8803"],
+  "evidence_kind": "DIRECT",
+  "impact": "Síntomas EPC/potencia requieren diagnóstico mecánico/electrónico; no se atribuye causa cibernética.",
+  "recommendation": "VehicleFaultCorrelation + escáner JAC / taller. No borrar DTC hasta decisión de taller.",
+  "validation_method": "Bytes 03 crudos",
+  "residual_risk": "N/A (falla técnica, no exploit)",
+  "threat_ids": [],
+  "date": "2026-11-11"
+}
