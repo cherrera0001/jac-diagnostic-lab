@@ -135,6 +135,14 @@ class SecurityPolicyTest {
         assertTrue(text.contains("N56"))
         assertTrue(text.contains("no se usa"))
         assertFalse(text.contains("%"))
+        val danger = readingReport(
+            ReadingFacts(
+                "s", "ELM327 v2.1", "A6", "CAN", "16.9V",
+                listOf("P0579", "P2299"), true, false, "JAC T8", "2023", powerLossOnBrake = true,
+            ),
+        )
+        assertTrue(danger.lines.any { it.contains("no uses la camioneta en la vía", ignoreCase = true) })
+        assertTrue(danger.lines.any { it.contains("No se prueba en la calle") })
     }
 
     @Test

@@ -176,6 +176,21 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                     color = Color(0xFFF5C16C),
                 )
             }
+            if (Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "CORTE DE POTENCIA AL FRENAR",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = Color(0xFFFF8A80),
+                        )
+                        Text(
+                            "Si al manejar se corta la energía o la potencia al frenar, no uses esta camioneta en la calle hasta que un servicio JAC lea los avisos sin borrarlos y mida el freno y el acelerador con el vehículo quieto. Esta aplicación no certifica que puedas circular. No pruebes el corte en movimiento.",
+                            color = Color(0xFFFFCDD2),
+                        )
+                    }
+                }
+            }
             if (tab != 0) Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
             if (state.error != null) {
                 Card(Modifier.fillMaxWidth()) {
@@ -240,7 +255,12 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
     Text(if (step == 6) reading.title else current.detail)
     if (step == 6) {
         reading.lines.forEach { Text(it) }
-        interpretationLines(codes, state.declaredModel, state.declaredYear).forEach { Text(it) }
+        interpretationLines(
+            codes,
+            state.declaredModel,
+            state.declaredYear,
+            powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
+        ).forEach { Text(it) }
     }
     if (saved != null && liveCodes.isEmpty() && step >= 6) {
         Text("Esta es la lectura ya guardada en el teléfono, sesión ${saved.sessionId}. No hace falta enchufar de nuevo para armar el informe.")
@@ -275,6 +295,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
                     bleValidated = state.bleValidated,
                     declaredModel = state.declaredModel,
                     declaredYear = state.declaredYear,
+                    powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
                 )
                 val document = readingReport(facts)
                 val pdf = renderReadingPdf(document.title, document.lines)
@@ -425,6 +446,7 @@ private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
         state.dtcs.flatMap { it.codes.map { code -> code.code } },
         state.declaredModel,
         state.declaredYear,
+        powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
     ).forEach { Text(it) }
     Button(onClick = { model.readDtcs() }, enabled = !state.busy) { Text("Leer almacenados, pendientes y permanentes") }
     Button(onClick = { model.readFreeze() }, enabled = !state.busy) { Text("Leer freeze frame") }
@@ -522,7 +544,11 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
     val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
         val facts = if (pdfFromSaved && saved != null) {
-            saved.copy(declaredModel = state.declaredModel, declaredYear = state.declaredYear)
+            saved.copy(
+                declaredModel = state.declaredModel,
+                declaredYear = state.declaredYear,
+                powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
+            )
         } else {
             ReadingFacts(
                 sessionId = state.sessionId,
@@ -535,6 +561,7 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
                 bleValidated = state.bleValidated,
                 declaredModel = state.declaredModel,
                 declaredYear = state.declaredYear,
+                powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
             )
         }
         val refusal = payloadHasContent(
@@ -838,7 +865,7 @@ private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
     var canvas = page.canvas
     var y = margin
     fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab 0.8.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText("JAC Diagnostic Lab 0.4.2-safe  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
         canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
         document.finishPage(page)
     }

@@ -234,6 +234,7 @@ data class ReadingFacts(
     val bleValidated: Boolean = false,
     val declaredModel: String = "",
     val declaredYear: String = "",
+    val powerLossOnBrake: Boolean = false,
 )
 
 data class ReadingReportDocument(
@@ -293,7 +294,12 @@ fun payloadHasContent(
     }
 }
 
-fun interpretationLines(codes: List<String>, model: String, year: String): List<String> {
+fun interpretationLines(
+    codes: List<String>,
+    model: String,
+    year: String,
+    powerLossOnBrake: Boolean = false,
+): List<String> {
     val unique = codes.map { it.trim().uppercase() }.filter { it.isNotBlank() }.distinct()
     val vehicle = when {
         model.isNotBlank() && year.isNotBlank() -> "${model.trim()}, año ${year.trim()}"
@@ -307,6 +313,10 @@ fun interpretationLines(codes: List<String>, model: String, year: String): List<
         if (vehicle.isNotBlank()) {
             add("Declaraste $vehicle. Ese dato tampoco salió de la computadora. Las fuentes abiertas revisadas no traen el texto de estos números para esa unidad.")
         }
+        if (powerLossOnBrake) {
+            add("Relato del conductor: al manejar se corta la potencia o la energía al frenar, y al detener aparecen fallos. Eso es un riesgo de seguridad física. No se prueba en la calle. No se borra. Se lleva al servicio JAC con este papel.")
+            add("Esta aplicación no se hace responsable de la circulación. Mientras ese corte ocurra, no uses la camioneta en la vía.")
+        }
         if (unique.isEmpty()) {
             add("En esta copia no hay avisos guardados que interpretar. Eso no significa que la camioneta esté bien.")
             return@buildList
@@ -316,7 +326,7 @@ fun interpretationLines(codes: List<String>, model: String, year: String): List<
             add("La computadora guardó dos avisos a la vez: P0579 y P2299.")
             add("P2299, en la definición pública, quiere decir que el freno y el acelerador quedaron en desacuerdo. Vio el freno pisado mientras el acelerador también estaba abierto, o una de esas señales no volvió a su sitio.")
             add("P0579, en esa misma definición pública, apunta a la entrada del crucero. Muchas veces esa entrada es el interruptor que el freno corta al pisarlo.")
-            add("Leídos juntos, la frase que encaja es esta: al frenar, la señal del freno y la del acelerador no coinciden, y el corte del crucero entra en la misma discusión. Encaja con una luz EPC y con una baja de potencia al frenar. No demuestra que esa sea la causa.")
+            add("Leídos juntos, la frase que encaja es esta: al frenar, la señal del freno y la del acelerador no coinciden, y el corte del crucero entra en la misma discusión. Encaja con una luz EPC y con una baja de potencia al frenar. No demuestra que esa sea la causa. Tampoco demuestra un ataque informático.")
             add("No dice qué pieza cambiar. No pide cambiar el pedal, el interruptor ni el acelerador.")
             add("JAC, en lo que se pudo abrir, no publica ese texto para la T8. Un PDF del dominio JAC habla de otros números de pedal, P2123, P2127, P2128, P3004 y P3005. No son los que contestó esta camioneta.")
             add("El manual diésel de la N56 sí define P2299 y cita 750 mV en el acelerador. Es otro modelo. Ese valor no se usa aquí.")
@@ -342,7 +352,7 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("No indica qué pieza cambiar. No borra los avisos.")
         add("")
         add("1. Qué significa")
-        interpretationLines(codes, facts.declaredModel, facts.declaredYear).forEach { add(it) }
+        interpretationLines(codes, facts.declaredModel, facts.declaredYear, facts.powerLossOnBrake).forEach { add(it) }
         add("")
         add("2. Qué contestó la computadora")
         add("Sesión ${facts.sessionId.ifBlank { "sin número" }}.")
