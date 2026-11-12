@@ -9,5 +9,5 @@
 - [x] VoltageAssessment + OperationalState + SessionTimeMetrics
 - [x] Compilar APK post-fix
 - [x] Informe comparativo 0.4.0 → sprint P0
-- [ ] Push tag + rama
+- [x] Push rama (`cab74d8`); tag `v0.4.0` ya existía en remoto
 
