@@ -445,3 +445,119 @@ object SecurityAssessment {
         )
     }
 }
+
+data class SecurityCheck(
+    val number: Int,
+    val title: String,
+    val result: String,
+    val detail: String,
+)
+
+object SecurityGuide {
+    val results = setOf("Comprobado", "Te toca a ti", "Sin comprobar")
+
+    fun checks(adapterId: String, ecuTalking: Boolean, codes: List<String>, bleValidated: Boolean): List<SecurityCheck> {
+        val knownCodes = codes.map { it.trim() }.filter { it.isNotBlank() }
+        val identity = when {
+            adapterId.isBlank() -> SecurityCheck(
+                3,
+                "El nombre del aparato",
+                "Sin comprobar",
+                "Todavía no contestó. Cuando conteste, el texto ELM327 no prueba que el aparato sea original.",
+            )
+            adapterId.contains("ELM327", true) -> SecurityCheck(
+                3,
+                "El nombre del aparato",
+                "Comprobado",
+                "Contestó «$adapterId». Ese texto se puede copiar. No prueba que el aparato sea original.",
+            )
+            else -> SecurityCheck(
+                3,
+                "El nombre del aparato",
+                "Comprobado",
+                "Contestó «$adapterId». No alcanza para decir que el aparato sea original.",
+            )
+        }
+        val reached = if (ecuTalking || knownCodes.isNotEmpty()) {
+            SecurityCheck(
+                4,
+                "Llegó hasta la computadora",
+                "Comprobado",
+                "La computadora contestó por el enchufe de diagnóstico. Eso no significa que la camioneta esté sana ni que puedas circular.",
+            )
+        } else {
+            SecurityCheck(
+                4,
+                "Llegó hasta la computadora",
+                "Sin comprobar",
+                "En esta pantalla todavía no hay una respuesta de la computadora.",
+            )
+        }
+        val radio = if (bleValidated) {
+            SecurityCheck(
+                5,
+                "El aparato acepta órdenes por Bluetooth",
+                "Comprobado",
+                "Después de conectar, aceptó órdenes de esta aplicación. Otra aplicación del mismo teléfono no pasa por este filtro. Ciérrala y saca el aparato al terminar.",
+            )
+        } else {
+            SecurityCheck(
+                5,
+                "El aparato acepta órdenes por Bluetooth",
+                "Sin comprobar",
+                "Este enlace todavía no se validó. Aunque se valide, otra aplicación del teléfono puede hablar directo con el aparato.",
+            )
+        }
+        val fault = if (knownCodes.isEmpty()) {
+            SecurityCheck(
+                7,
+                "Los avisos no son una intrusión",
+                "Sin comprobar",
+                "No hay avisos en esta copia. Si aparecen, se leen como una falla del vehículo. Esta lectura no demuestra que alguien haya entrado a la computadora.",
+            )
+        } else {
+            SecurityCheck(
+                7,
+                "Los avisos no son una intrusión",
+                "Comprobado",
+                "Hay avisos guardados. Son una falla del vehículo. Esta lectura no demuestra que alguien haya entrado a la computadora.",
+            )
+        }
+        return listOf(
+            SecurityCheck(
+                1,
+                "Esta aplicación no borra avisos",
+                "Comprobado",
+                "El borrado está bloqueado en esta aplicación. El bloqueo no viaja al aparato: otra aplicación sí podría borrarlos.",
+            ),
+            SecurityCheck(
+                2,
+                "Esta aplicación no sale a internet",
+                "Comprobado",
+                "No envía la lectura a un servidor. No pide ni guarda el PIN del Bluetooth.",
+            ),
+            identity,
+            reached,
+            radio,
+            SecurityCheck(
+                6,
+                "Sacar el aparato al terminar",
+                "Te toca a ti",
+                "El teléfono no ve si el aparato sigue enchufado. Si se queda puesto, quien ya esté emparejado puede volver a hablar con la camioneta.",
+            ),
+            fault,
+            SecurityCheck(
+                8,
+                "Año, programa y compuerta de esta camioneta",
+                "Sin comprobar",
+                "No se leyó el año, ni el programa de la computadora, ni si esta unidad trae una compuerta de seguridad. No se afirma.",
+            ),
+            SecurityCheck(
+                9,
+                "Pruebas que no se hacen en la camioneta",
+                "Sin comprobar",
+                "No se probó un segundo teléfono y no se lanzó ninguna prueba de ataque contra el vehículo. Si esas pruebas se hacen, van en un aparato aparte.",
+            ),
+        )
+    }
+}

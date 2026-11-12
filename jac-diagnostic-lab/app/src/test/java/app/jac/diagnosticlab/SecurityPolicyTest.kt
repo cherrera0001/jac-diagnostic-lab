@@ -6,6 +6,7 @@ import app.jac.diagnosticlab.security.FindingStatus
 import app.jac.diagnosticlab.security.ObdCommandPolicy
 import app.jac.diagnosticlab.security.SecurityAssessment
 import app.jac.diagnosticlab.security.ThreatModelEngine
+import app.jac.diagnosticlab.security.SecurityGuide
 import app.jac.diagnosticlab.security.VehicleFaultCorrelation
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.elm.ResponseKind
@@ -14,6 +15,7 @@ import app.jac.diagnosticlab.obd.DtcDecoder
 import app.jac.diagnosticlab.PlainReadingWriter
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
+import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -127,5 +129,49 @@ class SecurityPolicyTest {
         assertFalse(text.contains("reemplaza", true))
         val unknown = readingReport(ReadingFacts("s", "", "", "", "", listOf("P0999"), true))
         assertTrue(unknown.lines.any { it.contains("P0999") && it.contains("No traduzco") })
+        assertTrue(text.contains("4. Validación de seguridad"))
+        assertFalse(text.contains("%"))
+    }
+
+    @Test
+    fun securityGuideNumbersEveryCheckAndDoesNotCallTheTruckSafe() {
+        val idle = SecurityGuide.checks("", false, emptyList(), false)
+        assertEquals((1..9).toList(), idle.map { it.number })
+        assertTrue(idle.all { it.result in SecurityGuide.results })
+        assertEquals("Comprobado", idle.first { it.number == 1 }.result)
+        assertTrue(idle.first { it.number == 1 }.detail.contains("otra aplicación", ignoreCase = true))
+        assertEquals("Te toca a ti", idle.first { it.number == 6 }.result)
+        assertEquals("Sin comprobar", idle.first { it.number == 8 }.result)
+        val read = SecurityGuide.checks("ELM327 v2.1", true, listOf("P0579"), true)
+        assertTrue(read.first { it.number == 3 }.detail.contains("se puede copiar"))
+        assertTrue(read.first { it.number == 7 }.detail.contains("no demuestra"))
+        assertFalse(read.joinToString { it.detail + it.title }.contains("%"))
+        assertFalse(read.joinToString { it.detail }.contains("reemplaza", ignoreCase = true))
+    }
+
+    @Test
+    fun r1_pdfJoinsTheOtherFormatsOnlyWhenThereIsContent() {
+        assertEquals(null, payloadHasContent("pdf", exchanges = 1, codes = 0, confirmedAnswer = false, errors = 0, samples = 0, adapterId = ""))
+        assertEquals(null, payloadHasContent("json", exchanges = 1, codes = 0, confirmedAnswer = false, errors = 0, samples = 0, adapterId = ""))
+        assertEquals(null, payloadHasContent("txt", exchanges = 0, codes = 1, confirmedAnswer = false, errors = 0, samples = 0, adapterId = ""))
+        assertEquals(null, payloadHasContent("csv", exchanges = 0, codes = 0, confirmedAnswer = false, errors = 0, samples = 2, adapterId = ""))
+    }
+
+    @Test
+    fun r2_refusesAnEmptyExportAndSaysTheFileIsNotCreated() {
+        listOf("pdf", "json", "txt", "csv").forEach { format ->
+            val reason = payloadHasContent(format, 0, 0, false, 0, 0, "")
+            assertTrue(format, reason != null && reason!!.contains("No se crea"))
+        }
+        val csv = payloadHasContent("csv", exchanges = 4, codes = 2, confirmedAnswer = true, errors = 0, samples = 0, adapterId = "ELM327 v2.1")
+        assertTrue(csv!!.contains("No se crea el CSV"))
+    }
+
+    @Test
+    fun r3_savedReadingCanFeedThePdfWhenTheScreenSessionIsEmpty() {
+        val screen = payloadHasContent("json", 0, 0, false, 0, 0, "")
+        val saved = payloadHasContent("pdf", 0, 2, false, 0, 0, "ELM327 v2.1")
+        assertTrue(screen!!.contains("No se crea"))
+        assertEquals(null, saved)
     }
 }

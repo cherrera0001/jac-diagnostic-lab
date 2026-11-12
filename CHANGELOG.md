@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.6.0 — 2026-11-11
+
+Copia muestra el PDF junto a JSON, TXT y CSV. El archivo se arma al pulsar y no se crea si la sesión no tiene contenido. [R1](specs/001-exportacion/spec.md) [R2](specs/001-exportacion/spec.md) [ADR-001](adr/ADR-001-el-archivo-se-arma-al-pulsar.md)
+
+## v0.5.0 — 2026-11-11
+
+La pestaña Seguridad muestra nueve pasos de validación, cada uno con un resultado. No incluye lecturas de una unidad.
+
+- Resultados posibles: comprobado en esta aplicación, te toca a ti, o sin comprobar.
+- No hay porcentaje de seguridad. Comprobado no autoriza a circular.
+- El mismo listado entra en el PDF local.
+- El detalle técnico queda detrás de un botón.
+
 ## v0.4.0 — 2026-11-11
 
 La pantalla de entrada guía la lectura en ocho pasos numerados y guarda un informe PDF local con su huella. No incluye lecturas de una unidad.

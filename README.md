@@ -49,7 +49,7 @@ flowchart TD
 4. En **Hoy**, pulsar **4. Permitir Bluetooth**.
 5. Pulsar **5. Leer la camioneta**. Dejar el teléfono junto al aparato, con la pantalla abierta, cerca de un minuto.
 6. Leer solo lo que dice el paso 6. Traduce los números que conoce. No dice qué pieza cambiar.
-7. Pulsar **7. Guardar informe PDF**. Quedan dos archivos en Descargas, carpeta `JAC-lectura`: el PDF y un `.sha256` con la huella del archivo. La huella no va dentro del PDF, porque al escribirla el archivo cambiaría.
+7. Ir a **Copia** y pulsar **PDF del informe**. El archivo se arma en ese momento, no durante la lectura. JSON y TXT son la copia cruda. CSV solo sale si hubo sensores. Si no hay contenido, el botón no escribe y, si Android ya creó el archivo, se borra. La huella SHA-256 del PDF queda en un archivo `.sha256` al lado cuando se guarda desde Hoy.
 8. Sacar el aparato. Llevar el PDF a un servicio de la marca y pedir que lean los mismos números sin borrarlos.
 
 Si el teléfono ya tiene una lectura guardada, **Hoy** abre en el paso 6 para armar el informe sin enchufar de nuevo.
@@ -60,11 +60,11 @@ Son ocho trabajos, no ocho programas. El que revisa no es el que lee: tú detien
 
 | Pestaña | Para qué sirve | Qué no hace |
 |---|---|---|
-| Hoy | Los ocho pasos, el resultado en palabras y el PDF | No recomienda cambiar piezas |
+| Hoy | Los ocho pasos de la lectura, el resultado en palabras y el PDF | No recomienda cambiar piezas |
+| Seguridad | Nueve pasos de validación, cada uno con su resultado | No da un porcentaje ni certifica la camioneta |
 | Conexión | Buscar OBDII o OBDBLE y ver la identificación del aparato | No demuestra que el aparato sea original |
-| Avisos | Mostrar los números tal como llegaron | No inventa el texto de un número desconocido |
-| Copia | Guardar JSON, CSV o TXT en el teléfono | No sube nada a internet |
-| Revisión | Síntomas, hipótesis, inventario y hallazgos | No certifica el vehículo ni muestra un porcentaje |
+| Avisos | Mostrar los números tal como llegaron, y las hipótesis | No inventa el texto de un número desconocido |
+| Copia | Armar, al pulsar, el PDF y la copia cruda JSON, TXT o CSV | No crea un archivo vacío ni sube nada a internet |
 
 **Copia** puede anonimizar el identificador del vehículo y la dirección Bluetooth. **Hoy** no escribe esos datos en el PDF. El informe de una unidad concreta sigue fuera de este repositorio.
 
@@ -117,6 +117,10 @@ Instalar la APK debug con el teléfono desbloqueado:
 adb install -r dist\jac-diagnostic-lab-debug.apk
 ```
 
+## Cómo se construye
+
+El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numerado, decisión en `adr/`, prueba que nombra el requisito, y después el código. La exportación está en [specs/001-exportacion/spec.md](specs/001-exportacion/spec.md) y [ADR-001](adr/ADR-001-el-archivo-se-arma-al-pulsar.md).
+
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.4.0 (`versionCode` 3). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.6.0 (`versionCode` 5). Los resultados de una unidad concreta no forman parte de este archivo.

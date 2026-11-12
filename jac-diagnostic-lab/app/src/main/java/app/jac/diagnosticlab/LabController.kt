@@ -27,6 +27,7 @@ import app.jac.diagnosticlab.elm.ResponseKind
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
 import app.jac.diagnosticlab.evidence.anonymize
+import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.toCsv
 import app.jac.diagnosticlab.evidence.toJson
 import app.jac.diagnosticlab.evidence.toTxt
@@ -292,14 +293,20 @@ class LabController(private val app: Application) {
 
     fun export(uri: Uri, format: String, anonymizeExport: Boolean) {
         val record = if (anonymizeExport) anonymize(buildRecord()) else buildRecord()
+        val refusal = refusalFor(record, format)
+        if (refusal != null) {
+            discard(uri, refusal)
+            return
+        }
         val text = when (format) {
             "csv" -> toCsv(record)
             "txt" -> toTxt(record)
             else -> toJson(record)
         }
-        app.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-            ?: explain("Android no abrió el archivo elegido.")
+        writeExport(uri, text.toByteArray(Charsets.UTF_8), null)
     }
+
+    fun exportBytes(uri: Uri, bytes: ByteArray, refusal: String?) = writeExport(uri, bytes, refusal)
 
     fun disconnect() {
         stopPoll()
@@ -573,8 +580,37 @@ class LabController(private val app: Application) {
         )
     }
 
+    private fun refusalFor(record: SessionRecord, format: String): String? = payloadHasContent(
+        format,
+        record.exchanges.size,
+        record.dtcs.sumOf { it.codes.size },
+        record.dtcs.any { it.confirmedEmpty },
+        record.errors.size,
+        record.samples.size,
+        record.adapterIdentity,
+    )
+
+    private fun discard(uri: Uri, reason: String) {
+        runCatching { app.contentResolver.delete(uri, null, null) }
+        explain(reason)
+    }
+
+    private fun writeExport(uri: Uri, bytes: ByteArray, refusal: String?) {
+        if (refusal != null || bytes.isEmpty()) {
+            discard(uri, refusal ?: "El archivo no tenía contenido. Se descartó.")
+            return
+        }
+        val stream = app.contentResolver.openOutputStream(uri)
+        if (stream == null) {
+            discard(uri, "Android no abrió el archivo elegido.")
+            return
+        }
+        stream.use { it.write(bytes) }
+    }
+
     private fun persist() {
         val record = buildRecord()
+        if (refusalFor(record, "json") != null) return
         val dir = File(app.filesDir, "sessions").apply { mkdirs() }
         runCatching { File(dir, "$sessionId.json").writeText(toJson(record)) }
         runCatching { File(dir, "$sessionId.txt").writeText(toTxt(record)) }

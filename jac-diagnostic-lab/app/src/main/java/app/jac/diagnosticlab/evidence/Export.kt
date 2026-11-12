@@ -4,6 +4,7 @@ import app.jac.diagnosticlab.analysis.AnalysisReport
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.obd.DtcReadResult
+import app.jac.diagnosticlab.security.SecurityGuide
 import app.jac.diagnosticlab.obd.FreezeNote
 import app.jac.diagnosticlab.obd.PidReading
 
@@ -230,6 +231,7 @@ data class ReadingFacts(
     val voltageText: String,
     val storedCodes: List<String>,
     val ecuTalking: Boolean,
+    val bleValidated: Boolean = false,
 )
 
 data class ReadingReportDocument(
@@ -269,6 +271,24 @@ object StreetGuide {
 fun sha256Hex(bytes: ByteArray): String {
     val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
     return digest.joinToString("") { "%02x".format(it) }
+}
+
+fun payloadHasContent(
+    format: String,
+    exchanges: Int,
+    codes: Int,
+    confirmedAnswer: Boolean,
+    errors: Int,
+    samples: Int,
+    adapterId: String,
+): String? {
+    val talked = exchanges > 0 || codes > 0 || confirmedAnswer || errors > 0 || adapterId.isNotBlank()
+    return when (format.trim().lowercase()) {
+        "csv" -> if (samples > 0) null else "No hay sensores en esta sesión. No se crea el CSV."
+        "json", "txt" -> if (talked) null else "No hay respuestas ni errores. No se crea el archivo."
+        "pdf" -> if (talked) null else "Todavía no hay una lectura que interpretar. No se crea el PDF."
+        else -> "Formato desconocido. No se crea el archivo."
+    }
 }
 
 fun readingReport(facts: ReadingFacts): ReadingReportDocument {
@@ -312,6 +332,12 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("4. Pedir la medición del pedal de freno y de las dos señales del acelerador, con la camioneta quieta.")
         add("5. No probar el corte de potencia en la calle.")
         add("6. No cambiar piezas por esta hoja.")
+        add("")
+        add("4. Validación de seguridad")
+        add("No hay un porcentaje. Comprobado significa que esta aplicación lo revisó. No significa que la camioneta esté segura.")
+        SecurityGuide.checks(facts.adapterId, facts.ecuTalking, codes, facts.bleValidated).forEach { check ->
+            add("${check.number}. ${check.title}. ${check.result}. ${check.detail}")
+        }
     }
     val hash = sha256Hex(body.joinToString("\n").toByteArray(Charsets.UTF_8))
     val lines = body + listOf("", "Huella de este texto, SHA-256: $hash", "La huella del archivo PDF va en el archivo .sha256 del mismo nombre. No va dentro del PDF, porque al escribirla el archivo cambiaría.")

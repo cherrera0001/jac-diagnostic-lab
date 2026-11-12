@@ -67,8 +67,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
+import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.security.SecurityGuide
 import android.Manifest
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -106,6 +108,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun readVin() = lab.readVin()
     fun readFreeze() = lab.readFreeze()
     fun export(uri: Uri, format: String, anonymize: Boolean) = lab.export(uri, format, anonymize)
+    fun exportBytes(uri: Uri, bytes: ByteArray, refusal: String?) = lab.exportBytes(uri, bytes, refusal)
     fun disconnect() = lab.disconnect()
     fun startAutodiag() = lab.startAutodiag()
 }
@@ -149,7 +152,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Hoy", "Conexión", "Avisos", "Copia", "Revisión").forEachIndexed { index, label ->
+                listOf("Hoy", "Seguridad", "Conexión", "Avisos", "Copia").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -181,13 +184,13 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             }
             when (tab) {
                 0 -> TodayScreen(state, model, permissions)
-                1 -> LinkScreen(state, model, permissions)
-                2 -> CodeScreen(state, model)
-                3 -> EvidenceScreen(state, model)
-                else -> {
+                1 -> SecurityGuideScreen(state)
+                2 -> LinkScreen(state, model, permissions)
+                3 -> {
+                    CodeScreen(state, model)
                     AnalysisScreen(state, model)
-                    SecurityScreen(state)
                 }
+                else -> EvidenceScreen(state, model)
             }
         }
     }
@@ -233,7 +236,11 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
         5 -> "5. Leer la camioneta" to { model.startAutodiag() }
         6 -> "Ya lo leí" to { doneThrough = 6 }
         7 -> "7. Guardar informe PDF" to {
-            runCatching {
+            val refusal = payloadHasContent("pdf", state.exchanges.size, codes.size, state.dtcs.any { it.confirmedEmpty }, if (state.error.isNullOrBlank()) 0 else 1, state.samples.size, adapterId)
+            val savedRefusal = if (saved == null) refusal else payloadHasContent("pdf", 0, saved.storedCodes.size, false, 0, 0, saved.adapterId)
+            if (refusal != null && savedRefusal != null) {
+                pdfError = refusal
+            } else runCatching {
                 val facts = ReadingFacts(
                     sessionId = state.sessionId.ifBlank { saved?.sessionId.orEmpty() },
                     adapterId = adapterId,
@@ -242,6 +249,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
                     voltageText = state.voltageText.ifBlank { saved?.voltageText.orEmpty() },
                     storedCodes = codes,
                     ecuTalking = ecuTalking,
+                    bleValidated = state.bleValidated,
                 )
                 val document = readingReport(facts)
                 val pdf = renderReadingPdf(document.title, document.lines)
@@ -282,7 +290,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             }
         }
     }
-    Text("Versión 0.4.0. Conexión, Avisos y Copia son el detalle. Esta pantalla es la que se usa.")
+    Text("Versión 0.6.0. El PDF, el JSON, el TXT y el CSV se arman en Copia, al pulsar. La seguridad está en su pestaña.")
 }
 
 @Composable
@@ -451,11 +459,58 @@ private fun SensorScreen(state: LabState, model: DiagnosticViewModel) {
 
 @Composable
 private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var anonymize by remember { mutableStateOf(true) }
-    Text("Sesión ${state.sessionId.ifBlank { "(aún sin secuencia)" }}. Nada se sube a un servidor.")
+    val liveCodes = state.dtcs.sumOf { it.codes.size }
+    val confirmed = state.dtcs.any { it.confirmedEmpty }
+    val errors = if (state.error.isNullOrBlank()) 0 else 1
+    val livePdf = payloadHasContent("pdf", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
+    val saved = remember(state.sessionId, liveCodes, state.ecuTalking, state.adapterId) {
+        if (livePdf == null) null else latestSavedFacts(context)
+    }
+    val savedPdf = if (saved == null) {
+        "Todavía no hay una lectura que interpretar. No se crea el PDF."
+    } else {
+        payloadHasContent("pdf", 0, saved.storedCodes.size, false, 0, 0, saved.adapterId)
+    }
+    val pdfFromSaved = livePdf != null && savedPdf == null
+    val jsonBlock = payloadHasContent("json", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
+    val txtBlock = payloadHasContent("txt", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
+    val csvBlock = payloadHasContent("csv", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
+    Text("La lectura ocurre en Hoy, paso 5. El archivo se arma ahora, al pulsar. No se arma solo y no se sube.")
+    Text("Sesión en pantalla: ${state.sessionId.ifBlank { "todavía no hay" }}.")
+    if (pdfFromSaved) Text("Esta sesión en pantalla no tiene contenido. El PDF usará la lectura guardada ${saved?.sessionId}. JSON, TXT y CSV de esta sesión vacía no se crean.")
     Row {
         Checkbox(checked = anonymize, onCheckedChange = { anonymize = it })
-        Text("Anonimizar VIN y dirección Bluetooth al exportar", Modifier.padding(top = 12.dp))
+        Text("Anonimizar identificador y dirección Bluetooth en JSON y TXT", Modifier.padding(top = 12.dp))
+    }
+    val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val facts = if (pdfFromSaved && saved != null) {
+            saved
+        } else {
+            ReadingFacts(
+                sessionId = state.sessionId,
+                adapterId = state.adapterId,
+                protocolNumber = state.protocolNumber,
+                protocolText = state.protocolText,
+                voltageText = state.voltageText,
+                storedCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } },
+                ecuTalking = state.ecuTalking,
+                bleValidated = state.bleValidated,
+            )
+        }
+        val refusal = payloadHasContent(
+            "pdf",
+            if (pdfFromSaved) 0 else state.exchanges.size,
+            facts.storedCodes.size,
+            if (pdfFromSaved) false else confirmed,
+            if (pdfFromSaved) 0 else errors,
+            0,
+            facts.adapterId,
+        )
+        val bytes = if (refusal == null) renderReadingPdf(readingReport(facts).title, readingReport(facts).lines) else ByteArray(0)
+        model.exportBytes(uri, bytes, refusal)
     }
     val json = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) model.export(uri, "json", anonymize)
@@ -466,11 +521,15 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
     val txt = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
         if (uri != null) model.export(uri, "txt", anonymize)
     }
+    Button(onClick = { pdf.launch("jac-informe.pdf") }, enabled = livePdf == null || pdfFromSaved, modifier = Modifier.fillMaxWidth()) { Text("PDF del informe") }
+    if (livePdf != null && !pdfFromSaved) Text(livePdf)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(onClick = { json.launch("jac-sesion.json") }, enabled = state.exchanges.isNotEmpty()) { Text("JSON") }
-        Button(onClick = { csv.launch("jac-sensores.csv") }, enabled = state.samples.isNotEmpty()) { Text("CSV") }
-        Button(onClick = { txt.launch("jac-diagnostico.txt") }, enabled = state.exchanges.isNotEmpty() || state.error != null) { Text("TXT") }
+        Button(onClick = { json.launch("jac-sesion.json") }, enabled = jsonBlock == null) { Text("JSON") }
+        Button(onClick = { txt.launch("jac-diagnostico.txt") }, enabled = txtBlock == null) { Text("TXT") }
+        Button(onClick = { csv.launch("jac-sensores.csv") }, enabled = csvBlock == null) { Text("CSV") }
     }
+    listOfNotNull(jsonBlock, txtBlock, csvBlock).distinct().forEach { Text(it) }
+    Text("Si el selector crea el archivo y no hay contenido, la aplicación lo borra.")
     Text("La aplicación no tiene botón para borrar sesiones ni códigos.")
     Transcript(state)
 }
@@ -519,6 +578,53 @@ private fun AnalysisScreen(state: LabState, model: DiagnosticViewModel) {
         }
     }
     Text("No se recomienda sustituir piezas solo por estos síntomas.")
+}
+
+@Composable
+private fun SecurityGuideScreen(state: LabState) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val liveCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } }
+    val saved = remember(state.sessionId, liveCodes, state.ecuTalking) {
+        if (state.ecuTalking || liveCodes.isNotEmpty()) null else latestSavedFacts(context)
+    }
+    val codes = liveCodes.ifEmpty { saved?.storedCodes.orEmpty() }
+    val checks = SecurityGuide.checks(
+        adapterId = state.adapterId.ifBlank { saved?.adapterId.orEmpty() },
+        ecuTalking = state.ecuTalking || saved?.ecuTalking == true,
+        codes = codes,
+        bleValidated = state.bleValidated,
+    )
+    val checked = checks.count { it.result == "Comprobado" }
+    val yours = checks.count { it.result == "Te toca a ti" }
+    val open = checks.count { it.result == "Sin comprobar" }
+    var detail by remember { mutableStateOf(false) }
+    Text("Validación de seguridad", style = MaterialTheme.typography.headlineSmall)
+    Text("9 pasos. $checked comprobados en esta aplicación. $yours te toca a ti. $open sin comprobar.")
+    Text("Comprobado no significa que la camioneta esté segura. No hay un porcentaje.", color = Color(0xFFF5C16C))
+    checks.forEach { check ->
+        val mark = when (check.result) {
+            "Comprobado" -> Color(0xFF9DCC8A)
+            "Te toca a ti" -> Color(0xFFF5C16C)
+            else -> Color(0xFF9AA3AD)
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.Top) {
+            Box(
+                Modifier.size(36.dp).background(mark, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("${check.number}", color = Color(0xFF12171C), style = MaterialTheme.typography.titleMedium)
+            }
+            Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                Text("${check.number}. ${check.title}")
+                Text(check.result, color = mark, style = MaterialTheme.typography.titleSmall)
+                Text(check.detail, fontSize = 13.sp, color = Color(0xFFC5CDD6))
+            }
+        }
+    }
+    OutlinedButton(onClick = { detail = !detail }, modifier = Modifier.fillMaxWidth()) {
+        Text(if (detail) "Ocultar el detalle técnico" else "Ver el detalle técnico")
+    }
+    if (detail) SecurityScreen(state)
 }
 
 @Composable
@@ -685,7 +791,7 @@ private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
     var canvas = page.canvas
     var y = margin
     fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab 0.4.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText("JAC Diagnostic Lab 0.6.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
         canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
         document.finishPage(page)
     }

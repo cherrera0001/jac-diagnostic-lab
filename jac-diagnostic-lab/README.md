@@ -1,6 +1,8 @@
 # JAC Diagnostic Lab
 
-Aplicación Android de diagnóstico **solo lectura** para una JAC T8 con adaptador ELM327 Mini Bluetooth. Versión **0.4.0**. No borra códigos, no reprograma la ECU y no ejecuta actuadores.
+Aplicación Android de diagnóstico **solo lectura** para una JAC T8 con adaptador ELM327 Mini Bluetooth. Versión **0.6.0**. No borra códigos, no reprograma la ECU y no ejecuta actuadores.
+
+La pestaña **Seguridad** lista nueve validaciones. Cada una dice si quedó comprobada en esta aplicación, si te toca a ti, o si sigue sin comprobar. No muestra un porcentaje.
 
 La pantalla **Hoy** recorre ocho pasos numerados. Al final guarda un PDF y su huella SHA-256 en Descargas, carpeta `JAC-lectura`. El uso, los diagramas y el proceso están en el [README de la raíz](../README.md). El informe de una medición no se sube al repositorio.
 
