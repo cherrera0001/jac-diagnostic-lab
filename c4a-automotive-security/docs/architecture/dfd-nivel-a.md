@@ -42,7 +42,7 @@ flowchart TB
 
 | Límite | Estado |
 |---|---|
-| App → adaptador (BLE) | MEDIDO (sesión 2136-8803) |
+| App → adaptador (BLE) | MEDIDO en el equipo local. La transcripción no se versiona |
 | Adaptador → ECU vía OBD genérico | MEDIDO (`0100`, `03`) |
 | OBD → buses propietarios / gateway | DESCONOCIDO en esta unidad |
 | Autenticación frente a 3.er dispositivo | NO MEDIDO |

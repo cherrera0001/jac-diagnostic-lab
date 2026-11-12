@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-Informe de esta versión: [c4a-automotive-security/reports/INFORME-2026-11-11.md](c4a-automotive-security/reports/INFORME-2026-11-11.md).
+El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
 ## Cómo está armado
 
@@ -114,23 +114,6 @@ Instalar la APK debug con el teléfono desbloqueado:
 adb install -r dist\jac-diagnostic-lab-debug.apk
 ```
 
-## Resultado medido el 11-11-2026
-
-| Hecho | Valor |
-|---|---|
-| Enlace | OBDBLE, GATT de escritura y notificación |
-| Adaptador | Texto `ELM327 v2.1`. Esa cadena se puede imitar |
-| Protocolo | ISO 15765-4 CAN 11 bit / 500 kbit/s, número `A6` |
-| ECU | Respondió a `0100` desde `7E8` |
-| Códigos almacenados | **P0579**, **P2299** |
-| Pendientes | Ninguno |
-| Permanentes | Servicio rechazado, `7F 0A 13` |
-| MIL genérico | Apagado. No explica el testigo EPC |
-| Pruebas de la app | 25 de 25 en verde |
-| Año, firmware, gateway de esta unidad | Desconocidos |
-
-P0579 y P2299, en la definición pública SAE J2012, describen un conflicto entre el circuito de freno o crucero y el pedal del acelerador. Eso orienta el diagnóstico de taller. No demuestra que un tercero haya adulterado los pedales.
-
 ## Versión
 
-La serie de cambios está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.1.0. El corte de este informe y de este README es **v0.2.0**.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.1.0. Los resultados de una unidad concreta no forman parte de este archivo.

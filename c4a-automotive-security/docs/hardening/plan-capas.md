@@ -34,4 +34,4 @@ Prioridad: medidas reversibles, verificables, sin alterar ABS/inmovilizador/firm
 
 - Conservar sesiones crudas.  
 - No borrar DTC hasta que el taller lo decida.  
-- EPC/P0579/P2299 → línea de falla técnica, no ciber, hasta prueba en contrario.
+- Síntomas de EPC y códigos leídos → línea de falla técnica, no ciber, hasta prueba en contrario. El detalle queda en el informe local.

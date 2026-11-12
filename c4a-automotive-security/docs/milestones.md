@@ -3,8 +3,8 @@
 | Hito | Criterio de cierre | Estado | Evidencia |
 |---|---|---|---|
 | 0 Investigación | Inventario + limitaciones + fuentes | CERRADO | `research/`, `docs/` |
-| 1 Conectividad real | BT + ELM + 0100 | CERRADO | sesión `2136-8803` |
-| 2 Diagnóstico | DTC reales + correlación separada | CERRADO | P0579/P2299 + `VehicleFaultCorrelation` |
+| 1 Conectividad real | BT + ELM + 0100 | CERRADO | transcripción local, no versionada |
+| 2 Diagnóstico | DTC reales + correlación separada | CERRADO | informe local, no versionado |
 | 3 Auditoría Bluetooth | Auditor + hallazgos verificados | PARCIAL | Falta prueba 2.º teléfono (T-001) |
 | 4 Modelado amenazas | T-001…T-010 + TARA doc | CERRADO (baseline) | `ThreatModelEngine` + `docs/tara/` |
 | 5 Lab aislado | Emuladores + aislamiento comprobable | ABIERTO | esqueleto `lab/` |

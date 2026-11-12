@@ -2,7 +2,7 @@
 
 Auditoría integral, diagnóstico y hardening de **JAC T8**, basada en evidencia.
 
-Informe de la medición: [reports/INFORME-2026-11-11.md](reports/INFORME-2026-11-11.md).  
+El informe de una medición no se sube al repositorio. Queda en el equipo local.  
 Cómo se usa la app y cuál es el proceso: [README de la raíz](../README.md).
 
 - **Metodología de referencia:** ISO/SAE 21434 (TARA), STRIDE, SDD/TDD, Evidence-Driven Security.
@@ -23,22 +23,9 @@ Módulos en la APK (`app.jac.diagnosticlab.security`):
 - `ThreatModelEngine` / `HardeningAdvisor` / `SecurityAssessment`
 - Pestaña **Seguridad** en la UI
 
-## Estado verificado (2026-11-11)
+## Qué no se publica
 
-| Hecho | Evidencia |
-|---|---|
-| APK instalada en Xiaomi 2512BPNDAG | `pm path app.jac.diagnosticlab` |
-| Enlace BLE OBDBLE + GATT `FFF1`/`FFF2` | sesión `2026-11-11T2136-8803` |
-| `ATI` → ELM327 v2.1 (posible clon) | misma sesión |
-| Protocolo CAN 11/500 (`A6`) | `ATDP` / `ATDPN` |
-| ECU responde `0100` | trama `7E8…4100…` |
-| DTC stored `P0579`, `P2299` | modo `03` |
-| No se envió servicio `04` | política + transcripción |
-| Gateway independiente | **DOCUMENTAL de línea**; **UNKNOWN en esta unidad** |
-| Año / ECU FW / multimedia / telemática | **DESCONOCIDO** |
-
-Una conexión exitosa **no** prueba vulnerabilidad ni aptitud para circular.  
-Los DTC **no** demuestran un ataque.
+Las lecturas de una camioneta (códigos, transcripciones, identificadores de sesión) no se versionan. Una conexión exitosa no prueba una vulnerabilidad ni autoriza a circular. Un código de falla no demuestra un ataque.
 
 ## Arranque rápido
 

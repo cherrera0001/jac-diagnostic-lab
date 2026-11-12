@@ -18,4 +18,4 @@ Integridad de comunicaciones, disponibilidad ECU, autenticación, capacidad de d
 
 ## Separación falla técnica vs ciber
 
-DTC **P0579** / **P2299** = evidencia de diagnóstico. **No** se atribuyen a un ataque sin prueba independiente.
+Los códigos leídos en una unidad son evidencia de diagnóstico y quedan en el informe local. No se atribuyen a un ataque sin prueba independiente, y no se copian a este repositorio.

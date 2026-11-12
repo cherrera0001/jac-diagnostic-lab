@@ -10,7 +10,7 @@
       "method": "Entrevista / contexto de sesión",
       "confidence": "HIGH",
       "date": "2026-11-11",
-      "evidence": ["jac-diagnostic-lab/evidence/captured/session-2026-11-11T2136-8803.txt"]
+      "evidence": ["informe-local"]
     },
     {
       "id": "year",
@@ -36,7 +36,7 @@
       "method": "Modos 01/02/03 vía ELM327",
       "confidence": "MEDIUM",
       "date": "2026-11-11",
-      "evidence": ["session-2026-11-11T2136-8803"]
+      "evidence": ["informe-local"]
     },
     {
       "id": "obd_protocol",
@@ -45,7 +45,7 @@
       "method": "Solo lectura Nivel A",
       "confidence": "HIGH",
       "date": "2026-11-11",
-      "evidence": ["session-2026-11-11T2136-8803"]
+      "evidence": ["informe-local"]
     },
     {
       "id": "security_gateway",
@@ -81,17 +81,18 @@
       "confidence": "MEDIUM",
       "note": "La cadena ATI es imitable; no prueba autenticidad de un ELM Electronics original.",
       "date": "2026-11-11",
-      "evidence": ["session-2026-11-11T2136-8803"]
+      "evidence": ["informe-local"]
     },
     {
       "id": "stored_dtc",
-      "value": ["P0579", "P2299"],
+      "value": null,
+      "status": "LOCAL_ONLY",
       "source": "Modo 03",
       "method": "Solo lectura Nivel A",
-      "confidence": "HIGH",
-      "note": "Falla técnica; no atribuir causa cibernética sin evidencia.",
+      "confidence": null,
+      "note": "El detalle de códigos de una unidad no se versiona.",
       "date": "2026-11-11",
-      "evidence": ["session-2026-11-11T2136-8803"]
+      "evidence": []
     },
     {
       "id": "phone",

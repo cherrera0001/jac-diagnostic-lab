@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una JAC T8 con adaptador ELM327 Mini Bluetooth. No borra códigos, no reprograma la ECU y no ejecuta actuadores.
 
-El uso, los diagramas y el proceso están en el [README de la raíz](../README.md). El informe de la medición del 11-11-2026 está en [INFORME-2026-11-11.md](../c4a-automotive-security/reports/INFORME-2026-11-11.md).
+El uso, los diagramas y el proceso están en el [README de la raíz](../README.md). El informe de una medición no se sube al repositorio.
 
 La auditoría de ciberseguridad (TARA, hallazgos C4A-AUTO-*, lab aislado) vive en [`../c4a-automotive-security`](../c4a-automotive-security). En la APK, la pestaña **Seguridad** muestra inventario, hallazgos y amenazas solo con evidencia.
 
@@ -106,18 +106,4 @@ Los archivos de `evidence\samples\` son transcripciones simuladas para las prueb
 
 ## Prueba en el vehículo
 
-Intento del 11 de noviembre de 2026, con la camioneta descrita como JAC T8 encendida y estacionada y el ELM327 Mini Bluetooth en el puerto OBD-II.
-
-Primero falló la instalación por USB con el teléfono bloqueado (`INSTALL_FAILED_USER_RESTRICTED`). Después, con el teléfono desbloqueado, el paquete `app.jac.diagnosticlab` quedó instalado y se forzó `MainActivity` con `autodiag=true`.
-
-Sesión autodiag `2026-11-11T2136-8803` (evidencia en `evidence\captured\`):
-
-- Enlace por **OBDBLE** (GATT `fff1`/`fff2`). No apareció el nombre `OBDII` en ese escaneo.
-- Adaptador: `ELM327 v2.1`. Protocolo tras `0100`: `A6` / ISO 15765-4 CAN 11/500.
-- `ATRV` 16.9 V (estimación del adaptador).
-- ECU respondió a `0100`. Stored: **P0579**, **P2299**. Pending vacío. Permanent: `7F 0A 13`.
-- `0101`: MIL genérico apagado. No explica un testigo EPC.
-- No se envió el servicio `04`. Una conexión exitosa no autoriza a circular.
-- Hallazgos H1–H4 siguen en datos insuficientes; H6 toma apoyo de los DTC presentes, sin texto J2012-DA.
-
-Detalle: `evidence\captured\intento-2026-11-11-autodiag.txt` y `session-2026-11-11T2136-8803.*`.
+La transcripción de una sesión real se queda en el teléfono y, si se exporta, en el equipo local. No se copia a este repositorio. Una conexión exitosa no autoriza a circular. El servicio `04` no se envía.

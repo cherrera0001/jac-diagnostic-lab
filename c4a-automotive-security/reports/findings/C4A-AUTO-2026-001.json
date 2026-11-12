@@ -5,7 +5,7 @@
   "status": "VERIFIED",
   "severity": "MEDIUM",
   "confidence": "HIGH",
-  "evidence_ids": ["session-2026-11-11T2136-8803", "live-transcript-autodiag2"],
+  "evidence_ids": ["informe-local"],
   "evidence_kind": "DIRECT",
   "impact": "Un dispositivo/app capaz de abrir el GATT puede hablar con el intérprete ELM.",
   "recommendation": "Retirar dongle cuando no se use; restringir apps Bluetooth; evaluar dongle con autenticación.",
