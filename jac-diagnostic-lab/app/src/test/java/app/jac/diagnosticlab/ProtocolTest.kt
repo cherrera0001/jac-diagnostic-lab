@@ -79,6 +79,20 @@ class ProtocolTest {
     }
 
     @Test
+    fun parsesIndexedMultiLineVinWithoutMarkingMalformed() {
+        // Formato real de clones ELM sin ATH1: longitud suelta + índices "0:"/"1:"/"2:".
+        // VIN sintético 1G1YY22G965101234; no usar un VIN de vehículo real en la suite.
+        val raw = "014\r\n0: 49 02 01 31 47 31 \r\n1: 59 59 32 32 47 39 36 \r\n2: 35 31 30 31 32 33 34 \r\n\r\n"
+        val parsed = ElmParser.parse("0902", raw, true, false, false)
+        assertEquals(ResponseKind.OBD_DATA, parsed.kind)
+        val payload = parsed.frames.flatMap { it.payload }
+        assertEquals(0x49, payload[0])
+        assertEquals(0x02, payload[1])
+        val vin = app.jac.diagnosticlab.obd.decodeVin(exchange("0902", parsed))
+        assertEquals("1G1YY22G965101234", vin)
+    }
+
+    @Test
     fun reassemblesMultiFrameDtcsFromTwoEcus() {
         val multi = "7E8 10 0A 43 04 01 33 01 34\r7E8 21 02 00 03 00 00 00 00"
         val parsed = ElmParser.parse("03", multi, true, false, false)

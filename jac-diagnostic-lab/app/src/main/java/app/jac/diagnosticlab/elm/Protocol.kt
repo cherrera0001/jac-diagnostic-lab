@@ -267,8 +267,13 @@ object ElmParser {
 
     private fun parseLine(line: String): LineParts? {
         val trimmed = line.trim().uppercase()
-        val tokens = trimmed.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        // ELM a veces numera ISO-TP como "0: 49 02 …" / "1: …". El índice no es un byte OBD.
+        val withoutIndex = trimmed.replace(Regex("^[0-9A-F]+:\\s*"), "")
+        if (withoutIndex != trimmed && withoutIndex.isBlank()) return null
+        val tokens = withoutIndex.split(Regex("\\s+")).filter { it.isNotEmpty() }
         if (tokens.isEmpty()) return null
+        // Línea sola con longitud decimal/hex corta ("014"): no es trama; se ignora.
+        if (tokens.size == 1 && tokens[0].length in 1..3 && isHex(tokens[0])) return null
         if (tokens.size >= 2 && tokens[0].length == 3 && isHex(tokens[0]) && tokens.drop(1).all { it.length == 2 && isHex(it) }) {
             return classify(tokens[0], tokens.drop(1).map { it.toInt(16) }, trimmed)
         }
