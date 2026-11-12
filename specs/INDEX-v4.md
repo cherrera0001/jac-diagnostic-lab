@@ -6,7 +6,7 @@
 | 020-repository-recovery | Sprint 0 hecho |
 | 021-transport-reliability | Pendiente (GATT 133 / Classic) |
 | 022-obd-capability-discovery | **Implementado en 1.3.0** |
-| 023-live-telemetry-engine | Especificado |
+| 023-live-telemetry-engine | **Implementado en 1.4.0** |
 | 024-oem-vehicle-profiles | Pendiente (sin inventar OEM) |
 | 025-diagnostic-intelligence | Parcial (JacAnalysis / dossier) |
 | 026-reverse-engineering-research | Pendiente REA |

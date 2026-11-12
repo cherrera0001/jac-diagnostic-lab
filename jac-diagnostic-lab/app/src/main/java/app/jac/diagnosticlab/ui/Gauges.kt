@@ -50,6 +50,7 @@ fun LiveGaugeCard(
     rawHint: String?,
     baseline: Double?,
     supported: Boolean?,
+    statsHint: String? = null,
 ) {
     val statusColor = when {
         supported == false -> Muted
@@ -88,6 +89,9 @@ fun LiveGaugeCard(
             GaugeKind.THERMO -> ThermoGauge(value, channel.min, channel.max, statusColor)
             GaugeKind.BAR -> BarGauge(value, channel.min, channel.max, statusColor)
             GaugeKind.WARN -> WarnStrip(value, channel)
+        }
+        if (!statsHint.isNullOrBlank()) {
+            Text(statsHint, color = Accent, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(

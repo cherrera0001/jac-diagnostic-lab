@@ -500,8 +500,11 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
     val hz = state.sampleEffectiveHz
     Text("MONITOR VIVO", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
     Text(
-        if (state.polling) "Actualizando en orden de taller · %.2f Hz efectivo · intervalo %d ms".format(hz, state.intervalMs)
-        else "Detenido. Enciende el monitor con la camioneta quieta. Pedal de freno: no hay PID genérico.",
+        if (state.polling) {
+            "Scheduler 1 comando · base %d ms · Hz sesión ≈%.2f (medido). FAST/MEDIUM/SLOW por PID.".format(state.intervalMs, hz)
+        } else {
+            "Detenido. Camioneta quieta. Pedal de freno: no hay PID genérico. SAFE-001: sin prueba en movimiento."
+        },
         color = Color(0xFFB0B8C0),
         fontSize = 13.sp,
     )
@@ -562,10 +565,23 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
             else -> channel.pid in state.supported
         }
         if (supported == false && sample == null) return@forEach
+        val stats = state.channelStats[channel.pid]
+        val statsHint = stats?.let {
+            "%s · objetivo %d ms · %.2f Hz medido · lat %s ms · edad %s ms · ok %d / fail %d".format(
+                it.band,
+                it.targetIntervalMs,
+                it.effectiveHz,
+                it.lastLatencyMs?.toString() ?: "—",
+                it.ageMs?.toString() ?: "—",
+                it.sampleCount,
+                it.failCount,
+            )
+        }
         LiveGaugeCard(
             channel = channel,
             value = sample?.value,
             rawHint = sample?.raw,
+            statsHint = statsHint,
             baseline = state.beforeSnapshot?.values?.get(channel.pid),
             supported = supported,
         )

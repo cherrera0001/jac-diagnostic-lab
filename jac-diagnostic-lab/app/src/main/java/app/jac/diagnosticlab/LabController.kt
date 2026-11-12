@@ -25,6 +25,8 @@ import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ObdTransport
 import app.jac.diagnosticlab.elm.ResponseKind
 import app.jac.diagnosticlab.lab.TransportIsolation
+import app.jac.diagnosticlab.telemetry.ChannelStats
+import app.jac.diagnosticlab.telemetry.VehicleTelemetryEngine
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
 import app.jac.diagnosticlab.evidence.SnapshotReading
@@ -113,6 +115,7 @@ data class LabState(
     val afterSnapshot: SnapshotReading? = null,
     val capabilities: CapabilitySnapshot? = null,
     val bitmapRead: Boolean = false,
+    val channelStats: Map<Int, ChannelStats> = emptyMap(),
 )
 
 class LabController(private val app: Application) {
@@ -124,6 +127,7 @@ class LabController(private val app: Application) {
     private var session: ElmSession? = null
     private var ble: BleInspector? = null
     private var pollJob: Job? = null
+    private val telemetry = VehicleTelemetryEngine()
     private val autodiagGate = AtomicBoolean(false)
     private var dtcs: List<DtcReadResult> = emptyList()
     private var freeze: List<FreezeNote> = emptyList()
@@ -226,52 +230,103 @@ class LabController(private val app: Application) {
 
     fun readAllDtcs() = scope.launch {
         val current = session ?: return@launch explain("No hay sesión.")
+        telemetry.pause()
         state.update { it.copy(busy = true, statusLine = "Leyendo DTC 03, 07 y 0A.") }
-        dtcs = listOf(
-            current.readDtc(DtcCategory.STORED),
-            current.readDtc(DtcCategory.PENDING),
-            current.readDtc(DtcCategory.PERMANENT),
-        )
-        state.update { it.copy(dtcs = dtcs, busy = false, exchanges = current.exchanges.toList()) }
-        recompute()
-        persist()
+        try {
+            dtcs = listOf(
+                current.readDtc(DtcCategory.STORED),
+                current.readDtc(DtcCategory.PENDING),
+                current.readDtc(DtcCategory.PERMANENT),
+            )
+            state.update { it.copy(dtcs = dtcs, busy = false, exchanges = current.exchanges.toList()) }
+            recompute()
+            persist()
+        } finally {
+            telemetry.resume()
+        }
     }
 
     fun readSupported() = scope.launch { readSupportedInternal() }
 
     fun startPoll(pids: Set<Int>) {
         pollJob?.cancel()
+        telemetry.reset()
+        val supported = state.value.supported
+        val allowed = pids.filter { it != 0x00 && (supported.isEmpty() || it in supported || it < 0) }.toSet()
+        val withAtrv = allowed + (-1)
+        telemetry.plan(withAtrv, state.value.intervalMs)
         pollJob = scope.launch {
-            state.update { it.copy(polling = true, statusLine = "Registrando sensores, una consulta a la vez.") }
-            val allowed = pids.filter { it in state.value.supported && it != 0x00 }
+            state.update {
+                it.copy(
+                    polling = true,
+                    statusLine = "Telemetría: una consulta a la vez (FAST/MEDIUM/SLOW). Hz medido, no prometido.",
+                    channelStats = telemetry.stats(),
+                )
+            }
             while (true) {
-                val started = System.currentTimeMillis()
                 val current = session ?: break
-                for (pid in allowed) {
-                    val reading = current.readPid(pid)
-                    val sample = Sample(
-                        System.currentTimeMillis(), pid, reading.name, reading.value, reading.unit,
-                        reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
+                if (telemetry.isPaused()) {
+                    delay(80)
+                    continue
+                }
+                val now = System.currentTimeMillis()
+                val pid = telemetry.nextDue(now)
+                if (pid == null) {
+                    delay(telemetry.sleepHintMs(now) ?: 40L)
+                    continue
+                }
+                val t0 = System.currentTimeMillis()
+                try {
+                    if (pid < 0) {
+                        val voltage = current.exchange("ATRV", 2500)
+                        val parsed = parseAdapterVoltage(voltage.raw)
+                        val latency = System.currentTimeMillis() - t0
+                        if (parsed != null) {
+                            samples = (samples + Sample(
+                                System.currentTimeMillis(), -1, "Tensión estimada del adaptador", parsed, "V",
+                                true, parsed < 11.6 || parsed > 15.2, voltage.raw.trim(),
+                            )).takeLast(480)
+                            telemetry.recordSuccess(-1, latency)
+                        } else {
+                            telemetry.recordFailure(-1, latency)
+                        }
+                    } else {
+                        val reading = current.readPid(pid)
+                        val latency = System.currentTimeMillis() - t0
+                        val sample = Sample(
+                            System.currentTimeMillis(), pid, reading.name, reading.value, reading.unit,
+                            reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
+                        )
+                        samples = (samples + sample).takeLast(480)
+                        if (reading.valid) telemetry.recordSuccess(pid, latency) else telemetry.recordFailure(pid, latency)
+                    }
+                } catch (_: Exception) {
+                    telemetry.recordFailure(pid, System.currentTimeMillis() - t0)
+                }
+                state.update {
+                    it.copy(
+                        samples = samples,
+                        exchanges = current.exchanges.toList(),
+                        channelStats = telemetry.stats(),
                     )
-                    samples = (samples + sample).takeLast(240)
-                    state.update { it.copy(samples = samples, exchanges = current.exchanges.toList()) }
                 }
-                val voltage = current.exchange("ATRV", 2500)
-                val parsed = parseAdapterVoltage(voltage.raw)
-                if (parsed != null) {
-                    samples = (samples + Sample(System.currentTimeMillis(), -1, "Tensión estimada del adaptador", parsed, "V", true, parsed < 11.6 || parsed > 15.2, voltage.raw.trim())).takeLast(240)
-                }
+                refreshCapabilities()
                 recompute()
-                persist()
-                val wait = state.value.intervalMs - (System.currentTimeMillis() - started)
-                if (wait > 0) delay(wait)
+                if (samples.size % 12 == 0) persist()
             }
         }
     }
 
     fun stopPoll() {
         pollJob?.cancel()
-        state.update { it.copy(polling = false, statusLine = "Registro de sensores detenido.") }
+        telemetry.pause()
+        state.update {
+            it.copy(
+                polling = false,
+                channelStats = telemetry.stats(),
+                statusLine = "Registro de sensores detenido.",
+            )
+        }
     }
 
     /** Arranca el monitor en el orden fijo de taller (solo PID soportados + ATRV). */
@@ -328,7 +383,12 @@ class LabController(private val app: Application) {
     }
 
     fun setInterval(ms: Long) {
-        state.update { it.copy(intervalMs = ms.coerceIn(500L, 5000L)) }
+        val next = ms.coerceIn(500L, 5000L)
+        state.update { it.copy(intervalMs = next) }
+        if (state.value.polling && telemetry.currentPlans().isNotEmpty()) {
+            val pids = telemetry.currentPlans().map { it.pid }.toSet()
+            telemetry.plan(pids, next)
+        }
     }
 
     fun authorizeVin(enabled: Boolean) = state.update { it.copy(authorizeVin = enabled) }
@@ -572,27 +632,32 @@ class LabController(private val app: Application) {
 
     private suspend fun readSupportedInternal() {
         val current = session ?: return
-        var supported = emptySet<Int>()
-        var bitmapRead = false
-        for (page in ObdCapabilityDiscoveryEngine.supportPages) {
-            if (page != 0x00 && page !in supported) break
-            val reading = current.readPid(page)
-            if (!reading.valid) {
-                if (page == 0x00) break
-                continue
+        telemetry.pause()
+        try {
+            var supported = emptySet<Int>()
+            var bitmapRead = false
+            for (page in ObdCapabilityDiscoveryEngine.supportPages) {
+                if (page != 0x00 && page !in supported) break
+                val reading = current.readPid(page)
+                if (!reading.valid) {
+                    if (page == 0x00) break
+                    continue
+                }
+                bitmapRead = true
+                supported = supported + PidDecoder.supported(page, reading.raw)
             }
-            bitmapRead = true
-            supported = supported + PidDecoder.supported(page, reading.raw)
+            state.update {
+                it.copy(
+                    supported = supported,
+                    bitmapRead = bitmapRead,
+                    exchanges = current.exchanges.toList(),
+                    statusLine = if (bitmapRead) "PIDs soportados en mapa: ${supported.size}." else "No se pudo leer el mapa de PIDs.",
+                )
+            }
+            refreshCapabilities()
+        } finally {
+            telemetry.resume()
         }
-        state.update {
-            it.copy(
-                supported = supported,
-                bitmapRead = bitmapRead,
-                exchanges = current.exchanges.toList(),
-                statusLine = if (bitmapRead) "PIDs soportados en mapa: ${supported.size}." else "No se pudo leer el mapa de PIDs.",
-            )
-        }
-        refreshCapabilities()
     }
 
     fun refreshCapabilities() {

@@ -2,6 +2,15 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.4.0 — VehicleTelemetryEngine (SPEC-023)
+
+- **Tag:** `v1.4.0`
+- **versionCode:** 15
+- **Fecha:** 2026-11-12
+- **APK:** `jac-diagnostic-lab-1.4.0-debug.apk`
+
+Scheduler un-comando FAST/MEDIUM/SLOW, Hz/latencia/edad **por PID** (medidos), pause en DTC/mapa. Monitor muestra métricas por canal. Tests TEL-001…005.
+
 ## v1.3.0 — Matriz «Qué puede leer» (SPEC-022)
 
 - **Tag:** `v1.3.0`
