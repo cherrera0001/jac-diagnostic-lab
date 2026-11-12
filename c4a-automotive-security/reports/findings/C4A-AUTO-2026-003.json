@@ -1,0 +1,13 @@
+{
+  "finding_id": "C4A-AUTO-2026-003",
+  "component": "Application control plane",
+  "title": "Allowlist de la APK no protege frente a otras apps en el mismo teléfono",
+  "status": "VERIFIED",
+  "severity": "MEDIUM",
+  "confidence": "HIGH",
+  "evidence_ids": ["ObdCommandPolicy.kt"],
+  "impact": "Otra app OBD podría enviar el servicio 04 u operaciones no allowlisted al mismo adaptador.",
+  "recommendation": "Desemparejar tras uso; no dejar el dongle montado; revisar apps con Bluetooth.",
+  "validation_method": "Revisión de arquitectura + Nivel B",
+  "residual_risk": "Inherent al dongle Bluetooth abierto"
+}

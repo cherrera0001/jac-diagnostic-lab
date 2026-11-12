@@ -39,6 +39,8 @@ import app.jac.diagnosticlab.obd.milFromPayload
 import app.jac.diagnosticlab.elm.InitReport
 import app.jac.diagnosticlab.obd.PidDecoder
 import app.jac.diagnosticlab.obd.parseAdapterVoltage
+import app.jac.diagnosticlab.security.SecurityAssessment
+import app.jac.diagnosticlab.security.SecurityDashboard
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -88,6 +90,7 @@ data class LabState(
     val statusLine: String = "Listo para buscar el adaptador.",
     val protocol: String = "0",
     val simulated: Boolean = false,
+    val security: SecurityDashboard? = null,
 )
 
 class LabController(private val app: Application) {
@@ -509,10 +512,11 @@ class LabController(private val app: Application) {
         val rpm = current.samples.lastOrNull { it.pid == 0x0C && it.valid }?.value
         val voltage = parseAdapterVoltage(current.voltageText)
             ?: current.samples.lastOrNull { it.pid == -1 }?.value
+        val dtcReads = dtcs.ifEmpty { current.dtcs }
         val report = JacAnalysis.evaluate(
             AnalysisInput(
                 symptoms = current.symptoms,
-                dtcReads = dtcs.ifEmpty { current.dtcs },
+                dtcReads = dtcReads,
                 milOn = mil,
                 adapterVoltage = voltage,
                 rpm = rpm,
@@ -521,7 +525,24 @@ class LabController(private val app: Application) {
                 ecuAnswered0100 = current.ecuTalking,
             ),
         )
-        state.update { it.copy(analysis = report) }
+        val stored = dtcReads
+            .filter { it.category == DtcCategory.STORED }
+            .flatMap { it.codes.map { code -> code.code } }
+        val security = SecurityAssessment.build(
+            bleValidated = current.bleValidated || current.transportKind.contains("BLE", true) || current.transportKind.contains("GATT", true),
+            ecuTalking = current.ecuTalking,
+            ati = current.adapterId,
+            protocol = current.protocolText,
+            protocolNumber = current.protocolNumber,
+            atrv = current.voltageText,
+            storedDtcs = stored,
+            devices = current.devices,
+            gatt = current.gatt,
+            link = current.link,
+            transportKind = current.transportKind,
+            commands = current.exchanges.map { it.command },
+        )
+        state.update { it.copy(analysis = report, security = security) }
     }
 
     private fun buildRecord(): SessionRecord {

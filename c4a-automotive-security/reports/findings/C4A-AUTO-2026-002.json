@@ -1,0 +1,13 @@
+{
+  "finding_id": "C4A-AUTO-2026-002",
+  "component": "ELM327 identity",
+  "title": "Identidad ATI imitable (ELM327 v2.1); autenticidad de fabricante no demostrada",
+  "status": "VERIFIED",
+  "severity": "LOW",
+  "confidence": "HIGH",
+  "evidence_ids": ["ATI"],
+  "impact": "No se puede usar ATI como control de autenticidad.",
+  "recommendation": "Tratar como genérico/probable clon hasta prueba de procedencia.",
+  "validation_method": "Comparar datasheet ELM Electronics vs respuesta ATI",
+  "residual_risk": "Aceptado mientras se use dongle genérico"
+}

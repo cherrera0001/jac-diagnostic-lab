@@ -129,7 +129,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Enlace", "Códigos", "Sensores", "Evidencia", "Análisis").forEachIndexed { index, label ->
+                listOf("Enlace", "Códigos", "Sensores", "Evidencia", "Análisis", "Seguridad").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -164,7 +164,8 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                 1 -> CodeScreen(state, model)
                 2 -> SensorScreen(state, model)
                 3 -> EvidenceScreen(state, model)
-                else -> AnalysisScreen(state, model)
+                4 -> AnalysisScreen(state, model)
+                else -> SecurityScreen(state)
             }
         }
     }
@@ -404,6 +405,56 @@ private fun AnalysisScreen(state: LabState, model: DiagnosticViewModel) {
         }
     }
     Text("No se recomienda sustituir piezas solo por estos síntomas.")
+}
+
+@Composable
+private fun SecurityScreen(state: LabState) {
+    Text(
+        "C4A Automotive Security. Solo lectura Nivel A. Sin porcentaje de seguridad arbitrario. " +
+            "Hallazgos solo con evidencia. El laboratorio adversarial no corre contra el vehículo.",
+        fontSize = 13.sp,
+    )
+    val dash = state.security
+    if (dash == null) {
+        Text("Aún no hay evaluación. Conecte o espere el recompute de sesión.")
+        return
+    }
+    Text(
+        "Controles evaluados: ${dash.controlsEvaluated}. Conocidos/activos en APK u operación: ${dash.controlsKnown}. " +
+            "Hallazgos verificados: ${dash.findings.count { it.status == app.jac.diagnosticlab.security.FindingStatus.VERIFIED }}.",
+        style = MaterialTheme.typography.titleMedium,
+    )
+    Text("Inventario", style = MaterialTheme.typography.titleMedium)
+    dash.inventory.forEach { row ->
+        Text("${row.label}: ${row.value ?: "DESCONOCIDO"} [${row.status}] conf=${row.confidence ?: "-"}", fontSize = 12.sp)
+    }
+    Text("Hallazgos", style = MaterialTheme.typography.titleMedium)
+    dash.findings.forEach { f ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${f.findingId} · ${f.status}")
+                Text(f.title)
+                Text("Componente: ${f.component}", fontSize = 12.sp)
+                Text("Impacto: ${f.impact}", fontSize = 12.sp)
+                Text("Recomendación: ${f.recommendation}", fontSize = 12.sp)
+                Text("Riesgo residual: ${f.residualRisk}", fontSize = 12.sp)
+                if (f.evidenceIds.isNotEmpty()) Text("Evidencia: ${f.evidenceIds.joinToString()}", fontSize = 12.sp)
+            }
+        }
+    }
+    Text("Amenazas TARA", style = MaterialTheme.typography.titleMedium)
+    dash.threats.forEach { t ->
+        Text("${t.id} ${t.title}", fontSize = 13.sp)
+        Text("Factibilidad: ${t.feasibility}", fontSize = 12.sp)
+        Text("Residual: ${t.residualRisk}", fontSize = 12.sp)
+        Text("Medida: ${t.proposedMeasure}", fontSize = 12.sp)
+    }
+    Text("Hardening", style = MaterialTheme.typography.titleMedium)
+    dash.hardening.forEach { h ->
+        Text("[${h.layer}] ${h.action} · ${h.status}", fontSize = 12.sp)
+    }
+    dash.notes.forEach { Text("• $it", fontSize = 12.sp) }
+    Text("Diagnóstico EPC/DTC y ciberseguridad son líneas separadas. Los DTC no demuestran un ataque.")
 }
 
 @Composable

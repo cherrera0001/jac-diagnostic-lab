@@ -1,0 +1,13 @@
+{
+  "finding_id": "C4A-AUTO-2026-001",
+  "component": "Bluetooth OBD adapter",
+  "title": "Perfil BLE FFF0 permitió escritura de comandos AT tras conexión",
+  "status": "VERIFIED",
+  "severity": "MEDIUM",
+  "confidence": "HIGH",
+  "evidence_ids": ["session-2026-11-11T2136-8803", "live-transcript"],
+  "impact": "Un dispositivo o app capaz de abrir el GATT puede hablar con el intérprete ELM.",
+  "recommendation": "Retirar el dongle cuando no se use; restringir apps Bluetooth; evaluar adaptador con autenticación documentada.",
+  "validation_method": "Nivel A: NOTIFY FFF1 + WRITE FFF2 + ATI",
+  "residual_risk": "Persiste mientras el adaptador esté expuesto y emparejado"
+}

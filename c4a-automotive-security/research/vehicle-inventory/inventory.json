@@ -1,0 +1,92 @@
+{
+  "project": "C4A Automotive Security Lab",
+  "vehicle": "JAC T8",
+  "updated": "2026-11-11",
+  "attributes": [
+    {
+      "id": "make_model",
+      "value": "JAC T8",
+      "source": "Declaración del propietario",
+      "method": "Entrevista / contexto de sesión",
+      "confidence": "HIGH",
+      "date": "2026-11-11",
+      "evidence": ["jac-diagnostic-lab/evidence/captured/sesion-real-2026-11-11-latest.txt"]
+    },
+    {
+      "id": "year",
+      "value": null,
+      "status": "UNKNOWN",
+      "source": null,
+      "method": "Pendiente: VIN autorizado + documentación o placa",
+      "confidence": null,
+      "date": "2026-11-11",
+      "evidence": []
+    },
+    {
+      "id": "trim_engine_transmission",
+      "value": null,
+      "status": "UNKNOWN",
+      "method": "Pendiente: ficha técnica / VIN",
+      "evidence": []
+    },
+    {
+      "id": "ecu_identity",
+      "value": "Responde en 7E8 (ISO-TP CAN). Identidad de fabricante/firmware no leída.",
+      "source": "Respuestas OBD 7E8 en sesión real",
+      "method": "Modos 01/02/03 vía ELM327",
+      "confidence": "MEDIUM",
+      "date": "2026-11-11",
+      "evidence": ["session-2026-11-11T2136-8803"]
+    },
+    {
+      "id": "obd_protocol",
+      "value": "ISO 15765-4 CAN 11 bit / 500 kbaud (ATDPN A6 tras 0100)",
+      "source": "ELM327 ATDP/ATDPN",
+      "method": "Solo lectura Nivel A",
+      "confidence": "HIGH",
+      "date": "2026-11-11",
+      "evidence": ["session-2026-11-11T2136-8803"]
+    },
+    {
+      "id": "security_gateway",
+      "value": null,
+      "status": "UNKNOWN",
+      "method": "No se realizó descubrimiento invasivo de redes internas",
+      "evidence": []
+    },
+    {
+      "id": "infotainment_telematics",
+      "value": null,
+      "status": "UNKNOWN",
+      "note": "Dispositivo Bluetooth 'JAC SMART' visto emparejado en el teléfono; relación con el vehículo no verificada en esta sesión.",
+      "evidence": ["live-transcript sesión OBDBLE"]
+    },
+    {
+      "id": "adapter_bluetooth_names",
+      "value": ["OBDII", "OBDBLE"],
+      "source": "Observación del propietario + dumpsys / app",
+      "method": "Bluetooth bonded + scan",
+      "confidence": "HIGH",
+      "date": "2026-11-11",
+      "evidence": ["intento-2026-11-11-autodiag.txt"]
+    },
+    {
+      "id": "adapter_ati",
+      "value": "ELM327 v2.1",
+      "source": "ATI / ATZ",
+      "method": "BLE GATT FFF2/FFF1",
+      "confidence": "MEDIUM",
+      "note": "La cadena ATI es imitable; no prueba autenticidad de un ELM Electronics original.",
+      "date": "2026-11-11",
+      "evidence": ["session-2026-11-11T2136-8803"]
+    },
+    {
+      "id": "phone",
+      "value": "Xiaomi 2512BPNDAG, Android 17 / SDK 37",
+      "source": "ADB getprop",
+      "confidence": "HIGH",
+      "date": "2026-11-11",
+      "evidence": ["sesion-real-2026-11-11-latest.txt"]
+    }
+  ]
+}

@@ -55,26 +55,8 @@ data class Exchange(
 class ReadOnlyViolation(message: String) : IllegalArgumentException(message)
 
 object ReadOnlyGate {
-    private val at = Regex("^AT(Z|I|DP|DPN|RV|E0|L0|S0|H1|SP[0-9])$")
-    private val obd = Regex("^(01[0-9A-F]{2}|02[0-9A-F]{4}|03|07|0A|0900|0902)$")
-
     fun check(command: String) {
-        val raw = command.uppercase()
-        if (raw.contains(';') || raw.contains('\r') || raw.contains('\n')) {
-            throw ReadOnlyViolation("Comando compuesto bloqueado. No se envió al adaptador.")
-        }
-        val c = raw.replace(" ", "")
-        if (c == "04" || c.startsWith("04")) {
-            throw ReadOnlyViolation("Servicio 04 bloqueado. Esta aplicación no borra códigos.")
-        }
-        if (c.startsWith("ATSH") || c.startsWith("ATMA") || c.startsWith("ATCRA") ||
-            c.startsWith("ATBI") || c.startsWith("ATFI") || c.startsWith("ATAL")
-        ) {
-            throw ReadOnlyViolation("Comando de cabecera, monitor o control bloqueado. No se envió.")
-        }
-        if (!at.matches(c) && !obd.matches(c)) {
-            throw ReadOnlyViolation("Comando fuera de la lista de solo lectura: $c")
-        }
+        app.jac.diagnosticlab.security.ObdCommandPolicy.assertAllowed(command)
     }
 }
 
