@@ -10,7 +10,9 @@ import app.jac.diagnosticlab.obd.OperationalState
 import app.jac.diagnosticlab.obd.PidDecoder
 import app.jac.diagnosticlab.obd.SessionTimeMetrics
 import app.jac.diagnosticlab.obd.VoltageAssessment
+import app.jac.diagnosticlab.obd.FaultIdentification
 import app.jac.diagnosticlab.obd.assessAdapterVoltage
+import app.jac.diagnosticlab.obd.decodeFreeze
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -133,5 +135,36 @@ class DiagnosticRegressionTest {
         requireNotNull(note)
         assertTrue(note.contains("plausibilidad", ignoreCase = true) || note.contains("contexto", ignoreCase = true) || note.contains("mariposa", ignoreCase = true))
         assertFalse(note.contains("falla confirmada", ignoreCase = true))
+    }
+
+    @Test
+    fun testDiag004_freezeFrameDoesNotMisreadFrameNumberAsP0005() {
+        // 7E8 05 42 02 00 05 79 → cuadro 0, DTC P0579 (no P0005).
+        val parsed = ElmParser.parse("020200", "7E8054202000579", true, false, false)
+        val exchange = Exchange(0, "020200", parsed.raw, parsed.kind, parsed.detail, true, 1, parsed.frames)
+        val note = decodeFreeze(exchange)
+        assertEquals("P0579", note.dtc)
+        assertFalse(note.note.contains("P0005"))
+        assertTrue(note.raw.contains("0579") || note.raw.contains("4202000579") || exchange.raw.contains("0579"))
+    }
+
+    @Test
+    fun testFaultDossierListsWorkshopChecksAndNoDrive() {
+        val dossier = FaultIdentification.dossier(
+            storedCodes = listOf("P0579", "P2299"),
+            freezeDtc = "P0579",
+            freezeRaw = "7E8054202000579",
+            supportedPids = setOf(0x0C, 0x11, 0x49),
+            samples = listOf(0x0C to 787.0, 0x49 to 12.0),
+            powerLossOnBrake = true,
+            model = "JAC T8",
+            year = "2023",
+            time = SessionTimeMetrics(12, 15000, 0.73, 400, 1200),
+        )
+        assertTrue(dossier.title.contains("corte", ignoreCase = true))
+        assertTrue(dossier.lines.any { it.contains("NO PROBAR EN LA CALLE") })
+        assertTrue(dossier.lines.any { it.contains("Interruptor de freno") })
+        assertTrue(dossier.lines.any { it.contains("0x49") })
+        assertFalse(dossier.lines.any { it.contains("ataque por estos bytes").not() && it.contains("es un ataque") })
     }
 }

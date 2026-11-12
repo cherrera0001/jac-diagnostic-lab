@@ -217,9 +217,18 @@ object PidDecoder {
         Spec(0x2F, "Nivel de combustible", "Fuel Tank Level Input", "Nivel de combustible", 1, "%", { it[0] * 100.0 / 255.0 }),
         Spec(0x33, "Presión barométrica", "Absolute Barometric Pressure", "Baro", 1, "kPa", { it[0].toDouble() }),
         Spec(0x42, "Tensión del módulo", "Control Module Voltage", "Tensión módulo", 2, "V", { (it[0] * 256 + it[1]) / 1000.0 }, { it < 6 || it > 18 }),
+        Spec(0x45, "Posición relativa de mariposa", "Relative Throttle Position", "Mariposa relativa", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
         Spec(0x46, "Temperatura ambiente", "Ambient Air Temperature", "Ambiente", 1, "°C", { it[0] - 40.0 }),
+        Spec(0x47, "Posición absoluta de mariposa B", "Absolute Throttle Position B", "Mariposa B", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
+        // Pedal de acelerador (APP) — distinto de 0x11 Absolute Throttle.
+        Spec(0x49, "Posición del pedal acelerador D", "Accelerator Pedal Position D", "Pedal acelerador (pista D)", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
+        Spec(0x4A, "Posición del pedal acelerador E", "Accelerator Pedal Position E", "Pedal acelerador (pista E)", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
+        Spec(0x4B, "Posición del pedal acelerador F", "Accelerator Pedal Position F", "Pedal acelerador (pista F)", 1, "%", { it[0] * 100.0 / 255.0 }, { it < 0 || it > 100 }),
         Spec(0x5C, "Temperatura de aceite", "Engine Oil Temperature", "Aceite", 1, "°C", { it[0] - 40.0 }),
     ).associateBy { it.pid }
+
+    /** PIDs útiles para el relato freno/potencia. No incluyen un PID genérico del interruptor de freno. */
+    val faultHuntPids: List<Int> = listOf(0x0C, 0x0D, 0x04, 0x11, 0x45, 0x47, 0x49, 0x4A, 0x4B, 0x42, 0x05, 0x0B)
 
     fun supported(base: Int, data: List<Int>): Set<Int> {
         if (data.size < 4) return emptySet()
@@ -311,13 +320,23 @@ fun decodeFreeze(exchange: Exchange): FreezeNote {
         return FreezeNote(exchange.raw, null, exchange.detail)
     }
     val payload = exchange.frames.firstOrNull { it.payload.size >= 2 && it.payload[0] == 0x42 }?.payload
-        ?: return FreezeNote(exchange.raw, null, "No se identificó el servicio 42.")
-    if (payload.size >= 4 && payload[1] == 0x02) {
-        val hi = payload[2]
-        val lo = payload[3]
-        if (hi == 0 && lo == 0) return FreezeNote(exchange.raw, null, "El PID 02 del cuadro congelado vino en cero.")
-        val hit = DtcDecoder.decodePair(hi, lo, null, DtcCategory.STORED)
-        return FreezeNote(exchange.raw, hit.code, "DTC del cuadro congelado, PID 02. ${hit.scopeNote}")
+        ?: return FreezeNote(exchange.raw, null, "No se identificó el servicio 42. Bytes originales conservados.")
+    if (payload.size < 4 || payload[1] != 0x02) {
+        return FreezeNote(exchange.raw, null, "Bytes originales del modo 02. No se forzó una decodificación.")
     }
-    return FreezeNote(exchange.raw, null, "Bytes originales del modo 02. No se forzó una decodificación.")
+    // DIAG-004: muchas ECU ponen número de cuadro tras el PID 02 (p. ej. 42 02 00 05 79 → P0579).
+    // No tomar el 00 como byte alto del DTC (eso inventaba P0005).
+    val (hi, lo, frameNote) = when {
+        payload.size >= 5 -> Triple(payload[3], payload[4], "cuadro ${payload[2]}")
+        else -> Triple(payload[2], payload[3], "sin número de cuadro")
+    }
+    if (hi == 0 && lo == 0) {
+        return FreezeNote(exchange.raw, null, "El PID 02 del cuadro congelado vino en cero ($frameNote).")
+    }
+    val hit = DtcDecoder.decodePair(hi, lo, exchange.frames.firstOrNull()?.header, DtcCategory.STORED)
+    return FreezeNote(
+        exchange.raw,
+        hit.code,
+        "DTC del cuadro congelado, PID 02, $frameNote, bytes %02X %02X. ${hit.scopeNote}. No usar un resumen distinto de estos bytes.".format(hi, lo),
+    )
 }

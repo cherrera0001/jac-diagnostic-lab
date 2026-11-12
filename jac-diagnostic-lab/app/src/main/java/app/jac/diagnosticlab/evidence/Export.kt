@@ -5,8 +5,10 @@ import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.security.SecurityGuide
+import app.jac.diagnosticlab.obd.FaultIdentification
 import app.jac.diagnosticlab.obd.FreezeNote
 import app.jac.diagnosticlab.obd.PidReading
+import app.jac.diagnosticlab.obd.SessionTimeMetrics
 
 data class Sample(
     val atEpochMs: Long,
@@ -235,6 +237,11 @@ data class ReadingFacts(
     val declaredModel: String = "",
     val declaredYear: String = "",
     val powerLossOnBrake: Boolean = false,
+    val freezeDtc: String? = null,
+    val freezeRaw: String? = null,
+    val supportedPids: Set<Int> = emptySet(),
+    val samplePairs: List<Pair<Int, Double?>> = emptyList(),
+    val timeMetrics: SessionTimeMetrics? = null,
 )
 
 data class ReadingReportDocument(
@@ -351,10 +358,25 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("Documento local. No es una certificación y no autoriza a circular.")
         add("No indica qué pieza cambiar. No borra los avisos.")
         add("")
-        add("1. Qué significa")
+        add("1. Ficha de falla")
+        val dossier = FaultIdentification.dossier(
+            storedCodes = codes,
+            freezeDtc = facts.freezeDtc,
+            freezeRaw = facts.freezeRaw,
+            supportedPids = facts.supportedPids,
+            samples = facts.samplePairs,
+            powerLossOnBrake = facts.powerLossOnBrake,
+            model = facts.declaredModel,
+            year = facts.declaredYear,
+            time = facts.timeMetrics,
+        )
+        add(dossier.title)
+        dossier.lines.forEach { add(it) }
+        add("")
+        add("2. Qué significa")
         interpretationLines(codes, facts.declaredModel, facts.declaredYear, facts.powerLossOnBrake).forEach { add(it) }
         add("")
-        add("2. Qué contestó la computadora")
+        add("3. Qué contestó la computadora")
         add("Sesión ${facts.sessionId.ifBlank { "sin número" }}.")
         val declared = listOf(facts.declaredModel.trim(), facts.declaredYear.trim()).filter { it.isNotBlank() }
         if (declared.isNotEmpty()) {
@@ -373,7 +395,7 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("Avisos guardados, sin borrar: ${if (codes.isEmpty()) "ninguno en esta copia" else codes.joinToString(", ")}.")
         add("La luz EPC del tablero no es la luz genérica de falla. Que la luz genérica esté apagada no explica el EPC.")
         add("")
-        add("3. Qué hacer con el papel")
+        add("4. Qué hacer con el papel")
         add("1. Sacar el aparato del enchufe cuando no se esté leyendo.")
         add("2. Llevar este PDF al servicio JAC.")
         add("3. Pedir que lean los mismos números y el cuadro congelado, sin borrarlos.")
@@ -381,13 +403,13 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("5. No probar el corte de potencia en la calle.")
         add("6. No cambiar piezas por esta hoja.")
         add("")
-        add("4. Quién hace qué")
+        add("5. Quién hace qué")
         StreetGuide.steps.forEach { step ->
             add("${step.number}. ${step.role}: ${step.title}. ${step.detail}")
         }
         add("El revisor no es la lectora. Su trabajo es impedir que estos números se cierren como causa o como ataque.")
         add("")
-        add("5. Validación de seguridad")
+        add("6. Validación de seguridad")
         add("No hay un porcentaje. Comprobado significa que esta aplicación lo revisó. No significa que la camioneta esté segura.")
         SecurityGuide.checks(facts.adapterId, facts.ecuTalking, codes, facts.bleValidated, facts.declaredModel, facts.declaredYear).forEach { check ->
             add("${check.number}. ${check.title}. ${check.result}. ${check.detail}")

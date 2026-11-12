@@ -73,6 +73,7 @@ data class LabState(
     val voltageText: String = "",
     val voltageAssessment: VoltageAssessment? = null,
     val operationalState: OperationalState = OperationalState.UNKNOWN,
+    val timeMetrics: SessionTimeMetrics? = null,
     val sampleWindowMs: Long = 0L,
     val sampleEffectiveHz: Double = 0.0,
     val ecuTalking: Boolean = false,
@@ -436,24 +437,42 @@ class LabController(private val app: Application) {
 
     private suspend fun finishReads() {
         val current = session ?: return
+        readSupportedInternal()
         dtcs = listOf(
             current.readDtc(DtcCategory.STORED),
             current.readDtc(DtcCategory.PENDING),
             current.readDtc(DtcCategory.PERMANENT),
         )
         val mil = current.exchange("0101", 5000)
-        state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList()) }
-        val interesting = listOf(0x0C, 0x05, 0x04, 0x0D, 0x11, 0x0B).filter { it in state.value.supported }
-        for (pid in interesting) {
-            val reading = current.readPid(pid)
-            samples = samples + Sample(
-                System.currentTimeMillis(), pid, reading.name, reading.value, reading.unit,
-                reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
+        state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList(), statusLine = "Capturando sensores para la ficha de falla…") }
+        freeze = listOf(decodeFreeze(current.exchange("020200", 8000)))
+        val interesting = PidDecoder.faultHuntPids.filter { it in state.value.supported }
+        val deadline = System.currentTimeMillis() + 15_000L
+        var round = 0
+        while (System.currentTimeMillis() < deadline) {
+            round += 1
+            for (pid in interesting) {
+                val reading = current.readPid(pid)
+                samples = samples + Sample(
+                    System.currentTimeMillis(), pid, reading.name, reading.value, reading.unit,
+                    reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
+                )
+            }
+            if (interesting.isEmpty()) break
+            delay(400)
+        }
+        samples = samples.takeLast(400)
+        val metrics = SessionTimeMetrics.fromTimestamps(samples.map { it.atEpochMs })
+        state.update {
+            it.copy(
+                samples = samples,
+                freeze = freeze,
+                exchanges = current.exchanges.toList(),
+                timeMetrics = metrics,
+                statusLine = "Captura ${metrics.windowMs} ms, ${metrics.sampleCount} muestras, %.2f Hz. Rondas $round.".format(metrics.effectiveHz),
             )
         }
-        freeze = listOf(decodeFreeze(current.exchange("020200", 8000)))
-        state.update { it.copy(samples = samples, freeze = freeze, exchanges = current.exchanges.toList()) }
-        trace("0101 ${mil.kind}")
+        trace("0101 ${mil.kind}; freeze=${freeze.firstOrNull()?.dtc}; hunt=${interesting.joinToString { "%02X".format(it) }}")
     }
 
     private suspend fun connectClassic(device: BluetoothDevice): Boolean {
@@ -500,6 +519,10 @@ class LabController(private val app: Application) {
         if (0x20 in supported) {
             val next = current.readPid(0x20)
             if (next.valid) supported = supported + PidDecoder.supported(0x20, next.raw)
+        }
+        if (0x40 in supported) {
+            val next = current.readPid(0x40)
+            if (next.valid) supported = supported + PidDecoder.supported(0x40, next.raw)
         }
         state.update { it.copy(supported = supported, exchanges = current.exchanges.toList(), statusLine = "PIDs soportados: ${supported.size}.") }
     }

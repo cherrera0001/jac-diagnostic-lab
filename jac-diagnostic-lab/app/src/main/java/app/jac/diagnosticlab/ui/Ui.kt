@@ -72,6 +72,7 @@ import app.jac.diagnosticlab.evidence.interpretationLines
 import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.obd.FaultIdentification
 import app.jac.diagnosticlab.security.SecurityGuide
 import android.Manifest
 import org.json.JSONObject
@@ -255,6 +256,19 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
     Text(if (step == 6) reading.title else current.detail)
     if (step == 6) {
         reading.lines.forEach { Text(it) }
+        val dossier = FaultIdentification.dossier(
+            storedCodes = codes,
+            freezeDtc = state.freeze.firstOrNull()?.dtc ?: saved?.freezeDtc,
+            freezeRaw = state.freeze.firstOrNull()?.raw ?: saved?.freezeRaw,
+            supportedPids = state.supported.ifEmpty { saved?.supportedPids.orEmpty() },
+            samples = state.samples.map { it.pid to it.value }.ifEmpty { saved?.samplePairs.orEmpty() },
+            powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
+            model = state.declaredModel,
+            year = state.declaredYear,
+            time = state.timeMetrics ?: saved?.timeMetrics,
+        )
+        Text(dossier.title, style = MaterialTheme.typography.titleMedium, color = Color(0xFFFF8A80))
+        dossier.lines.forEach { Text(it) }
         interpretationLines(
             codes,
             state.declaredModel,
@@ -284,19 +298,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             if (refusal != null && savedRefusal != null) {
                 pdfError = refusal
             } else runCatching {
-                val facts = ReadingFacts(
-                    sessionId = state.sessionId.ifBlank { saved?.sessionId.orEmpty() },
-                    adapterId = adapterId,
-                    protocolNumber = state.protocolNumber.ifBlank { saved?.protocolNumber.orEmpty() },
-                    protocolText = state.protocolText.ifBlank { saved?.protocolText.orEmpty() },
-                    voltageText = state.voltageText.ifBlank { saved?.voltageText.orEmpty() },
-                    storedCodes = codes,
-                    ecuTalking = ecuTalking,
-                    bleValidated = state.bleValidated,
-                    declaredModel = state.declaredModel,
-                    declaredYear = state.declaredYear,
-                    powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
-                )
+                val facts = factsFromState(state, codes, adapterId, ecuTalking, saved)
                 val document = readingReport(facts)
                 val pdf = renderReadingPdf(document.title, document.lines)
                 val stamp = facts.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
@@ -336,7 +338,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             }
         }
     }
-    Text("Versión 0.8.0. El significado está en el paso 6 y en el PDF de Copia. El teléfono no busca los códigos en internet.")
+    Text("Versión 1.0.0. Autodiag captura ~15 s de sensores, freeze frame corregido y ficha de falla para el taller.")
 }
 
 @Composable
@@ -543,27 +545,8 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
     }
     val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        val facts = if (pdfFromSaved && saved != null) {
-            saved.copy(
-                declaredModel = state.declaredModel,
-                declaredYear = state.declaredYear,
-                powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
-            )
-        } else {
-            ReadingFacts(
-                sessionId = state.sessionId,
-                adapterId = state.adapterId,
-                protocolNumber = state.protocolNumber,
-                protocolText = state.protocolText,
-                voltageText = state.voltageText,
-                storedCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } },
-                ecuTalking = state.ecuTalking,
-                bleValidated = state.bleValidated,
-                declaredModel = state.declaredModel,
-                declaredYear = state.declaredYear,
-                powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
-            )
-        }
+        val liveCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } }
+        val facts = factsFromState(state, liveCodes, state.adapterId, state.ecuTalking, if (pdfFromSaved) saved else null)
         val refusal = payloadHasContent(
             "pdf",
             if (pdfFromSaved) 0 else state.exchanges.size,
@@ -804,6 +787,41 @@ private fun latestSavedFacts(context: Context): ReadingFacts? {
     }.getOrNull()
 }
 
+private fun factsFromState(
+    state: LabState,
+    codes: List<String>,
+    adapterId: String,
+    ecuTalking: Boolean,
+    saved: ReadingFacts?,
+): ReadingFacts {
+    val power = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms
+    if (saved != null && !ecuTalking && codes.isEmpty()) {
+        return saved.copy(
+            declaredModel = state.declaredModel.ifBlank { saved.declaredModel },
+            declaredYear = state.declaredYear.ifBlank { saved.declaredYear },
+            powerLossOnBrake = power || saved.powerLossOnBrake,
+        )
+    }
+    return ReadingFacts(
+        sessionId = state.sessionId.ifBlank { saved?.sessionId.orEmpty() },
+        adapterId = adapterId.ifBlank { saved?.adapterId.orEmpty() },
+        protocolNumber = state.protocolNumber.ifBlank { saved?.protocolNumber.orEmpty() },
+        protocolText = state.protocolText.ifBlank { saved?.protocolText.orEmpty() },
+        voltageText = state.voltageText.ifBlank { saved?.voltageText.orEmpty() },
+        storedCodes = codes.ifEmpty { saved?.storedCodes.orEmpty() },
+        ecuTalking = ecuTalking || saved?.ecuTalking == true,
+        bleValidated = state.bleValidated,
+        declaredModel = state.declaredModel,
+        declaredYear = state.declaredYear,
+        powerLossOnBrake = power,
+        freezeDtc = state.freeze.firstOrNull()?.dtc ?: saved?.freezeDtc,
+        freezeRaw = state.freeze.firstOrNull()?.raw ?: saved?.freezeRaw,
+        supportedPids = state.supported.ifEmpty { saved?.supportedPids.orEmpty() },
+        samplePairs = state.samples.map { it.pid to it.value }.ifEmpty { saved?.samplePairs.orEmpty() },
+        timeMetrics = state.timeMetrics ?: saved?.timeMetrics,
+    )
+}
+
 private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
     if (Build.VERSION.SDK_INT >= 29) {
         val values = ContentValues().apply {
@@ -865,7 +883,7 @@ private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
     var canvas = page.canvas
     var y = margin
     fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab 0.4.2-safe  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText("JAC Diagnostic Lab 1.0.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
         canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
         document.finishPage(page)
     }

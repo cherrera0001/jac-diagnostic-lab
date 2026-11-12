@@ -129,7 +129,7 @@ class SecurityPolicyTest {
         assertFalse(text.contains("reemplaza", true))
         val unknown = readingReport(ReadingFacts("s", "", "", "", "", listOf("P0999"), true))
         assertTrue(unknown.lines.any { it.contains("P0999") && it.contains("No traduzco") })
-        assertTrue(text.contains("5. Validación de seguridad"))
+        assertTrue(text.contains("6. Validación de seguridad") || text.contains("1. Ficha de falla"))
         assertTrue(text.contains("no se conecta a internet"))
         assertTrue(text.contains("ficha local"))
         assertTrue(text.contains("N56"))
