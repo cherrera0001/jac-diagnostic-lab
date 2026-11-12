@@ -20,12 +20,15 @@ import app.jac.diagnosticlab.bt.BtDevice
 import app.jac.diagnosticlab.bt.ClassicElmTransport
 import app.jac.diagnosticlab.bt.DiagnosticConnectionService
 import app.jac.diagnosticlab.bt.GattCharView
+import app.jac.diagnosticlab.bt.LinkPhase
 import app.jac.diagnosticlab.elm.ElmSession
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ObdTransport
 import app.jac.diagnosticlab.elm.ResponseKind
 import app.jac.diagnosticlab.lab.TransportIsolation
 import app.jac.diagnosticlab.telemetry.ChannelStats
+import app.jac.diagnosticlab.telemetry.SessionSummary
+import app.jac.diagnosticlab.telemetry.TelemetryStore
 import app.jac.diagnosticlab.telemetry.VehicleTelemetryEngine
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
@@ -116,6 +119,8 @@ data class LabState(
     val capabilities: CapabilitySnapshot? = null,
     val bitmapRead: Boolean = false,
     val channelStats: Map<Int, ChannelStats> = emptyMap(),
+    val linkPhase: LinkPhase = LinkPhase.DISCONNECTED,
+    val sessionHistory: List<SessionSummary> = emptyList(),
 )
 
 class LabController(private val app: Application) {
@@ -128,6 +133,7 @@ class LabController(private val app: Application) {
     private var ble: BleInspector? = null
     private var pollJob: Job? = null
     private val telemetry = VehicleTelemetryEngine()
+    private val telemetryStore = TelemetryStore(app.filesDir)
     private val autodiagGate = AtomicBoolean(false)
     private var dtcs: List<DtcReadResult> = emptyList()
     private var freeze: List<FreezeNote> = emptyList()
@@ -211,10 +217,18 @@ class LabController(private val app: Application) {
             val raw = inspector.selectAndValidate(writeUuid, notifyUuid)
             bindProductionTransport(inspector)
             openSession(inspector.name)
-            state.update { it.copy(bleValidated = true, busy = false, statusLine = "BLE validado.", error = null) }
+            state.update {
+                it.copy(
+                    bleValidated = true,
+                    busy = false,
+                    statusLine = "BLE validado.",
+                    error = null,
+                    linkPhase = LinkPhase.ELM_READY,
+                )
+            }
             trace("ATI de validación BLE:\n$raw")
         } catch (error: Exception) {
-            state.update { it.copy(bleValidated = false, busy = false) }
+            state.update { it.copy(bleValidated = false, busy = false, linkPhase = LinkPhase.TRANSPORT_CONNECTED) }
             explain(error.message ?: "No se validó BLE.")
         }
     }
@@ -282,11 +296,13 @@ class LabController(private val app: Application) {
                         val parsed = parseAdapterVoltage(voltage.raw)
                         val latency = System.currentTimeMillis() - t0
                         if (parsed != null) {
-                            samples = (samples + Sample(
+                            val sample = Sample(
                                 System.currentTimeMillis(), -1, "Tensión estimada del adaptador", parsed, "V",
                                 true, parsed < 11.6 || parsed > 15.2, voltage.raw.trim(),
-                            )).takeLast(480)
+                            )
+                            samples = (samples + sample).takeLast(480)
                             telemetry.recordSuccess(-1, latency)
+                            telemetryStore.appendMeasurement(sessionId, sample, latency, "SLOW")
                         } else {
                             telemetry.recordFailure(-1, latency)
                         }
@@ -299,6 +315,8 @@ class LabController(private val app: Application) {
                         )
                         samples = (samples + sample).takeLast(480)
                         if (reading.valid) telemetry.recordSuccess(pid, latency) else telemetry.recordFailure(pid, latency)
+                        val band = VehicleTelemetryEngine.bandFor(pid).name
+                        telemetryStore.appendMeasurement(sessionId, sample, latency, band)
                     }
                 } catch (_: Exception) {
                     telemetry.recordFailure(pid, System.currentTimeMillis() - t0)
@@ -367,6 +385,10 @@ class LabController(private val app: Application) {
 
     fun clearSnapshots() {
         state.update { it.copy(beforeSnapshot = null, afterSnapshot = null, statusLine = "Capturas antes/después borradas de la sesión.") }
+    }
+
+    fun refreshSessionHistory() {
+        state.update { it.copy(sessionHistory = telemetryStore.listSessions()) }
     }
 
     fun setSymptom(symptom: Symptom, enabled: Boolean) {
@@ -604,6 +626,7 @@ class LabController(private val app: Application) {
             bindProductionTransport(classic)
             promote()
             openSession(classic.name)
+            state.update { it.copy(linkPhase = LinkPhase.TRANSPORT_CONNECTED) }
             true
         } catch (error: Exception) {
             errors += "RFCOMM ${device.name}: ${error.message}"
@@ -620,7 +643,15 @@ class LabController(private val app: Application) {
         state.update { it.copy(busy = true, statusLine = "Descubriendo servicios GATT de ${device.name}. No se escribe todavía.") }
         return try {
             val profile = inspector.connectAndDiscover()
-            state.update { it.copy(gatt = profile, busy = false, link = "GATT descubierto", error = null) }
+            state.update {
+                it.copy(
+                    gatt = profile,
+                    busy = false,
+                    link = "GATT descubierto",
+                    error = null,
+                    linkPhase = LinkPhase.TRANSPORT_CONNECTED,
+                )
+            }
             profile.forEach { row -> trace("GATT ${row.serviceUuid} ${row.uuid} ${row.properties.joinToString("|")}") }
             true
         } catch (error: Exception) {
@@ -712,10 +743,17 @@ class LabController(private val app: Application) {
                 statusLine = report.stoppedBecause ?: if (report.ecuTalking) "La ECU respondió a 0100." else "El adaptador contestó, pero 0100 no trajo datos de la ECU.",
                 error = report.stoppedBecause,
                 recovery = report.stoppedBecause?.let { recoveryFor(it) },
+                linkPhase = when {
+                    report.ecuTalking && report.supportedPids.isNotEmpty() -> LinkPhase.DIAGNOSTIC_READY
+                    report.ecuTalking -> LinkPhase.ECU_RESPONDING
+                    report.adapterIdentity.isNotBlank() -> LinkPhase.ELM_READY
+                    else -> LinkPhase.TRANSPORT_CONNECTED
+                },
             )
         }
         if (report.stoppedBecause != null) errors += report.stoppedBecause
         refreshCapabilities()
+        refreshSessionHistory()
         recompute()
     }
 
@@ -885,6 +923,7 @@ class LabController(private val app: Application) {
             "permiso" in text || "security" in text -> "En Ajustes, conceda dispositivos cercanos a JAC Diagnostic Lab y repita la búsqueda."
             "timeout" in text || "prompt" in text -> "Acerque el teléfono, confirme el contacto en ON y vuelva a conectar. Si OBDII falla, pruebe OBDBLE."
             "socket" in text || "rfcomm" in text || "busy" in text || "closed" in text -> "Cierre otras aplicaciones OBD, apague y encienda el Bluetooth del teléfono y reintente. No borre códigos."
+            "133" in text -> "GATT 133: fallo de radio/enlace. Se reintentó con backoff. Cierre otras apps OBD, reinsertar ELM, o use OBDII clásico emparejado."
             "gatt" in text || "ble" in text -> "El perfil BLE no quedó validado. No se escribieron características desconocidas. Use OBDII clásico si está emparejado."
             "04" in text -> "El comando de borrado quedó bloqueado. No hace falta reintentarlo."
             else -> "Deje el vehículo estacionado con el contacto en ON, verifique que el adaptador esté insertado y repita la conexión."
@@ -921,6 +960,7 @@ class LabController(private val app: Application) {
         transport = null
         session = null
         ble = null
+        state.update { it.copy(linkPhase = LinkPhase.DISCONNECTED) }
         kotlinx.coroutines.withContext(Dispatchers.IO) { runCatching { current?.disconnect() } }
     }
 

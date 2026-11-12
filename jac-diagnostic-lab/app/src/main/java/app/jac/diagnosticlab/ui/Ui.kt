@@ -113,6 +113,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
     fun clearSnapshots() = lab.clearSnapshots()
     fun refreshCapabilities() = lab.refreshCapabilities()
+    fun refreshSessionHistory() = lab.refreshSessionHistory()
     fun setSymptom(symptom: Symptom, enabled: Boolean) = lab.setSymptom(symptom, enabled)
     fun setProtocol(code: String) = lab.setProtocol(code)
     fun setInterval(ms: Long) = lab.setInterval(ms)
@@ -165,7 +166,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Hoy", "Monitor", "Capacidad", "Taller", "Copia").forEachIndexed { index, label ->
+                listOf("Hoy", "Monitor", "Capacidad", "Historial", "Copia").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -201,7 +202,10 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                     }
                 }
             }
-            if (tab != 0) Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
+            if (tab != 0) {
+                Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
+                Text("Fase: ${state.linkPhase.label}", fontSize = 12.sp, color = Color(0xFF9AA3AD))
+            }
             if (state.error != null) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
@@ -214,9 +218,10 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                 0 -> TodayScreen(state, model, permissions)
                 1 -> MonitorScreen(state, model, permissions)
                 2 -> CapabilityScreen(state, model)
-                3 -> WorkshopScreen(state, model)
+                3 -> HistoryScreen(state, model)
                 else -> {
                     EvidenceScreen(state, model)
+                    WorkshopScreen(state, model)
                     CodeScreen(state, model)
                     AnalysisScreen(state, model)
                     SecurityGuideScreen(state)
@@ -604,6 +609,33 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
     }
     Text("Si no hay enlace: pestaña Hoy → autodiagnóstico, o Conexión vía permisos + OBDBLE. GATT 133 es radio, no la UI.", fontSize = 12.sp, color = Color(0xFF9AA3AD))
     LinkScreen(state, model, requestPermissions)
+}
+
+@Composable
+private fun HistoryScreen(state: LabState, model: DiagnosticViewModel) {
+    Text("HISTORIAL DE TELEMETRÍA", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
+    Text(
+        "Sesiones JSONL locales (append-only). No se mezclan con la sesión viva. Sin cloud.",
+        fontSize = 13.sp,
+        color = Color(0xFFB0B8C0),
+    )
+    Button(onClick = { model.refreshSessionHistory() }, modifier = Modifier.fillMaxWidth()) {
+        Text("Actualizar listado")
+    }
+    Text("Sesión viva: ${state.sessionId.ifBlank { "—" }} · muestras en RAM: ${state.samples.size}", fontSize = 12.sp)
+    if (state.sessionHistory.isEmpty()) {
+        Text("Sin archivos de telemetría todavía. Arranque Monitor → Iniciar monitor ordenado.")
+    } else {
+        state.sessionHistory.take(40).forEach { row ->
+            Text(
+                "${row.id} · ${row.measurementCount} mediciones · ${row.startedAtEpochMs}",
+                fontSize = 13.sp,
+                fontFamily = FontFamily.Monospace,
+            )
+            Text(row.path, fontSize = 10.sp, color = Color(0xFF9AA3AD))
+        }
+    }
+    Text("Taller / ficha de falla: ver Copia (más abajo en esa pestaña).", fontSize = 12.sp, color = Color(0xFF9AA3AD))
 }
 
 @Composable

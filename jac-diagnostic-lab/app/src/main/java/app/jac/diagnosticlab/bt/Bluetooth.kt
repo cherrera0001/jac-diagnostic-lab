@@ -287,37 +287,53 @@ class BleInspector(
     private var servicesDeferred = CompletableDeferred<Int>()
 
     suspend fun connectAndDiscover(): List<GattCharView> {
-        connectedDeferred = CompletableDeferred()
-        servicesDeferred = CompletableDeferred()
-        withContext(Dispatchers.Main) {
-            gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        }
-        val connectStatus = withTimeout(12_000) { connectedDeferred.await() }
-        if (connectStatus != BluetoothGatt.GATT_SUCCESS) {
-            throw IOException("GATT no conectó. Código $connectStatus.")
-        }
-        val discoverStatus = withTimeout(12_000) { servicesDeferred.await() }
-        if (discoverStatus != BluetoothGatt.GATT_SUCCESS) throw IOException("No se descubrieron servicios. Código $discoverStatus.")
-        withContext(Dispatchers.Main) { gatt?.requestMtu(185) }
-        delay(300)
-        profile = gatt?.services.orEmpty().flatMap { service ->
-            service.characteristics.map { characteristic ->
-                val props = characteristic.properties
-                val names = mutableListOf<String>()
-                val canWrite = props and BluetoothGattCharacteristic.PROPERTY_WRITE != 0 ||
-                    props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
-                val canNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0 ||
-                    props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
-                if (props and BluetoothGattCharacteristic.PROPERTY_READ != 0) names += "READ"
-                if (props and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) names += "WRITE"
-                if (props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) names += "WRITE_NR"
-                if (props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) names += "NOTIFY"
-                if (props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) names += "INDICATE"
-                GattCharView(service.uuid.toString(), characteristic.uuid.toString(), names, canWrite, canNotify)
+        var lastConnectStatus = -1
+        repeat(GattRetryPolicy.MAX_ATTEMPTS) { attempt ->
+            runCatching {
+                withContext(Dispatchers.Main) {
+                    gatt?.close()
+                    gatt = null
+                }
             }
+            connectedDeferred = CompletableDeferred()
+            servicesDeferred = CompletableDeferred()
+            withContext(Dispatchers.Main) {
+                gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            }
+            lastConnectStatus = withTimeout(12_000) { connectedDeferred.await() }
+            if (lastConnectStatus == BluetoothGatt.GATT_SUCCESS) {
+                val discoverStatus = withTimeout(12_000) { servicesDeferred.await() }
+                if (discoverStatus != BluetoothGatt.GATT_SUCCESS) {
+                    throw IOException("No se descubrieron servicios. Código $discoverStatus.")
+                }
+                withContext(Dispatchers.Main) { gatt?.requestMtu(185) }
+                delay(300)
+                profile = gatt?.services.orEmpty().flatMap { service ->
+                    service.characteristics.map { characteristic ->
+                        val props = characteristic.properties
+                        val names = mutableListOf<String>()
+                        val canWrite = props and BluetoothGattCharacteristic.PROPERTY_WRITE != 0 ||
+                            props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0
+                        val canNotify = props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0 ||
+                            props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
+                        if (props and BluetoothGattCharacteristic.PROPERTY_READ != 0) names += "READ"
+                        if (props and BluetoothGattCharacteristic.PROPERTY_WRITE != 0) names += "WRITE"
+                        if (props and BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE != 0) names += "WRITE_NR"
+                        if (props and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0) names += "NOTIFY"
+                        if (props and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0) names += "INDICATE"
+                        GattCharView(service.uuid.toString(), characteristic.uuid.toString(), names, canWrite, canNotify)
+                    }
+                }
+                log("GATT descubrió ${profile.size} características (intento ${attempt + 1}). Aún no se escribió ninguna.")
+                return profile
+            }
+            log("GATT connect status=$lastConnectStatus intento ${attempt + 1}/${GattRetryPolicy.MAX_ATTEMPTS}")
+            if (!GattRetryPolicy.shouldRetry(lastConnectStatus, attempt)) {
+                throw IOException("GATT no conectó. Código $lastConnectStatus.")
+            }
+            delay(GattRetryPolicy.backoffMs(attempt))
         }
-        log("GATT descubrió ${profile.size} características. Aún no se escribió ninguna.")
-        return profile
+        throw IOException("GATT no conectó tras reintentos. Código $lastConnectStatus.")
     }
 
     suspend fun selectAndValidate(writeUuid: String, notifyUuid: String): String {

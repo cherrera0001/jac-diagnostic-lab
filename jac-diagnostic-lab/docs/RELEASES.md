@@ -2,6 +2,15 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.5.0 — Persistencia telemetría + LinkPhase (SPEC-024/027)
+
+- **Tag:** `v1.5.0`
+- **versionCode:** 16
+- **Fecha:** 2026-11-12
+- **Auditoría:** `docs/audits/latest-code-assessment.md`
+
+JSONL append-only + pestaña Historial. `LinkPhase` (BT≠ECU). Reintentos GATT con backoff (133). Tests STORE/BT.
+
 ## v1.4.0 — VehicleTelemetryEngine (SPEC-023)
 
 - **Tag:** `v1.4.0`
