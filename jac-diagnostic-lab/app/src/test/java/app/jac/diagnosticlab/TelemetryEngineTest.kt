@@ -60,22 +60,16 @@ class TelemetryEngineTest {
 
     @Test
     fun testTel005_mediumNotStarvedWhenDue() {
-        var now = 0L
-        val engine = VehicleTelemetryEngine { now }
-        engine.plan(setOf(0x0C, 0x0B), 100L) // FAST 100, MEDIUM 200
-        // Consume FAST several times
-        repeat(3) {
-            val pid = engine.nextDue(now)!!
-            assertEquals(0x0C, pid)
-            engine.recordSuccess(pid, 10, now)
-            now += 100L
-        }
-        // At now=300, FAST last at 200 → due again at 300; MEDIUM never polled → due from start
-        // Both due: FAST wins. Advance so FAST is fresh and MEDIUM still never polled... 
-        // After last record at 200, now=300: FAST due (300-200>=100), MEDIUM due (never). FAST wins.
-        engine.recordSuccess(0x0C, 10, now) // poll FAST at 300
-        now = 301L
-        // FAST last 300, not due until 400. MEDIUM never → due. Must be 0x0B.
-        assertEquals(0x0B, engine.nextDue(now))
+        val engine = VehicleTelemetryEngine { 0L }
+        engine.plan(setOf(0x0C, 0x0B), 100L) // FAST 100 ms, MEDIUM 200 ms
+        assertEquals(100L, engine.currentPlans().first { it.pid == 0x0C }.targetIntervalMs)
+        assertEquals(200L, engine.currentPlans().first { it.pid == 0x0B }.targetIntervalMs)
+        assertEquals(0x0C, engine.nextDue(0L))
+        engine.recordSuccess(0x0C, 10, 0L)
+        // FAST fresco hasta t=100; MEDIUM nunca consultado → 0x0B
+        assertEquals(0x0B, engine.nextDue(1L))
+        engine.recordSuccess(0x0B, 10, 1L)
+        assertNull(engine.nextDue(50L))
+        assertEquals(0x0C, engine.nextDue(100L))
     }
 }

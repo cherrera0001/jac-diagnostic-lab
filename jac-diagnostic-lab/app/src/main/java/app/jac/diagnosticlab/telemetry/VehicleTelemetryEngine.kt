@@ -59,7 +59,7 @@ class VehicleTelemetryEngine(
     fun isPaused(): Boolean = paused
 
     fun plan(pids: Set<Int>, baseIntervalMs: Long): List<ChannelPlan> {
-        val base = baseIntervalMs.coerceIn(200L, 10_000L)
+        val base = baseIntervalMs.coerceIn(100L, 10_000L)
         plans = pids.filter { it != 0x00 }.distinct().sorted().map { pid ->
             val band = bandFor(pid)
             val mult = when (band) {
