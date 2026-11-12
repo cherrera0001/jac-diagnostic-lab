@@ -1,0 +1,88 @@
+﻿JAC Diagnostic Lab
+Sesión 2026-11-11T2129-8493
+Inicio 1794443378490
+Teléfono Xiaomi 2512BPNDAG / Android 17 (SDK 37)
+Vehículo JAC T8, encendida y estacionada, ELM327 Mini Bluetooth en el puerto OBD-II. Los cinco síntomas marcados son el reporte del conductor del 11-11-2026, no mediciones.
+Conexión Bluetooth LE GATT estado Conectado
+Adaptador OBDBLE 
+Protocolo  
+ATRV 
+VIN (no consultado)
+
+Una conexión exitosa no significa que el vehículo sea seguro para circular.
+ATZ solo reinicia el adaptador. Esta sesión no envió el servicio 04.
+
+== Transcripción ==
+
+> 0900  [OBD_DATA] 220 ms
+SEARCHING...
+
+49 00 54 60 00 00 
+
+
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0902  [MALFORMED] 150 ms
+014
+
+0: 49 02 01 4C 4A 31 
+
+1: 31 50 41 42 44 38 50 
+
+2: 43 30 39 31 34 35 30 
+
+
+
+
+La respuesta no es hexadecimal interpretable. No se inventaron códigos.
+
+== DTC ==
+No se ejecutó la lectura de códigos.
+
+== Freeze frame ==
+No consultado.
+
+== Análisis ==
+No hay puntaje numérico. Un hallazgo confirmado es un byte o un bit leído. Una hipótesis solo puede tener evidencia a favor, evidencia en contra o datos insuficientes. El síntoma del conductor no confirma una pieza. NO DATA no significa ausencia de códigos. ATRV es la estimación del ELM327.
+
+H1 Señales inconsistentes del interruptor de freno [INSUFFICIENT_DATA]
+  a favor: El conductor observa pérdida de potencia al usar el freno, a veces al volver a frenar.
+  falta: El OBD-II genérico no define un PID del interruptor de freno ni de su señal redundante.
+  falta: Esta aplicación no hace pruebas de frenado.
+  siguiente: Con el vehículo estacionado y el contacto en ON, medir el interruptor y la señal redundante con multímetro o con un escáner JAC.
+  requiere escáner JAC o inspección de taller
+
+H2 Relación entre pedal de freno y acelerador electrónico [INSUFFICIENT_DATA]
+  falta: No existe un PID genérico que cruce el freno con el pedal del acelerador.
+  falta: El PID de posición de acelerador no se confirmó como soportado.
+  siguiente: Comparar, en taller y sin una prueba de conducción lanzada por esta app, la señal de freno y la del acelerador con herramienta del fabricante.
+  requiere escáner JAC o inspección de taller
+
+H3 Potencia reducida por estrategia de la ECU [INSUFFICIENT_DATA]
+  a favor: Observación del conductor: EPC, advertencia de motor o pérdida de potencia. No es una medición de la ECU.
+  falta: El modo de potencia reducida y el testigo EPC no tienen un PID genérico. Un MIL encendido no nombra la estrategia ni la pieza.
+  siguiente: Leer con escáner JAC el estado de limitación de par, sin sustituir piezas solo por el testigo.
+  requiere escáner JAC o inspección de taller
+
+H4 Alimentación, conexiones o tierras [INSUFFICIENT_DATA]
+  falta: Falta una medición de batería, bornes y tierras con un instrumento independiente. ATRV no la reemplaza.
+  siguiente: Medir tensión en batería y caídas en tierras con el contacto en ON y, si el taller lo decide, con el motor en ralentí. No se pide una prueba de ruta.
+
+H5 Comunicación entre módulos [INSUFFICIENT_DATA]
+  falta: No se interrogaron buses propietarios ni módulos de ABS, BCM o transmisión. Que el OBD genérico responda no demuestra que todos los módulos se hablen.
+  siguiente: Si el fallo vuelve, registrar la hora y repetir 0100 y los DTC sin borrar nada. Un escáner JAC puede ver redes que este adaptador no muestra.
+  requiere escáner JAC o inspección de taller
+
+H6 Otras fallas indicadas por los DTC [INSUFFICIENT_DATA]
+  falta: Sin catálogo J2012-DA verificado no se traduce el código a un texto de falla.
+  siguiente: Anotar los bytes y el código. No borrar la memoria. Contrastar el código con documentación del fabricante antes de cambiar piezas.
+
+== Errores ==
+Seleccione un dispositivo.
+No hay un adaptador conectado.
+Seleccione un dispositivo.
+Seleccione un dispositivo.
+No hay un adaptador conectado.
+ATI no validó un ELM327. Respuesta: timeout BLE

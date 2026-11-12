@@ -1,0 +1,168 @@
+﻿{
+  "schema": 1,
+  "simulated": false,
+  "id": "2026-11-11T2129-8493",
+  "startedAtEpochMs": 1794443378490,
+  "androidDevice": "Xiaomi 2512BPNDAG",
+  "androidRelease": "Android 17 (SDK 37)",
+  "vehicleNote": "JAC T8, encendida y estacionada, ELM327 Mini Bluetooth en el puerto OBD-II. Los cinco síntomas marcados son el reporte del conductor del 11-11-2026, no mediciones.",
+  "connectionType": "Bluetooth LE GATT",
+  "connectionState": "Conectado",
+  "adapterName": "OBDBLE",
+  "adapterAddress": "81:23:45:67:89:BA",
+  "adapterIdentity": "",
+  "protocolText": "",
+  "protocolNumber": "",
+  "adapterVoltage": "",
+  "vin": null,
+  "symptoms": [
+    "EPC_LAMP",
+    "ENGINE_WARNING",
+    "BRAKE_POWER_LOSS",
+    "CLEARS_AFTER_RESTART",
+    "RETURNS_WITH_BRAKE"
+  ],
+  "safety": "Solo lectura. No se envió el servicio 04. Una conexión no autoriza a circular.",
+  "exchanges": [
+    {
+      "atEpochMs": 1794443565516,
+      "command": "0900",
+      "kind": "OBD_DATA",
+      "elapsedMs": 220,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "SEARCHING...\r\n49 00 54 60 00 00 \r\n\r\n",
+      "frames": [
+        {
+          "header": null,
+          "pciStripped": false,
+          "payload": [
+            "49",
+            "00",
+            "54",
+            "60",
+            "00",
+            "00"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443565738,
+      "command": "0902",
+      "kind": "MALFORMED",
+      "elapsedMs": 150,
+      "promptSeen": true,
+      "detail": "La respuesta no es hexadecimal interpretable. No se inventaron códigos.",
+      "raw": "014\r\n0: 49 02 01 4C 4A 31 \r\n1: 31 50 41 42 44 38 50 \r\n2: 43 30 39 31 34 35 30 \r\n\r\n",
+      "frames": []
+    }
+  ],
+  "dtcs": [],
+  "freeze": [],
+  "samples": [],
+  "errors": [
+    "Seleccione un dispositivo.",
+    "No hay un adaptador conectado.",
+    "Seleccione un dispositivo.",
+    "Seleccione un dispositivo.",
+    "No hay un adaptador conectado.",
+    "ATI no validó un ELM327. Respuesta: timeout BLE"
+  ],
+  "analysis": {
+    "methodology": "No hay puntaje numérico. Un hallazgo confirmado es un byte o un bit leído. Una hipótesis solo puede tener evidencia a favor, evidencia en contra o datos insuficientes. El síntoma del conductor no confirma una pieza. NO DATA no significa ausencia de códigos. ATRV es la estimación del ELM327.",
+    "confirmed": [],
+    "hypotheses": [
+      {
+        "id": "H1",
+        "title": "Señales inconsistentes del interruptor de freno",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [
+          "El conductor observa pérdida de potencia al usar el freno, a veces al volver a frenar."
+        ],
+        "contrary": [],
+        "missing": [
+          "El OBD-II genérico no define un PID del interruptor de freno ni de su señal redundante.",
+          "Esta aplicación no hace pruebas de frenado."
+        ],
+        "nextChecks": [
+          "Con el vehículo estacionado y el contacto en ON, medir el interruptor y la señal redundante con multímetro o con un escáner JAC."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H2",
+        "title": "Relación entre pedal de freno y acelerador electrónico",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [],
+        "contrary": [],
+        "missing": [
+          "No existe un PID genérico que cruce el freno con el pedal del acelerador.",
+          "El PID de posición de acelerador no se confirmó como soportado."
+        ],
+        "nextChecks": [
+          "Comparar, en taller y sin una prueba de conducción lanzada por esta app, la señal de freno y la del acelerador con herramienta del fabricante."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H3",
+        "title": "Potencia reducida por estrategia de la ECU",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [
+          "Observación del conductor: EPC, advertencia de motor o pérdida de potencia. No es una medición de la ECU."
+        ],
+        "contrary": [],
+        "missing": [
+          "El modo de potencia reducida y el testigo EPC no tienen un PID genérico. Un MIL encendido no nombra la estrategia ni la pieza."
+        ],
+        "nextChecks": [
+          "Leer con escáner JAC el estado de limitación de par, sin sustituir piezas solo por el testigo."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H4",
+        "title": "Alimentación, conexiones o tierras",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [],
+        "contrary": [],
+        "missing": [
+          "Falta una medición de batería, bornes y tierras con un instrumento independiente. ATRV no la reemplaza."
+        ],
+        "nextChecks": [
+          "Medir tensión en batería y caídas en tierras con el contacto en ON y, si el taller lo decide, con el motor en ralentí. No se pide una prueba de ruta."
+        ],
+        "needsJacScanner": false
+      },
+      {
+        "id": "H5",
+        "title": "Comunicación entre módulos",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [],
+        "contrary": [],
+        "missing": [
+          "No se interrogaron buses propietarios ni módulos de ABS, BCM o transmisión. Que el OBD genérico responda no demuestra que todos los módulos se hablen."
+        ],
+        "nextChecks": [
+          "Si el fallo vuelve, registrar la hora y repetir 0100 y los DTC sin borrar nada. Un escáner JAC puede ver redes que este adaptador no muestra."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H6",
+        "title": "Otras fallas indicadas por los DTC",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [],
+        "contrary": [],
+        "missing": [
+          "Sin catálogo J2012-DA verificado no se traduce el código a un texto de falla."
+        ],
+        "nextChecks": [
+          "Anotar los bytes y el código. No borrar la memoria. Contrastar el código con documentación del fabricante antes de cambiar piezas."
+        ],
+        "needsJacScanner": false
+      }
+    ]
+  }
+}

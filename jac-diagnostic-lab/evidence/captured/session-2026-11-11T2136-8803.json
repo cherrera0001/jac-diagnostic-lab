@@ -1,0 +1,621 @@
+﻿{
+  "schema": 1,
+  "simulated": false,
+  "id": "2026-11-11T2136-8803",
+  "startedAtEpochMs": 1794443768803,
+  "androidDevice": "Xiaomi 2512BPNDAG",
+  "androidRelease": "Android 17 (SDK 37)",
+  "vehicleNote": "JAC T8, encendida y estacionada, ELM327 Mini Bluetooth en el puerto OBD-II. Los cinco síntomas marcados son el reporte del conductor del 11-11-2026, no mediciones.",
+  "connectionType": "Bluetooth LE GATT",
+  "connectionState": "Conectado",
+  "adapterName": "OBDBLE",
+  "adapterAddress": "81:23:45:67:89:BA",
+  "adapterIdentity": "ELM327 v2.1",
+  "protocolText": "AUTO,ISO 15765-4 (CAN 11/500)",
+  "protocolNumber": "A6",
+  "adapterVoltage": "16.9V",
+  "vin": null,
+  "symptoms": [
+    "EPC_LAMP",
+    "ENGINE_WARNING",
+    "BRAKE_POWER_LOSS",
+    "CLEARS_AFTER_RESTART",
+    "RETURNS_WITH_BRAKE"
+  ],
+  "safety": "Solo lectura. No se envió el servicio 04. Una conexión no autoriza a circular.",
+  "exchanges": [
+    {
+      "atEpochMs": 1794443778420,
+      "command": "ATZ",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 91,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OKELM327 v2.1\r\n",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443778814,
+      "command": "ATE0",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 384,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OK\r\n",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779199,
+      "command": "ATL0",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 56,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OK\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779255,
+      "command": "ATS0",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 89,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OK\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779345,
+      "command": "ATH1",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 61,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OK\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779407,
+      "command": "ATI",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 88,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "ELM327 v2.1\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779495,
+      "command": "ATSP0",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 61,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "OK\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779557,
+      "command": "ATDP",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 88,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "AUTO\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779645,
+      "command": "ATDPN",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 60,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "A0\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779705,
+      "command": "ATRV",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 155,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "16.9V\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443779860,
+      "command": "0100",
+      "kind": "OBD_DATA",
+      "elapsedMs": 209,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "SEARCHING...\r7E8064100983B8013\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "00",
+            "98",
+            "3B",
+            "80",
+            "13"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443780069,
+      "command": "ATDP",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 85,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "AUTO,ISO 15765-4 (CAN 11/500)\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443780155,
+      "command": "ATDPN",
+      "kind": "RECOGNIZED",
+      "elapsedMs": 91,
+      "promptSeen": true,
+      "detail": "Comando AT aceptado por el adaptador.",
+      "raw": "A6\r",
+      "frames": []
+    },
+    {
+      "atEpochMs": 1794443780250,
+      "command": "03",
+      "kind": "OBD_DATA",
+      "elapsedMs": 177,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E806430205792299\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "43",
+            "02",
+            "05",
+            "79",
+            "22",
+            "99"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443780428,
+      "command": "07",
+      "kind": "OBD_DATA",
+      "elapsedMs": 150,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E8024700\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "47",
+            "00"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443780578,
+      "command": "0A",
+      "kind": "OBD_DATA",
+      "elapsedMs": 147,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E8037F0A13\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "7F",
+            "0A",
+            "13"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443780726,
+      "command": "0101",
+      "kind": "OBD_DATA",
+      "elapsedMs": 152,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E8064101020EC901\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "01",
+            "02",
+            "0E",
+            "C9",
+            "01"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443780880,
+      "command": "010C",
+      "kind": "OBD_DATA",
+      "elapsedMs": 148,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E804410C0C2C\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "0C",
+            "0C",
+            "2C"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781029,
+      "command": "0105",
+      "kind": "OBD_DATA",
+      "elapsedMs": 149,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E80341055F\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "05",
+            "5F"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781179,
+      "command": "0104",
+      "kind": "OBD_DATA",
+      "elapsedMs": 151,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E803410438\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "04",
+            "38"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781331,
+      "command": "010D",
+      "kind": "OBD_DATA",
+      "elapsedMs": 143,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E803410D00\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "0D",
+            "00"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781474,
+      "command": "0111",
+      "kind": "OBD_DATA",
+      "elapsedMs": 155,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E8034111E5\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "11",
+            "E5"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781631,
+      "command": "010B",
+      "kind": "OBD_DATA",
+      "elapsedMs": 147,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E803410B66\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "41",
+            "0B",
+            "66"
+          ]
+        }
+      ]
+    },
+    {
+      "atEpochMs": 1794443781779,
+      "command": "020200",
+      "kind": "OBD_DATA",
+      "elapsedMs": 150,
+      "promptSeen": true,
+      "detail": "Respuesta OBD con servicio esperado o negativo 7F.",
+      "raw": "7E8054202000579\r\r",
+      "frames": [
+        {
+          "header": "7E8",
+          "pciStripped": true,
+          "payload": [
+            "42",
+            "02",
+            "00",
+            "05",
+            "79"
+          ]
+        }
+      ]
+    }
+  ],
+  "dtcs": [
+    {
+      "category": "STORED",
+      "kind": "OBD_DATA",
+      "confirmedEmpty": false,
+      "note": "Códigos decodificados de los bytes originales. Esta versión no incluye el texto del SAE J2012-DA.",
+      "raw": "7E806430205792299\r\r",
+      "codes": [
+        {
+          "code": "P0579",
+          "hi": 5,
+          "lo": 121,
+          "scope": "GENERIC",
+          "scopeNote": "Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA.",
+          "ecu": "7E8"
+        },
+        {
+          "code": "P2299",
+          "hi": 34,
+          "lo": 153,
+          "scope": "GENERIC",
+          "scopeNote": "Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA.",
+          "ecu": "7E8"
+        }
+      ]
+    },
+    {
+      "category": "PENDING",
+      "kind": "OBD_DATA",
+      "confirmedEmpty": true,
+      "note": "La ECU informó cero códigos de esta categoría.",
+      "raw": "7E8024700\r\r",
+      "codes": []
+    },
+    {
+      "category": "PERMANENT",
+      "kind": "OBD_DATA",
+      "confirmedEmpty": false,
+      "note": "La ECU respondió negativo (7F). No se inventaron códigos.",
+      "raw": "7E8037F0A13\r\r",
+      "codes": []
+    }
+  ],
+  "freeze": [
+    {
+      "raw": "7E8054202000579\r\r",
+      "dtc": "P0005",
+      "note": "DTC del cuadro congelado, PID 02. Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA."
+    }
+  ],
+  "samples": [
+    {
+      "atEpochMs": 1794443781029,
+      "pid": 12,
+      "name": "Régimen del motor",
+      "value": 779,
+      "unit": "rpm",
+      "valid": true,
+      "suspect": false,
+      "raw": "0C 2C"
+    },
+    {
+      "atEpochMs": 1794443781179,
+      "pid": 5,
+      "name": "Temperatura del refrigerante",
+      "value": 55,
+      "unit": "°C",
+      "valid": true,
+      "suspect": false,
+      "raw": "5F"
+    },
+    {
+      "atEpochMs": 1794443781331,
+      "pid": 4,
+      "name": "Carga calculada",
+      "value": 21.96078431372549,
+      "unit": "%",
+      "valid": true,
+      "suspect": false,
+      "raw": "38"
+    },
+    {
+      "atEpochMs": 1794443781474,
+      "pid": 13,
+      "name": "Velocidad",
+      "value": 0,
+      "unit": "km/h",
+      "valid": true,
+      "suspect": false,
+      "raw": "00"
+    },
+    {
+      "atEpochMs": 1794443781630,
+      "pid": 17,
+      "name": "Posición del acelerador",
+      "value": 89.80392156862744,
+      "unit": "%",
+      "valid": true,
+      "suspect": false,
+      "raw": "E5"
+    },
+    {
+      "atEpochMs": 1794443781779,
+      "pid": 11,
+      "name": "Presión del colector",
+      "value": 102,
+      "unit": "kPa",
+      "valid": true,
+      "suspect": false,
+      "raw": "66"
+    }
+  ],
+  "errors": [],
+  "analysis": {
+    "methodology": "No hay puntaje numérico. Un hallazgo confirmado es un byte o un bit leído. Una hipótesis solo puede tener evidencia a favor, evidencia en contra o datos insuficientes. El síntoma del conductor no confirma una pieza. NO DATA no significa ausencia de códigos. ATRV es la estimación del ELM327.",
+    "confirmed": [
+      "La ECU respondió al PID 0100. Hay comunicación OBD-II en esta sesión.",
+      "El PID 0101 reportó el MIL genérico apagado. Eso no apaga ni explica un testigo EPC.",
+      "Hay un código stored genérico P0579 (bytes 05 79). La causa no está identificada.",
+      "Hay un código stored genérico P2299 (bytes 22 99). La causa no está identificada.",
+      "El adaptador estimó 16.9 V con ATRV. No es una medición independiente de batería o tierras."
+    ],
+    "hypotheses": [
+      {
+        "id": "H1",
+        "title": "Señales inconsistentes del interruptor de freno",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [
+          "El conductor observa pérdida de potencia al usar el freno, a veces al volver a frenar."
+        ],
+        "contrary": [],
+        "missing": [
+          "El OBD-II genérico no define un PID del interruptor de freno ni de su señal redundante.",
+          "Esta aplicación no hace pruebas de frenado."
+        ],
+        "nextChecks": [
+          "Con el vehículo estacionado y el contacto en ON, medir el interruptor y la señal redundante con multímetro o con un escáner JAC."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H2",
+        "title": "Relación entre pedal de freno y acelerador electrónico",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [
+          "Hay síntoma de freno y el PID de acelerador está soportado, pero no se midió al mismo tiempo que el pedal de freno."
+        ],
+        "contrary": [],
+        "missing": [
+          "No existe un PID genérico que cruce el freno con el pedal del acelerador.",
+          "Una lectura de acelerador con el vehículo quieto no relaciona el freno."
+        ],
+        "nextChecks": [
+          "Comparar, en taller y sin una prueba de conducción lanzada por esta app, la señal de freno y la del acelerador con herramienta del fabricante."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H3",
+        "title": "Potencia reducida por estrategia de la ECU",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [
+          "Observación del conductor: EPC, advertencia de motor o pérdida de potencia. No es una medición de la ECU."
+        ],
+        "contrary": [],
+        "missing": [
+          "El modo de potencia reducida y el testigo EPC no tienen un PID genérico. Un MIL encendido no nombra la estrategia ni la pieza."
+        ],
+        "nextChecks": [
+          "Leer con escáner JAC el estado de limitación de par, sin sustituir piezas solo por el testigo."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H4",
+        "title": "Alimentación, conexiones o tierras",
+        "status": "INSUFFICIENT_DATA",
+        "supporting": [],
+        "contrary": [],
+        "missing": [
+          "Falta una medición de batería, bornes y tierras con un instrumento independiente. ATRV no la reemplaza."
+        ],
+        "nextChecks": [
+          "Medir tensión en batería y caídas en tierras con el contacto en ON y, si el taller lo decide, con el motor en ralentí. No se pide una prueba de ruta."
+        ],
+        "needsJacScanner": false
+      },
+      {
+        "id": "H5",
+        "title": "Comunicación entre módulos",
+        "status": "CONTRARY_EVIDENCE",
+        "supporting": [],
+        "contrary": [
+          "0100 respondió y esta sesión no acumuló CAN ERROR, BUS INIT ERROR ni UNABLE TO CONNECT."
+        ],
+        "missing": [
+          "No se interrogaron buses propietarios ni módulos de ABS, BCM o transmisión. Que el OBD genérico responda no demuestra que todos los módulos se hablen."
+        ],
+        "nextChecks": [
+          "Si el fallo vuelve, registrar la hora y repetir 0100 y los DTC sin borrar nada. Un escáner JAC puede ver redes que este adaptador no muestra."
+        ],
+        "needsJacScanner": true
+      },
+      {
+        "id": "H6",
+        "title": "Otras fallas indicadas por los DTC",
+        "status": "SUPPORTING_EVIDENCE",
+        "supporting": [
+          "Código presente: P0579.",
+          "Código presente: P2299."
+        ],
+        "contrary": [],
+        "missing": [
+          "Sin catálogo J2012-DA verificado no se traduce el código a un texto de falla."
+        ],
+        "nextChecks": [
+          "Anotar los bytes y el código. No borrar la memoria. Contrastar el código con documentación del fabricante antes de cambiar piezas."
+        ],
+        "needsJacScanner": false
+      }
+    ]
+  }
+}

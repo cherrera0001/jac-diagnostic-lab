@@ -1,0 +1,212 @@
+﻿JAC Diagnostic Lab
+Sesión 2026-11-11T2136-8803
+Inicio 1794443768803
+Teléfono Xiaomi 2512BPNDAG / Android 17 (SDK 37)
+Vehículo JAC T8, encendida y estacionada, ELM327 Mini Bluetooth en el puerto OBD-II. Los cinco síntomas marcados son el reporte del conductor del 11-11-2026, no mediciones.
+Conexión Bluetooth LE GATT estado Conectado
+Adaptador OBDBLE ELM327 v2.1
+Protocolo A6 AUTO,ISO 15765-4 (CAN 11/500)
+ATRV 16.9V
+VIN (no consultado)
+
+Una conexión exitosa no significa que el vehículo sea seguro para circular.
+ATZ solo reinicia el adaptador. Esta sesión no envió el servicio 04.
+
+== Transcripción ==
+
+> ATZ  [RECOGNIZED] 91 ms
+OKELM327 v2.1
+
+
+Comando AT aceptado por el adaptador.
+
+> ATE0  [RECOGNIZED] 384 ms
+OK
+
+
+Comando AT aceptado por el adaptador.
+
+> ATL0  [RECOGNIZED] 56 ms
+OK
+
+Comando AT aceptado por el adaptador.
+
+> ATS0  [RECOGNIZED] 89 ms
+OK
+
+Comando AT aceptado por el adaptador.
+
+> ATH1  [RECOGNIZED] 61 ms
+OK
+
+Comando AT aceptado por el adaptador.
+
+> ATI  [RECOGNIZED] 88 ms
+ELM327 v2.1
+
+Comando AT aceptado por el adaptador.
+
+> ATSP0  [RECOGNIZED] 61 ms
+OK
+
+Comando AT aceptado por el adaptador.
+
+> ATDP  [RECOGNIZED] 88 ms
+AUTO
+
+Comando AT aceptado por el adaptador.
+
+> ATDPN  [RECOGNIZED] 60 ms
+A0
+
+Comando AT aceptado por el adaptador.
+
+> ATRV  [RECOGNIZED] 155 ms
+16.9V
+
+Comando AT aceptado por el adaptador.
+
+> 0100  [OBD_DATA] 209 ms
+SEARCHING...
+7E8064100983B8013
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> ATDP  [RECOGNIZED] 85 ms
+AUTO,ISO 15765-4 (CAN 11/500)
+
+Comando AT aceptado por el adaptador.
+
+> ATDPN  [RECOGNIZED] 91 ms
+A6
+
+Comando AT aceptado por el adaptador.
+
+> 03  [OBD_DATA] 177 ms
+7E806430205792299
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 07  [OBD_DATA] 150 ms
+7E8024700
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0A  [OBD_DATA] 147 ms
+7E8037F0A13
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0101  [OBD_DATA] 152 ms
+7E8064101020EC901
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 010C  [OBD_DATA] 148 ms
+7E804410C0C2C
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0105  [OBD_DATA] 149 ms
+7E80341055F
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0104  [OBD_DATA] 151 ms
+7E803410438
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 010D  [OBD_DATA] 143 ms
+7E803410D00
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 0111  [OBD_DATA] 155 ms
+7E8034111E5
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 010B  [OBD_DATA] 147 ms
+7E803410B66
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+> 020200  [OBD_DATA] 150 ms
+7E8054202000579
+
+
+Respuesta OBD con servicio esperado o negativo 7F.
+
+== DTC ==
+STORED: Códigos decodificados de los bytes originales. Esta versión no incluye el texto del SAE J2012-DA.
+  P0579 ECU=7E8 Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA.
+  P2299 ECU=7E8 Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA.
+PENDING: La ECU informó cero códigos de esta categoría.
+  (sin códigos decodificados)
+PERMANENT: La ECU respondió negativo (7F). No se inventaron códigos.
+  (sin códigos decodificados)
+
+== Freeze frame ==
+DTC del cuadro congelado, PID 02. Genérico según SAE J2012: el segundo carácter es 0 o 2. Sin texto descriptivo: no se incluye J2012-DA. dtc=P0005
+7E8054202000579
+
+
+
+== Análisis ==
+No hay puntaje numérico. Un hallazgo confirmado es un byte o un bit leído. Una hipótesis solo puede tener evidencia a favor, evidencia en contra o datos insuficientes. El síntoma del conductor no confirma una pieza. NO DATA no significa ausencia de códigos. ATRV es la estimación del ELM327.
+Confirmado: La ECU respondió al PID 0100. Hay comunicación OBD-II en esta sesión.
+Confirmado: El PID 0101 reportó el MIL genérico apagado. Eso no apaga ni explica un testigo EPC.
+Confirmado: Hay un código stored genérico P0579 (bytes 05 79). La causa no está identificada.
+Confirmado: Hay un código stored genérico P2299 (bytes 22 99). La causa no está identificada.
+Confirmado: El adaptador estimó 16.9 V con ATRV. No es una medición independiente de batería o tierras.
+
+H1 Señales inconsistentes del interruptor de freno [INSUFFICIENT_DATA]
+  a favor: El conductor observa pérdida de potencia al usar el freno, a veces al volver a frenar.
+  falta: El OBD-II genérico no define un PID del interruptor de freno ni de su señal redundante.
+  falta: Esta aplicación no hace pruebas de frenado.
+  siguiente: Con el vehículo estacionado y el contacto en ON, medir el interruptor y la señal redundante con multímetro o con un escáner JAC.
+  requiere escáner JAC o inspección de taller
+
+H2 Relación entre pedal de freno y acelerador electrónico [INSUFFICIENT_DATA]
+  a favor: Hay síntoma de freno y el PID de acelerador está soportado, pero no se midió al mismo tiempo que el pedal de freno.
+  falta: No existe un PID genérico que cruce el freno con el pedal del acelerador.
+  falta: Una lectura de acelerador con el vehículo quieto no relaciona el freno.
+  siguiente: Comparar, en taller y sin una prueba de conducción lanzada por esta app, la señal de freno y la del acelerador con herramienta del fabricante.
+  requiere escáner JAC o inspección de taller
+
+H3 Potencia reducida por estrategia de la ECU [INSUFFICIENT_DATA]
+  a favor: Observación del conductor: EPC, advertencia de motor o pérdida de potencia. No es una medición de la ECU.
+  falta: El modo de potencia reducida y el testigo EPC no tienen un PID genérico. Un MIL encendido no nombra la estrategia ni la pieza.
+  siguiente: Leer con escáner JAC el estado de limitación de par, sin sustituir piezas solo por el testigo.
+  requiere escáner JAC o inspección de taller
+
+H4 Alimentación, conexiones o tierras [INSUFFICIENT_DATA]
+  falta: Falta una medición de batería, bornes y tierras con un instrumento independiente. ATRV no la reemplaza.
+  siguiente: Medir tensión en batería y caídas en tierras con el contacto en ON y, si el taller lo decide, con el motor en ralentí. No se pide una prueba de ruta.
+
+H5 Comunicación entre módulos [CONTRARY_EVIDENCE]
+  en contra: 0100 respondió y esta sesión no acumuló CAN ERROR, BUS INIT ERROR ni UNABLE TO CONNECT.
+  falta: No se interrogaron buses propietarios ni módulos de ABS, BCM o transmisión. Que el OBD genérico responda no demuestra que todos los módulos se hablen.
+  siguiente: Si el fallo vuelve, registrar la hora y repetir 0100 y los DTC sin borrar nada. Un escáner JAC puede ver redes que este adaptador no muestra.
+  requiere escáner JAC o inspección de taller
+
+H6 Otras fallas indicadas por los DTC [SUPPORTING_EVIDENCE]
+  a favor: Código presente: P0579.
+  a favor: Código presente: P2299.
+  falta: Sin catálogo J2012-DA verificado no se traduce el código a un texto de falla.
+  siguiente: Anotar los bytes y el código. No borrar la memoria. Contrastar el código con documentación del fabricante antes de cambiar piezas.
+
+== Errores ==
+Ninguno registrado.
