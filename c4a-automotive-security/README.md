@@ -25,7 +25,7 @@ Módulos en la APK (`app.jac.diagnosticlab.security`):
 
 ## Qué no se publica
 
-Las lecturas de una camioneta (códigos, transcripciones, identificadores de sesión) no se versionan. Una conexión exitosa no prueba una vulnerabilidad ni autoriza a circular. Un código de falla no demuestra un ataque.
+Las lecturas de una camioneta (códigos, transcripciones, identificadores de sesión y el PDF del informe) no se versionan. Una conexión exitosa no prueba una vulnerabilidad ni autoriza a circular. Un código de falla no demuestra un ataque.
 
 ## Arranque rápido
 

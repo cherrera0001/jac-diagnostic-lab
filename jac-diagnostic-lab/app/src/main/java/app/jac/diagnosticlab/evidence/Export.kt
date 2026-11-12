@@ -222,6 +222,103 @@ private fun sessionMap(record: SessionRecord): Map<String, Any?> = linkedMapOf(
     },
 )
 
+data class ReadingFacts(
+    val sessionId: String,
+    val adapterId: String,
+    val protocolNumber: String,
+    val protocolText: String,
+    val voltageText: String,
+    val storedCodes: List<String>,
+    val ecuTalking: Boolean,
+)
+
+data class ReadingReportDocument(
+    val title: String,
+    val lines: List<String>,
+    val bodySha256: String,
+)
+
+data class StreetStep(
+    val number: Int,
+    val role: String,
+    val title: String,
+    val detail: String,
+)
+
+object StreetGuide {
+    val steps: List<StreetStep> = listOf(
+        StreetStep(1, "Tú", "Deja la camioneta quieta", "Freno de mano puesto. Contacto en ON. No la muevas y no pises el acelerador para probar."),
+        StreetStep(2, "Tú", "Enchufa el aparato", "El aparato pequeño va en el enchufe de diagnóstico, debajo del volante, hasta el fondo."),
+        StreetStep(3, "Tú", "Cierra las otras aplicaciones", "Si hay otra aplicación de diagnóstico abierta, ciérrala. El aparato atiende a una sola."),
+        StreetStep(4, "El teléfono", "Permite el Bluetooth", "Sin ese permiso el teléfono no puede hablar con el aparato."),
+        StreetStep(5, "La lectora", "Lee y no cierres", "Deja el teléfono junto al aparato, con esta pantalla abierta. Tarda cerca de un minuto."),
+        StreetStep(6, "La lectora", "Lee el resultado", "Dice en palabras qué contestó la computadora. No dice qué pieza cambiar."),
+        StreetStep(7, "El informe", "Guarda el PDF", "Queda en Descargas, carpeta JAC-lectura, con un archivo de huella al lado."),
+        StreetStep(8, "El taller", "Saca el aparato y lleva el PDF", "En un servicio JAC piden leer los mismos números sin borrarlos, y medir el pedal de freno y el del acelerador con la camioneta quieta."),
+    )
+
+    fun current(doneThrough: Int, busy: Boolean, hasReading: Boolean, pdfSaved: Boolean): Int {
+        if (busy) return 5
+        if (doneThrough >= 8) return 8
+        if (pdfSaved) return 8
+        if (hasReading && doneThrough < 6) return 6
+        return (doneThrough + 1).coerceIn(1, 8)
+    }
+}
+
+fun sha256Hex(bytes: ByteArray): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256").digest(bytes)
+    return digest.joinToString("") { "%02x".format(it) }
+}
+
+fun readingReport(facts: ReadingFacts): ReadingReportDocument {
+    val codes = facts.storedCodes.map { it.trim().uppercase() }.filter { it.isNotBlank() }.distinct()
+    val gloss = mapOf(
+        "P0579" to "Definición genérica, no de JAC: la entrada del crucero no responde como la computadora espera. A menudo entra el interruptor que el freno corta.",
+        "P2299" to "Definición genérica, no de JAC: la computadora vio el freno y el acelerador en desacuerdo. No dice qué pieza cambiar.",
+    )
+    val body = buildList {
+        add("Documento local. No es una certificación y no autoriza a circular.")
+        add("No indica qué pieza cambiar. No borra los avisos.")
+        add("")
+        add("1. Quién hace qué")
+        StreetGuide.steps.forEach { step ->
+            add("${step.number}. ${step.role}: ${step.title}. ${step.detail}")
+        }
+        add("El revisor no es la lectora. Su trabajo es impedir que estos números se cierren como causa o como ataque.")
+        add("")
+        add("2. Qué contestó la computadora")
+        add("Sesión ${facts.sessionId.ifBlank { "sin número" }}.")
+        if (facts.ecuTalking) add("La computadora del motor contestó.") else add("En esta copia no quedó constancia de que la computadora contestara.")
+        if (facts.adapterId.isNotBlank()) add("El aparato se identificó como «${facts.adapterId}». Ese texto se puede copiar. No prueba que el aparato sea original.")
+        val protocol = listOf(facts.protocolNumber, facts.protocolText).filter { it.isNotBlank() }.joinToString(" ")
+        if (protocol.isNotBlank()) add("Protocolo informado: $protocol.")
+        if (facts.voltageText.isNotBlank()) add("El aparato estimó ${facts.voltageText}. Eso no es una medición de batería. Hace falta un multímetro.")
+        if (codes.isEmpty()) {
+            add("No quedó ningún aviso guardado en esta copia. Eso no significa que la camioneta esté bien.")
+        } else {
+            add("Avisos guardados, sin borrar: ${codes.joinToString(", ")}.")
+            codes.forEach { code ->
+                add("$code. ${gloss[code] ?: "Número anotado. No traduzco la pieza y no invento el significado."}")
+            }
+        }
+        add("La luz EPC del tablero no es la luz genérica de falla. Que la luz genérica esté apagada no explica el EPC.")
+        add("JAC no publicó, en las fuentes abiertas revisadas, el texto de estos números para esta T8. Si el escáner de la marca muestra otro número, manda ese escáner.")
+        add("")
+        add("3. Qué hacer con el papel")
+        add("1. Sacar el aparato del enchufe cuando no se esté leyendo.")
+        add("2. Llevar este PDF al servicio JAC.")
+        add("3. Pedir que lean los mismos números y el cuadro congelado, sin borrarlos.")
+        add("4. Pedir la medición del pedal de freno y de las dos señales del acelerador, con la camioneta quieta.")
+        add("5. No probar el corte de potencia en la calle.")
+        add("6. No cambiar piezas por esta hoja.")
+    }
+    val hash = sha256Hex(body.joinToString("\n").toByteArray(Charsets.UTF_8))
+    val lines = body + listOf("", "Huella de este texto, SHA-256: $hash", "La huella del archivo PDF va en el archivo .sha256 del mismo nombre. No va dentro del PDF, porque al escribirla el archivo cambiaría.")
+    val title = if (codes.isEmpty()) "Lectura sin avisos guardados" else "Hay avisos guardados. No cambies piezas por esta hoja."
+    return ReadingReportDocument(title, lines, hash)
+}
+
 private fun csv(value: String): String {
     val escaped = value.replace("\"", "\"\"")
     return if (escaped.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"$escaped\"" else escaped

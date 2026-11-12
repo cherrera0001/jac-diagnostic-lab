@@ -2,23 +2,34 @@ package app.jac.diagnosticlab
 
 import android.app.Application
 import android.bluetooth.BluetoothAdapter
+import android.content.ContentValues
+import android.content.Context
 import android.content.Intent
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.verticalScroll
@@ -39,7 +50,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -52,7 +65,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import app.jac.diagnosticlab.analysis.Symptom
+import app.jac.diagnosticlab.evidence.ReadingFacts
+import app.jac.diagnosticlab.evidence.StreetGuide
+import app.jac.diagnosticlab.evidence.readingReport
+import app.jac.diagnosticlab.evidence.sha256Hex
 import android.Manifest
+import org.json.JSONObject
+import java.io.ByteArrayOutputStream
+import java.io.File
 
 class JacApplication : Application() {
     lateinit var lab: LabController
@@ -129,7 +149,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Enlace", "Códigos", "Sensores", "Evidencia", "Análisis", "Seguridad").forEachIndexed { index, label ->
+                listOf("Hoy", "Conexión", "Avisos", "Copia", "Revisión").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -145,12 +165,12 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         ) {
             Card(Modifier.fillMaxWidth()) {
                 Text(
-                    "Una conexión exitosa no significa que el vehículo sea seguro para circular. Lectura únicamente, con el vehículo estacionado y el contacto en ON. ATZ reinicia el adaptador; no borra códigos.",
+                    "Solo lectura, con la camioneta detenida. Esta aplicación no borra avisos y no arregla nada. Que logre conectar no significa que puedas seguir circulando.",
                     Modifier.padding(12.dp),
                     color = Color(0xFFF5C16C),
                 )
             }
-            Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
+            if (tab != 0) Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
             if (state.error != null) {
                 Card(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(12.dp)) {
@@ -160,15 +180,109 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                 }
             }
             when (tab) {
-                0 -> LinkScreen(state, model, permissions)
-                1 -> CodeScreen(state, model)
-                2 -> SensorScreen(state, model)
+                0 -> TodayScreen(state, model, permissions)
+                1 -> LinkScreen(state, model, permissions)
+                2 -> CodeScreen(state, model)
                 3 -> EvidenceScreen(state, model)
-                4 -> AnalysisScreen(state, model)
-                else -> SecurityScreen(state)
+                else -> {
+                    AnalysisScreen(state, model)
+                    SecurityScreen(state)
+                }
             }
         }
     }
+}
+
+@Composable
+private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPermissions: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val liveCodes = state.dtcs.flatMap { it.codes.map { code -> code.code } }
+    val saved = remember(state.sessionId, liveCodes, state.ecuTalking) {
+        if (state.ecuTalking || liveCodes.isNotEmpty()) null else latestSavedFacts(context)
+    }
+    val codes = liveCodes.ifEmpty { saved?.storedCodes.orEmpty() }
+    val ecuTalking = state.ecuTalking || saved?.ecuTalking == true
+    val adapterId = state.adapterId.ifBlank { saved?.adapterId.orEmpty() }
+    val hasReading = ecuTalking || codes.isNotEmpty()
+    var doneThrough by rememberSaveable { mutableIntStateOf(0) }
+    var pdfHash by rememberSaveable { mutableStateOf("") }
+    var pdfWhere by rememberSaveable { mutableStateOf("") }
+    var pdfError by rememberSaveable { mutableStateOf("") }
+    val step = StreetGuide.current(doneThrough, state.busy, hasReading, pdfHash.isNotBlank())
+    val current = StreetGuide.steps.first { it.number == step }
+    val reading = PlainReadingWriter.explain(state.busy, ecuTalking, codes, adapterId, if (hasReading) null else state.error)
+    Text("Paso $step de 8", style = MaterialTheme.typography.labelLarge, color = Color(0xFFF5C16C))
+    Text(current.title, style = MaterialTheme.typography.headlineSmall)
+    Text("Lo hace: ${current.role}", color = Color(0xFFF5C16C))
+    Text(if (step == 6) reading.title else current.detail)
+    if (step == 6) reading.lines.forEach { Text(it) }
+    if (saved != null && liveCodes.isEmpty() && step >= 6) {
+        Text("Esta es la lectura ya guardada en el teléfono, sesión ${saved.sessionId}. No hace falta enchufar de nuevo para armar el informe.")
+    }
+    if (pdfError.isNotBlank()) Text(pdfError)
+    if (step == 8 && pdfHash.isNotBlank()) {
+        Text("Informe guardado en $pdfWhere")
+        Text("Huella del PDF", style = MaterialTheme.typography.titleMedium)
+        Text(pdfHash.chunked(8).joinToString(" "), fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+    }
+    val action: Pair<String, () -> Unit> = when (step) {
+        1, 2, 3 -> "Ya está" to { doneThrough = step }
+        4 -> "4. Permitir Bluetooth" to {
+            if (bluetoothReady(context)) doneThrough = 4 else requestPermissions()
+        }
+        5 -> "5. Leer la camioneta" to { model.startAutodiag() }
+        6 -> "Ya lo leí" to { doneThrough = 6 }
+        7 -> "7. Guardar informe PDF" to {
+            runCatching {
+                val facts = ReadingFacts(
+                    sessionId = state.sessionId.ifBlank { saved?.sessionId.orEmpty() },
+                    adapterId = adapterId,
+                    protocolNumber = state.protocolNumber.ifBlank { saved?.protocolNumber.orEmpty() },
+                    protocolText = state.protocolText.ifBlank { saved?.protocolText.orEmpty() },
+                    voltageText = state.voltageText.ifBlank { saved?.voltageText.orEmpty() },
+                    storedCodes = codes,
+                    ecuTalking = ecuTalking,
+                )
+                val document = readingReport(facts)
+                val pdf = renderReadingPdf(document.title, document.lines)
+                val stamp = facts.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
+                val pdfName = "JAC-lectura-$stamp.pdf"
+                val hash = sha256Hex(pdf)
+                val where = saveDownload(context, pdfName, pdf, "application/pdf")
+                saveDownload(context, "$pdfName.sha256", "$hash  $pdfName\n".toByteArray(Charsets.UTF_8), "text/plain")
+                pdfHash = hash
+                pdfWhere = where
+                pdfError = ""
+            }.onFailure { pdfError = "No se pudo guardar el informe. ${it.message.orEmpty()}" }
+        }
+        else -> "8. Ya saqué el aparato" to { doneThrough = 8 }
+    }
+    if (!(step == 8 && doneThrough >= 8)) {
+        Button(onClick = action.second, enabled = !state.busy, modifier = Modifier.fillMaxWidth()) { Text(action.first) }
+    } else {
+        Text("Listo. Lleva el PDF al servicio JAC. No borres los avisos antes de que los lean ellos.")
+    }
+    if (state.busy) Text("Leyendo. No cierres la aplicación y no pises el acelerador.")
+    StreetGuide.steps.forEach { item ->
+        val status = when {
+            item.number < step -> "Hecho"
+            item.number == step -> "Ahora"
+            else -> "Después"
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(36.dp).background(if (item.number == step) Color(0xFFF5C16C) else Color(0xFF2A3440), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("${item.number}", color = if (item.number == step) Color(0xFF12171C) else Color.White, style = MaterialTheme.typography.titleMedium)
+            }
+            Column(Modifier.padding(start = 10.dp).weight(1f)) {
+                Text("$status · ${item.number}. ${item.title}")
+                Text("${item.role}. ${item.detail}", fontSize = 13.sp, color = Color(0xFFC5CDD6))
+            }
+        }
+    }
+    Text("Versión 0.4.0. Conexión, Avisos y Copia son el detalle. Esta pantalla es la que se usa.")
 }
 
 @Composable
@@ -469,6 +583,213 @@ private fun Transcript(state: LabState) {
             "> ${exchange.command} [${exchange.kind}]\n${exchange.raw.ifBlank { "(sin bytes)" }}\n${exchange.detail}",
             fontFamily = FontFamily.Monospace,
             fontSize = 12.sp,
+        )
+    }
+}
+
+private fun bluetoothReady(context: Context): Boolean {
+    val permission = if (Build.VERSION.SDK_INT >= 31) Manifest.permission.BLUETOOTH_CONNECT else Manifest.permission.ACCESS_FINE_LOCATION
+    val granted = ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    return granted && BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
+}
+
+private fun latestSavedFacts(context: Context): ReadingFacts? {
+    val file = File(context.filesDir, "sessions").listFiles()
+        ?.filter { it.extension.equals("json", true) }
+        ?.maxByOrNull { it.lastModified() }
+        ?: return null
+    return runCatching {
+        val root = JSONObject(file.readText())
+        val codes = buildList {
+            val reads = root.optJSONArray("dtcs") ?: return@buildList
+            for (index in 0 until reads.length()) {
+                val list = reads.optJSONObject(index)?.optJSONArray("codes") ?: continue
+                for (codeIndex in 0 until list.length()) {
+                    val code = list.optJSONObject(codeIndex)?.optString("code").orEmpty()
+                    if (code.isNotBlank()) add(code)
+                }
+            }
+        }
+        val protocolNumber = root.optString("protocolNumber")
+        if (codes.isEmpty() && protocolNumber.isBlank()) return@runCatching null
+        ReadingFacts(
+            sessionId = root.optString("id"),
+            adapterId = root.optString("adapterIdentity"),
+            protocolNumber = protocolNumber,
+            protocolText = root.optString("protocolText"),
+            voltageText = root.optString("adapterVoltage"),
+            storedCodes = codes,
+            ecuTalking = true,
+        )
+    }.getOrNull()
+}
+
+private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
+    if (Build.VERSION.SDK_INT >= 29) {
+        val values = ContentValues().apply {
+            put(MediaStore.Downloads.DISPLAY_NAME, name)
+            put(MediaStore.Downloads.MIME_TYPE, mime)
+            put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/JAC-lectura")
+            put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+        val uri = context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: error("Android no creó el archivo en Descargas")
+        context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("Android no abrió el archivo")
+        values.clear()
+        values.put(MediaStore.Downloads.IS_PENDING, 0)
+        context.contentResolver.update(uri, values, null, null)
+        return "Descargas/JAC-lectura/$name"
+    }
+    val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+    File(dir, name).writeBytes(bytes)
+    return dir.absolutePath + "/" + name
+}
+
+private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
+    val document = PdfDocument()
+    val heading = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 16f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        color = 0xFF1A1A1A.toInt()
+    }
+    val body = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 11f
+        color = 0xFF1A1A1A.toInt()
+    }
+    val footer = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textSize = 9f
+        color = 0xFF5C6570.toInt()
+    }
+    val pageWidth = 595
+    val pageHeight = 842
+    val margin = 48f
+    val maxWidth = pageWidth - margin * 2
+    fun wrap(paint: Paint, text: String): List<String> {
+        if (text.isEmpty()) return listOf("")
+        val rows = mutableListOf<String>()
+        var rest = text
+        while (rest.isNotEmpty()) {
+            val count = paint.breakText(rest, true, maxWidth, null).coerceAtLeast(1)
+            var cut = count.coerceAtMost(rest.length)
+            if (cut < rest.length) {
+                val space = rest.lastIndexOf(' ', cut - 1)
+                if (space > 0) cut = space
+            }
+            rows += rest.substring(0, cut).trimEnd()
+            rest = rest.substring(cut).trimStart()
+        }
+        return rows
+    }
+    var pageNumber = 1
+    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+    var canvas = page.canvas
+    var y = margin
+    fun finishPage() {
+        canvas.drawText("JAC Diagnostic Lab 0.4.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
+        document.finishPage(page)
+    }
+    fun ensure(height: Float) {
+        if (y + height <= pageHeight - 48f) return
+        finishPage()
+        pageNumber += 1
+        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+        canvas = page.canvas
+        y = margin
+    }
+    wrap(heading, title).forEach { row ->
+        ensure(22f)
+        canvas.drawText(row, margin, y + 16f, heading)
+        y += 22f
+    }
+    y += 8f
+    lines.forEach { line ->
+        wrap(body, line).forEach { row ->
+            val height = if (row.isEmpty()) 8f else 16f
+            ensure(height)
+            if (row.isNotEmpty()) canvas.drawText(row, margin, y + 11f, body)
+            y += height
+        }
+    }
+    finishPage()
+    val output = ByteArrayOutputStream()
+    document.writeTo(output)
+    document.close()
+    return output.toByteArray()
+}
+
+data class PlainReading(
+    val title: String,
+    val lines: List<String>,
+    val next: String,
+)
+
+object PlainReadingWriter {
+    private val gloss = mapOf(
+        "P0579" to "El crucero, o el interruptor que lo corta cuando frenas, no responde como la computadora espera.",
+        "P2299" to "La computadora vio el freno y el acelerador en desacuerdo. No dice qué pieza cambiar.",
+    )
+
+    fun explain(
+        busy: Boolean,
+        ecuTalking: Boolean,
+        codes: List<String>,
+        adapterId: String,
+        error: String?,
+    ): PlainReading {
+        if (busy) {
+            return PlainReading(
+                title = "Estoy leyendo. No cierres la aplicación.",
+                lines = listOf(
+                    "La camioneta está detenida y el contacto sigue en ON.",
+                    "No pises el acelerador para probar. Esta lectura no se hace en movimiento.",
+                ),
+                next = "Espera a que el título cambie. Puede tardar un minuto.",
+            )
+        }
+        if (!error.isNullOrBlank() && !ecuTalking && codes.isEmpty()) {
+            return PlainReading(
+                title = "No pude completar la lectura.",
+                lines = listOf("Qué ocurrió: $error"),
+                next = "Revisa la lista de la pantalla y pulsa Leer la camioneta otra vez. No borres nada en otra aplicación.",
+            )
+        }
+        if (!ecuTalking && codes.isEmpty()) {
+            return PlainReading(
+                title = "Todavía no hay una lectura de esta salida.",
+                lines = listOf(
+                    "1. Camioneta detenida, freno de mano puesto.",
+                    "2. El aparato pequeño va en el enchufe de diagnóstico, debajo del volante.",
+                    "3. Contacto en ON. El motor puede estar en marcha, pero no muevas el vehículo.",
+                    "4. Cierra otras aplicaciones de diagnóstico.",
+                    "5. Bluetooth del teléfono encendido. El aparato ya está emparejado.",
+                    "6. Pulsa el botón de abajo y deja el teléfono cerca del aparato.",
+                ),
+                next = "Cuando termine, esta pantalla dice en palabras qué contestó la computadora.",
+            )
+        }
+        val unique = codes.distinct()
+        val lines = buildList {
+            if (ecuTalking) add("La computadora del motor contestó.")
+            if (adapterId.isNotBlank()) {
+                add("El aparato se identificó como «$adapterId». Ese nombre se puede copiar: no prueba que sea original.")
+            }
+            if (unique.isEmpty()) {
+                add("En esta lectura no quedó ningún aviso guardado. Eso no significa que la camioneta esté bien.")
+            } else {
+                add("Dejó ${unique.size} aviso(s) guardado(s). No los borré.")
+                unique.forEach { code ->
+                    val text = gloss[code] ?: "Número anotado por la computadora. No traduzco la pieza."
+                    add("$code. $text")
+                }
+            }
+            add("La luz EPC del tablero no es la misma luz que esta lectura llama falla genérica.")
+            add("JAC no ha confirmado, en las fuentes abiertas revisadas, el texto de estos números para tu T8. El escáner de la marca manda.")
+        }
+        return PlainReading(
+            title = if (unique.isEmpty()) "Hubo comunicación. No hay un aviso guardado en esta lectura." else "Hay avisos guardados. No cambies piezas por esta pantalla.",
+            lines = lines,
+            next = "Siguiente: copia la lectura en la pestaña Copia y llévala a un servicio JAC. Pide que lean los mismos números sin borrarlos, y que midan el pedal de freno y el del acelerador con la camioneta quieta.",
         )
     }
 }

@@ -30,40 +30,43 @@ La app solo envía una lista cerrada de consultas. No borra códigos, no reprogr
 
 ## Cómo se usa
 
-Condición: camioneta **estacionada**, freno de mano puesto, contacto en **ON**. No circular con la app conectada.
+Condición: camioneta **estacionada**, freno de mano puesto, contacto en **ON**. No circular con la app conectada. La pantalla que se usa es **Hoy**. Muestra «Paso N de 8» y un solo botón. Las otras pestañas son el detalle.
 
 ```mermaid
 flowchart TD
-  A["1. Emparejar OBDBLE en Ajustes Bluetooth"] --> B["2. Cerrar otras apps OBD"]
-  B --> C["3. Abrir JAC Diagnostic Lab"]
-  C --> D["4. Enlace: buscar y validar con ATI"]
-  D --> E["5. Códigos: leer almacenados, pendientes y permanentes"]
-  E --> F["6. Seguridad: inventario y hallazgos de esta sesión"]
-  F --> G["7. Evidencia: exportar TXT o JSON anonimizado"]
-  G --> H["8. Quitar el ELM327 del puerto"]
+  A["1. Tú: camioneta quieta, contacto en ON"] --> B["2. Tú: enchufar el aparato bajo el volante"]
+  B --> C["3. Tú: cerrar otras apps de diagnóstico"]
+  C --> D["4. El teléfono: permitir Bluetooth"]
+  D --> E["5. La lectora: leer, sin cerrar la pantalla"]
+  E --> F["6. La lectora: leer el resultado en palabras"]
+  F --> G["7. El informe: guardar PDF y su huella"]
+  G --> H["8. El taller: sacar el aparato y llevar el PDF"]
 ```
 
-1. En el teléfono, emparejar el adaptador. Si Android pide PIN, se escribe en el diálogo del sistema. Esta app no lo pide ni lo guarda.
-2. Cerrar OBD Auto Doctor u otra app OBD. El adaptador suele aceptar un solo cliente.
-3. Abrir **JAC Diagnostic Lab** y conceder Bluetooth si lo pide.
-4. Pestaña **Enlace**. Buscar. Elegir **OBDBLE** si no aparece **OBDII**. Validar con ATI. Tiene que verse una identificación del adaptador antes de seguir.
-5. Pestaña **Códigos**. Leer almacenados, pendientes y permanentes. No hay botón para borrarlos.
-6. Pestaña **Seguridad**. Muestra lo verificado en esta sesión y lo que sigue desconocido. No muestra un porcentaje de seguridad.
-7. Pestaña **Evidencia**. Exportar JSON o TXT con la anonimización activada.
-8. Desconectar en la app y **retirar el adaptador** del puerto OBD-II.
+1. Freno de mano puesto. Contacto en ON. No mover la camioneta y no pisar el acelerador para probar.
+2. El aparato va en el enchufe de diagnóstico, debajo del volante. El emparejamiento se hace en Ajustes de Android. Si el sistema pide PIN, se escribe ahí. Esta app no lo pide ni lo guarda.
+3. Cerrar OBD Auto Doctor u otra app de diagnóstico. El aparato atiende a un solo cliente.
+4. En **Hoy**, pulsar **4. Permitir Bluetooth**.
+5. Pulsar **5. Leer la camioneta**. Dejar el teléfono junto al aparato, con la pantalla abierta, cerca de un minuto.
+6. Leer solo lo que dice el paso 6. Traduce los números que conoce. No dice qué pieza cambiar.
+7. Pulsar **7. Guardar informe PDF**. Quedan dos archivos en Descargas, carpeta `JAC-lectura`: el PDF y un `.sha256` con la huella del archivo. La huella no va dentro del PDF, porque al escribirla el archivo cambiaría.
+8. Sacar el aparato. Llevar el PDF a un servicio de la marca y pedir que lean los mismos números sin borrarlos.
 
-La pestaña **Análisis** separa síntomas del conductor y bytes leídos. Un síntoma no condena una pieza. **Sensores** solo lee PID que la ECU declaró soportados.
+Si el teléfono ya tiene una lectura guardada, **Hoy** abre en el paso 6 para armar el informe sin enchufar de nuevo.
+
+Son ocho trabajos, no ocho programas. El que revisa no es el que lee: tú detienes y enchufas; el teléfono mantiene la pantalla; el aparato solo pasa bytes; la computadora del motor es la única que contesta; la lectora traduce y no borra; el contraste separa lo medido, lo genérico y lo que el fabricante no publicó para esta unidad; el revisor no cierra una causa ni un ataque con esa sola lectura; el taller confirma con su escáner.
 
 ### Qué significan las pantallas
 
 | Pestaña | Para qué sirve | Qué no hace |
 |---|---|---|
-| Enlace | Encontrar OBDII o OBDBLE y abrir la sesión | No demuestra que el dongle sea original |
-| Códigos | Mostrar DTC tal como llegaron | No traduce el texto SAE J2012-DA |
-| Sensores | RPM, temperatura, carga, velocidad, acelerador, colector, si el mapa los incluye | No mide el interruptor de freno |
-| Evidencia | Guardar la transcripción en el teléfono | No sube nada a internet |
-| Análisis | Hipótesis de la falla, con lo que falta | No recomienda cambiar piezas |
-| Seguridad | Hallazgos y amenazas con evidencia | No certifica el vehículo |
+| Hoy | Los ocho pasos, el resultado en palabras y el PDF | No recomienda cambiar piezas |
+| Conexión | Buscar OBDII o OBDBLE y ver la identificación del aparato | No demuestra que el aparato sea original |
+| Avisos | Mostrar los números tal como llegaron | No inventa el texto de un número desconocido |
+| Copia | Guardar JSON, CSV o TXT en el teléfono | No sube nada a internet |
+| Revisión | Síntomas, hipótesis, inventario y hallazgos | No certifica el vehículo ni muestra un porcentaje |
+
+**Copia** puede anonimizar el identificador del vehículo y la dirección Bluetooth. **Hoy** no escribe esos datos en el PDF. El informe de una unidad concreta sigue fuera de este repositorio.
 
 ## Proceso de funcionamiento
 
@@ -116,4 +119,4 @@ adb install -r dist\jac-diagnostic-lab-debug.apk
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.1.0. Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.4.0 (`versionCode` 3). Los resultados de una unidad concreta no forman parte de este archivo.
