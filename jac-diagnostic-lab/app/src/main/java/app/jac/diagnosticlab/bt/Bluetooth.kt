@@ -429,6 +429,7 @@ private fun BluetoothGattCharacteristic.canNotify(): Boolean =
     properties and BluetoothGattCharacteristic.PROPERTY_NOTIFY != 0 ||
         properties and BluetoothGattCharacteristic.PROPERTY_INDICATE != 0
 
+@SuppressLint("MissingPermission")
 private fun BluetoothDevice.toView(): BtDevice {
     val label = name?.trim().orEmpty().ifBlank { "(sin nombre)" }
     val upper = label.uppercase()
@@ -454,24 +455,29 @@ class DiagnosticConnectionService : Service() {
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val manager = getSystemService(NotificationManager::class.java)
-        if (Build.VERSION.SDK_INT >= 26) {
-            manager.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Diagnóstico", NotificationManager.IMPORTANCE_LOW),
-            )
+        return try {
+            val manager = getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 26) {
+                manager.createNotificationChannel(
+                    NotificationChannel(CHANNEL, "Diagnóstico", NotificationManager.IMPORTANCE_LOW),
+                )
+            }
+            val notification = NotificationCompat.Builder(this, CHANNEL)
+                .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+                .setContentTitle("JAC Diagnostic Lab")
+                .setContentText("Sesión de solo lectura. No borra códigos ni modifica la ECU.")
+                .setOngoing(true)
+                .build()
+            if (Build.VERSION.SDK_INT >= 29) {
+                startForeground(42, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+            } else {
+                startForeground(42, notification)
+            }
+            START_NOT_STICKY
+        } catch (_: Exception) {
+            stopSelf()
+            START_NOT_STICKY
         }
-        val notification = NotificationCompat.Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setContentTitle("JAC Diagnostic Lab")
-            .setContentText("Sesión de solo lectura. No borra códigos ni modifica la ECU.")
-            .setOngoing(true)
-            .build()
-        if (Build.VERSION.SDK_INT >= 29) {
-            startForeground(42, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
-        } else {
-            startForeground(42, notification)
-        }
-        return START_NOT_STICKY
     }
 
     companion object {

@@ -1,0 +1,20 @@
+SIMULADO — no proviene del vehículo.
+
+>0100
+SEARCHING...
+UNABLE TO CONNECT
+>
+>0100
+BUS INIT: ERROR
+>
+>0100
+CAN ERROR
+>
+>0100
+STOPPED
+>
+>ATZ
+?
+>
+
+Estos textos se clasifican como fallo de enlace. No se convierten en “vehículo sin fallas”.

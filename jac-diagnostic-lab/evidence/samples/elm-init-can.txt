@@ -1,0 +1,9 @@
+SIMULADO — no proviene del vehículo.
+
+ATI
+ELM327 v1.5
+>0100
+7E8 06 41 00 BE 1F A8 13
+>
+
+Sirve para probar eco, encabezado CAN y PID 0100. No es una lectura de la JAC T8.

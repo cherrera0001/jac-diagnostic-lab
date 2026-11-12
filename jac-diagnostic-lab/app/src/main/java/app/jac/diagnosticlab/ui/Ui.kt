@@ -1,0 +1,424 @@
+package app.jac.diagnosticlab
+
+import android.app.Application
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewmodel.compose.viewModel
+import app.jac.diagnosticlab.analysis.Symptom
+import android.Manifest
+
+class JacApplication : Application() {
+    lateinit var lab: LabController
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        lab = LabController(this)
+    }
+}
+
+class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
+    private val lab = (app as JacApplication).lab
+    val state = lab.state
+    fun refresh() = lab.refresh()
+    fun scan() = lab.scan()
+    fun stopScan() = lab.stopScan()
+    fun select(address: String) = lab.select(address)
+    fun connectClassic() = lab.connectSelectedClassic()
+    fun inspectBle() = lab.inspectSelectedBle()
+    fun validateBle(write: String, notify: String) = lab.validateBle(write, notify)
+    fun initialize() = lab.initialize()
+    fun readDtcs() = lab.readAllDtcs()
+    fun readSupported() = lab.readSupported()
+    fun startPoll(pids: Set<Int>) = lab.startPoll(pids)
+    fun stopPoll() = lab.stopPoll()
+    fun setSymptom(symptom: Symptom, enabled: Boolean) = lab.setSymptom(symptom, enabled)
+    fun setProtocol(code: String) = lab.setProtocol(code)
+    fun setInterval(ms: Long) = lab.setInterval(ms)
+    fun authorizeVin(enabled: Boolean) = lab.authorizeVin(enabled)
+    fun readVin() = lab.readVin()
+    fun readFreeze() = lab.readFreeze()
+    fun export(uri: Uri, format: String, anonymize: Boolean) = lab.export(uri, format, anonymize)
+    fun disconnect() = lab.disconnect()
+    fun startAutodiag() = lab.startAutodiag()
+}
+
+class MainActivity : ComponentActivity() {
+    private val model: DiagnosticViewModel by viewModels()
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent { JacTheme { JacApp(model) } }
+        if (intent.getBooleanExtra("autodiag", false)) model.startAutodiag()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("autodiag", false)) model.startAutodiag()
+    }
+}
+
+@Composable
+private fun JacTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            primary = Color(0xFFF5C16C),
+            background = Color(0xFF12171C),
+            surface = Color(0xFF1C242E),
+        ),
+        content = content,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun JacApp(model: DiagnosticViewModel = viewModel()) {
+    val state by model.state.collectAsState()
+    var tab by remember { mutableIntStateOf(0) }
+    val permissions = rememberLauncherPermissions()
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        bottomBar = {
+            NavigationBar {
+                listOf("Enlace", "Códigos", "Sensores", "Evidencia", "Análisis").forEachIndexed { index, label ->
+                    NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
+                }
+            }
+        },
+    ) { padding ->
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(12.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Card(Modifier.fillMaxWidth()) {
+                Text(
+                    "Una conexión exitosa no significa que el vehículo sea seguro para circular. Lectura únicamente, con el vehículo estacionado y el contacto en ON. ATZ reinicia el adaptador; no borra códigos.",
+                    Modifier.padding(12.dp),
+                    color = Color(0xFFF5C16C),
+                )
+            }
+            Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
+            if (state.error != null) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("Qué ocurrió: ${state.error}")
+                        Text("Qué hacer: ${state.recovery.orEmpty()}")
+                    }
+                }
+            }
+            when (tab) {
+                0 -> LinkScreen(state, model, permissions)
+                1 -> CodeScreen(state, model)
+                2 -> SensorScreen(state, model)
+                3 -> EvidenceScreen(state, model)
+                else -> AnalysisScreen(state, model)
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberLauncherPermissions(): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { }
+    val enable = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { }
+    return {
+        val needed = buildList {
+            if (Build.VERSION.SDK_INT >= 31) {
+                add(Manifest.permission.BLUETOOTH_SCAN)
+                add(Manifest.permission.BLUETOOTH_CONNECT)
+            } else {
+                add(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }.filter {
+            ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (needed.isNotEmpty()) launcher.launch(needed.toTypedArray())
+        else enable.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+    }
+}
+
+@Composable
+private fun LinkScreen(state: LabState, model: DiagnosticViewModel, requestPermissions: () -> Unit) {
+    Text("Bluetooth ${if (state.bluetoothOn) "encendido" else "apagado"}. Enlace: ${state.link}.")
+    Text("Adaptador: ${state.adapterId.ifBlank { "sin ATI todavía" }}")
+    Text("Protocolo: ${state.protocolNumber.ifBlank { "sin ATDPN" }} ${state.protocolText}")
+    Text("Tensión estimada por el adaptador: ${state.voltageText.ifBlank { "sin ATRV" }}")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = requestPermissions, enabled = !state.busy) { Text("Permisos") }
+        Button(onClick = { model.scan() }, enabled = !state.busy) { Text("Buscar") }
+        OutlinedButton(onClick = { model.stopScan() }) { Text("Detener") }
+    }
+    state.devices.forEach { device ->
+        val mark = if (device.primary) "Candidato principal" else if (device.candidate) "Posible OBD" else "Otro"
+        Text(
+            "${device.name}\n${device.address} · ${device.typeLabel} · $mark",
+            modifier = Modifier
+                .fillMaxWidth()
+                .selectable(selected = state.selectedAddress == device.address) { model.select(device.address) }
+                .padding(8.dp),
+            color = if (state.selectedAddress == device.address) Color(0xFFF5C16C) else Color.White,
+        )
+    }
+    Text("Protocolo manual, solo opciones del datasheet ELM327. 0 es automático.")
+    listOf(
+        "0" to "0 Automático",
+        "6" to "6 CAN 11 bit / 500 kbaud",
+        "7" to "7 CAN 29 bit / 500 kbaud",
+        "8" to "8 CAN 11 bit / 250 kbaud",
+        "9" to "9 CAN 29 bit / 250 kbaud",
+        "3" to "3 ISO 9141-2",
+        "4" to "4 KWP 5 baud",
+        "5" to "5 KWP rápido",
+        "1" to "1 SAE J1850 PWM",
+        "2" to "2 SAE J1850 VPW",
+    ).forEach { (code, label) ->
+        Row(Modifier.selectable(state.protocol == code) { model.setProtocol(code) }) {
+            Checkbox(checked = state.protocol == code, onCheckedChange = { model.setProtocol(code) })
+            Text(label, Modifier.padding(top = 12.dp))
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { model.connectClassic() }, enabled = !state.busy) { Text("Conectar clásico") }
+        Button(onClick = { model.inspectBle() }, enabled = !state.busy) { Text("Inspeccionar BLE") }
+    }
+    Button(onClick = { model.initialize() }, enabled = !state.busy) { Text("Inicializar y leer 0100") }
+    OutlinedButton(onClick = { model.disconnect() }) { Text("Desconectar") }
+    if (state.gatt.isNotEmpty()) {
+        Text("Servicios GATT. No se escribe una característica hasta elegir una con WRITE y otra con NOTIFY.")
+        var write by remember(state.gatt) { mutableStateOf(state.gatt.firstOrNull { it.canWrite }?.uuid.orEmpty()) }
+        var notify by remember(state.gatt) { mutableStateOf(state.gatt.firstOrNull { it.canNotify }?.uuid.orEmpty()) }
+        state.gatt.forEach { row ->
+            Text("${row.uuid}\n${row.properties.joinToString()} · servicio ${row.serviceUuid}", fontSize = 12.sp)
+            Row {
+                if (row.canWrite) {
+                    OutlinedButton(onClick = { write = row.uuid }) { Text(if (write == row.uuid) "Escritura elegida" else "Elegir escritura") }
+                }
+                if (row.canNotify) {
+                    OutlinedButton(onClick = { notify = row.uuid }) { Text(if (notify == row.uuid) "Aviso elegido" else "Elegir aviso") }
+                }
+            }
+        }
+        Button(onClick = { model.validateBle(write, notify) }, enabled = write.isNotBlank() && notify.isNotBlank() && !state.busy) {
+            Text("Validar BLE con ATI")
+        }
+        Text(if (state.bleValidated) "BLE validado." else "BLE aún no validado.")
+    }
+    Transcript(state)
+}
+
+@Composable
+private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
+    Text("Los códigos salen de los bytes recibidos. Si no hay una definición del SAE J2012-DA, no se inventa un texto de falla.")
+    Button(onClick = { model.readDtcs() }, enabled = !state.busy) { Text("Leer almacenados, pendientes y permanentes") }
+    Button(onClick = { model.readFreeze() }, enabled = !state.busy) { Text("Leer freeze frame") }
+    Row {
+        Checkbox(checked = state.authorizeVin, onCheckedChange = model::authorizeVin)
+        Text("Autorizo consultar el VIN. Puede anonimizarse al exportar.", Modifier.padding(top = 12.dp))
+    }
+    Button(onClick = { model.readVin() }, enabled = state.authorizeVin && !state.busy) { Text("Consultar VIN") }
+    Text("VIN: ${state.vin ?: "no consultado"}")
+    if (state.dtcs.isEmpty()) Text("Todavía no hay una lectura de códigos en esta sesión.")
+    state.dtcs.forEach { read ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp)) {
+                Text("${read.category} · ${read.kind}")
+                Text(read.note)
+                if (read.confirmedEmpty) Text("La ECU informó cero códigos de esta categoría.")
+                if (read.kind == app.jac.diagnosticlab.elm.ResponseKind.NO_DATA) {
+                    Text("NO DATA no significa que el vehículo no tenga códigos.")
+                }
+                read.codes.forEach { code ->
+                    Text("${code.code}  ECU ${code.ecu ?: "sin encabezado"}")
+                    Text(code.scopeNote, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+    state.freeze.forEach { Text("${it.note} ${it.dtc ?: ""}") }
+}
+
+@Composable
+private fun SensorScreen(state: LabState, model: DiagnosticViewModel) {
+    Text("Primero se consultan los PID soportados. El pedal de freno no se asume en un PID genérico. ATRV es la estimación del adaptador.")
+    Button(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Consultar PID soportados") }
+    val names = mapOf(0x0C to "RPM", 0x05 to "Refrigerante", 0x04 to "Carga", 0x0D to "Velocidad", 0x11 to "Acelerador", 0x0B to "Colector")
+    Text(if (state.supported.isEmpty()) "Aún no hay mapa de soporte." else "Soportados en el rango leído: ${state.supported.map { "%02X".format(it) }.joinToString()}")
+    names.forEach { (pid, label) ->
+        Text("$label: ${if (pid in state.supported) "el mapa lo incluye" else "no aparece en el mapa leído"}")
+    }
+    Row {
+        listOf(1000L to "1 s", 2000L to "2 s", 5000L to "5 s").forEach { (ms, label) ->
+            OutlinedButton(onClick = { model.setInterval(ms) }) { Text(if (state.intervalMs == ms) "[$label]" else label) }
+        }
+    }
+    val chosen = names.keys.filter { it in state.supported }.toSet()
+    Button(onClick = { model.startPoll(chosen) }, enabled = !state.polling && chosen.isNotEmpty()) { Text("Iniciar registro") }
+    OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling) { Text("Detener registro") }
+    state.samples.takeLast(8).forEach { sample ->
+        Text("${sample.name}: ${sample.value?.let { "%.2f".format(it) } ?: "sin valor"} ${sample.unit.orEmpty()} ${if (sample.suspect) "(fuera de rango habitual)" else ""} ${if (!sample.valid) "(no válido)" else ""}")
+    }
+    val series = state.samples.filter { it.pid == 0x0C && it.value != null }.takeLast(40).map { it.value!! }
+    if (series.size >= 2) {
+        Canvas(Modifier.fillMaxWidth().height(120.dp).padding(8.dp)) {
+            val min = series.min()
+            val max = series.max().coerceAtLeast(min + 1)
+            val path = Path()
+            series.forEachIndexed { index, value ->
+                val x = index * size.width / (series.lastIndex)
+                val y = size.height - ((value - min) / (max - min) * size.height).toFloat()
+                if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            drawPath(path, Color(0xFFF5C16C), style = Stroke(3f))
+            drawLine(Color.Gray, Offset(0f, size.height), Offset(size.width, size.height))
+        }
+        Text("Gráfico de RPM de esta sesión. No es una prueba de conducción.")
+    }
+}
+
+@Composable
+private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
+    var anonymize by remember { mutableStateOf(true) }
+    Text("Sesión ${state.sessionId.ifBlank { "(aún sin secuencia)" }}. Nada se sube a un servidor.")
+    Row {
+        Checkbox(checked = anonymize, onCheckedChange = { anonymize = it })
+        Text("Anonimizar VIN y dirección Bluetooth al exportar", Modifier.padding(top = 12.dp))
+    }
+    val json = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) model.export(uri, "json", anonymize)
+    }
+    val csv = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        if (uri != null) model.export(uri, "csv", anonymize)
+    }
+    val txt = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) model.export(uri, "txt", anonymize)
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { json.launch("jac-sesion.json") }, enabled = state.exchanges.isNotEmpty()) { Text("JSON") }
+        Button(onClick = { csv.launch("jac-sensores.csv") }, enabled = state.samples.isNotEmpty()) { Text("CSV") }
+        Button(onClick = { txt.launch("jac-diagnostico.txt") }, enabled = state.exchanges.isNotEmpty() || state.error != null) { Text("TXT") }
+    }
+    Text("La aplicación no tiene botón para borrar sesiones ni códigos.")
+    Transcript(state)
+}
+
+@Composable
+private fun AnalysisScreen(state: LabState, model: DiagnosticViewModel) {
+    Text("Síntomas informados por el conductor. Desmárquelos si no corresponden a esta salida. No son mediciones.")
+    listOf(
+        Symptom.EPC_LAMP to "Se ilumina el indicador EPC",
+        Symptom.ENGINE_WARNING to "Advertencia de falla de motor",
+        Symptom.BRAKE_POWER_LOSS to "Al frenar, a veces baja la potencia",
+        Symptom.CLEARS_AFTER_RESTART to "Puede desaparecer al rearrancar",
+        Symptom.RETURNS_WITH_BRAKE to "Puede volver al usar el freno",
+    ).forEach { (symptom, label) ->
+        Row {
+            Checkbox(checked = symptom in state.symptoms, onCheckedChange = { model.setSymptom(symptom, it) })
+            Text(label, Modifier.padding(top = 12.dp))
+        }
+    }
+    val report = state.analysis
+    if (report == null) {
+        Text("Aún no hay análisis.")
+        return
+    }
+    Text(report.methodology, fontSize = 13.sp)
+    Text("Hallazgos leídos", style = MaterialTheme.typography.titleMedium)
+    if (report.confirmed.isEmpty()) Text("Todavía no hay un byte de la ECU que confirme un hallazgo.")
+    report.confirmed.forEach { Text("• $it") }
+    report.hypotheses.forEach { item ->
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("${item.id}. ${item.title}")
+                Text(
+                    when (item.status) {
+                        app.jac.diagnosticlab.analysis.HypothesisStatus.INSUFFICIENT_DATA -> "Datos insuficientes"
+                        app.jac.diagnosticlab.analysis.HypothesisStatus.SUPPORTING_EVIDENCE -> "Hay evidencia a favor, no una pieza condenada"
+                        app.jac.diagnosticlab.analysis.HypothesisStatus.CONTRARY_EVIDENCE -> "Hay evidencia en contra"
+                    },
+                )
+                item.supporting.forEach { Text("A favor: $it", fontSize = 13.sp) }
+                item.contrary.forEach { Text("En contra: $it", fontSize = 13.sp) }
+                item.missing.forEach { Text("Falta: $it", fontSize = 13.sp) }
+                item.nextChecks.forEach { Text("Siguiente verificación: $it", fontSize = 13.sp) }
+                if (item.needsJacScanner) Text("Esto pide escáner JAC o inspección de taller.")
+            }
+        }
+    }
+    Text("No se recomienda sustituir piezas solo por estos síntomas.")
+}
+
+@Composable
+private fun Transcript(state: LabState) {
+    Text("Transcripción original", style = MaterialTheme.typography.titleMedium)
+    if (state.exchanges.isEmpty()) {
+        Text("Sin comandos en esta sesión.")
+        return
+    }
+    state.exchanges.takeLast(20).forEach { exchange ->
+        Text(
+            "> ${exchange.command} [${exchange.kind}]\n${exchange.raw.ifBlank { "(sin bytes)" }}\n${exchange.detail}",
+            fontFamily = FontFamily.Monospace,
+            fontSize = 12.sp,
+        )
+    }
+}

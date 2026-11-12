@@ -1,0 +1,19 @@
+SIMULADO — no proviene del vehículo.
+
+>03
+7E8 10 0A 43 04 01 33 01 34
+7E8 21 02 00 03 00 00 00 00
+>
+>03
+7E8 04 43 01 01 33
+7E9 04 43 01 C1 00
+>
+>03
+43 00
+>
+>07
+NO DATA
+>
+
+La última respuesta NO DATA no significa que no existan códigos pendientes.
+El 43 00 sí es una respuesta positiva de cero códigos almacenados.
