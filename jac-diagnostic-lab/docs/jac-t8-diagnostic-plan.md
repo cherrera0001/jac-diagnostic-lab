@@ -31,8 +31,9 @@ No hay un porcentaje de confianza. Un hallazgo confirmado es un byte leído: un 
 2. Identificar el adaptador con `ATI` y el protocolo con `ATDP` / `ATDPN`.
 3. Leer `0100`. Si no hay respuesta de la ECU, el informe es de comunicación, no de “sin fallas”.
 4. Leer `03`, `07` y `0A` antes de cualquier otra cosa. No borrar la memoria.
-5. Si el mapa lo permite, leer RPM, refrigerante, carga, velocidad, acelerador y colector. La velocidad debería ser cero si el vehículo sigue quieto.
+5. Si el mapa lo permite, leer en este orden (pestaña **Monitor**): RPM (`0x0C`), velocidad (`0x0D`), refrigerante (`0x05`), carga (`0x04`), **mariposa absoluta** (`0x11`, no es el pedal), MAP (`0x0B`), y APP `0x49/4A/4B` solo si el mapa las declara. Velocidad debería ser 0 si sigue quieta.
 6. `ATRV` se anota aparte de cualquier medición con multímetro.
-7. Lo que pida un escáner JAC queda escrito como verificación de taller: interruptor de freno, señal redundante, limitación de par y redes que el OBD genérico no muestra.
+7. Captura **ANTES** → trabajo de taller → captura **DESPUÉS** (misma postura) y nuevo PDF.
+8. Lo que pida un escáner JAC queda como verificación de marca: interruptor de freno, señal redundante, limitación de par y redes que el OBD genérico no muestra.
 
-No se recomienda sustituir el interruptor, el acelerador, la ECU ni el alternador solo por estos síntomas.
+No se recomienda sustituir el interruptor, el acelerador, la ECU ni el alternador solo por estos síntomas. Si el relato es corte al frenar (**SAFE-001**), no circular hasta el servicio.

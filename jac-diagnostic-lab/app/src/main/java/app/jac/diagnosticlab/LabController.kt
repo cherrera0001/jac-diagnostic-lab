@@ -26,6 +26,8 @@ import app.jac.diagnosticlab.elm.ObdTransport
 import app.jac.diagnosticlab.elm.ResponseKind
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
+import app.jac.diagnosticlab.evidence.SnapshotReading
+import app.jac.diagnosticlab.evidence.WorkshopGuide
 import app.jac.diagnosticlab.evidence.anonymize
 import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.toCsv
@@ -103,6 +105,8 @@ data class LabState(
     val security: SecurityDashboard? = null,
     val declaredModel: String = "",
     val declaredYear: String = "",
+    val beforeSnapshot: SnapshotReading? = null,
+    val afterSnapshot: SnapshotReading? = null,
 )
 
 class LabController(private val app: Application) {
@@ -262,6 +266,46 @@ class LabController(private val app: Application) {
     fun stopPoll() {
         pollJob?.cancel()
         state.update { it.copy(polling = false, statusLine = "Registro de sensores detenido.") }
+    }
+
+    /** Arranca el monitor en el orden fijo de taller (solo PID soportados + ATRV). */
+    fun startOrderedMonitor() {
+        val supported = state.value.supported
+        val ordered = WorkshopGuide.monitorOrder
+            .map { it.pid }
+            .filter { it > 0 && (supported.isEmpty() || it in supported) }
+            .toSet()
+        val fallback = setOf(0x0C, 0x05, 0x04, 0x0D, 0x11, 0x0B)
+        val chosen = if (ordered.isNotEmpty()) ordered else fallback.filter { supported.isEmpty() || it in supported }.toSet()
+        if (chosen.isEmpty() && supported.isNotEmpty()) {
+            explain("Ningún canal del monitor está en el mapa soportado. Consulta PID otra vez.")
+            return
+        }
+        startPoll(if (chosen.isEmpty()) fallback else chosen)
+    }
+
+    fun captureSnapshot(phase: String) {
+        val label = phase.trim().ifBlank { "captura" }
+        val latest = linkedMapOf<Int, Double?>()
+        for (channel in WorkshopGuide.monitorOrder) {
+            val hit = samples.lastOrNull { it.pid == channel.pid && it.value != null }
+                ?: state.value.samples.lastOrNull { it.pid == channel.pid && it.value != null }
+            latest[channel.pid] = hit?.value
+        }
+        val codes = dtcs.flatMap { it.codes.map { code -> code.code } }.distinct()
+        val snap = SnapshotReading(label, System.currentTimeMillis(), codes, latest)
+        state.update {
+            when {
+                label.equals("después", ignoreCase = true) || label.equals("despues", ignoreCase = true) ||
+                    label.equals("after", ignoreCase = true) -> it.copy(afterSnapshot = snap, statusLine = "Captura DESPUÉS guardada.")
+                else -> it.copy(beforeSnapshot = snap, statusLine = "Captura ANTES guardada.")
+            }
+        }
+        persist()
+    }
+
+    fun clearSnapshots() {
+        state.update { it.copy(beforeSnapshot = null, afterSnapshot = null, statusLine = "Capturas antes/después borradas de la sesión.") }
     }
 
     fun setSymptom(symptom: Symptom, enabled: Boolean) {

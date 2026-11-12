@@ -403,13 +403,20 @@ fun readingReport(facts: ReadingFacts): ReadingReportDocument {
         add("5. No probar el corte de potencia en la calle.")
         add("6. No cambiar piezas por esta hoja.")
         add("")
-        add("5. Quién hace qué")
+        add("5. Quién hace qué (dueño)")
         StreetGuide.steps.forEach { step ->
             add("${step.number}. ${step.role}: ${step.title}. ${step.detail}")
         }
         add("El revisor no es la lectora. Su trabajo es impedir que estos números se cierren como causa o como ataque.")
         add("")
-        add("6. Validación de seguridad")
+        add("6. Ciclo de taller (mecánico)")
+        add("Si se hace un ajuste: captura ANTES en Monitor, trabaja, captura DESPUÉS, compara DTC y medidores, nuevo PDF.")
+        WorkshopGuide.steps.forEach { step ->
+            add("${step.number}. ${step.who}: ${step.title}. ${step.detail} Control: ${step.control}")
+        }
+        add("Orden del monitor: " + WorkshopGuide.monitorOrder.joinToString(" → ") { it.shortLabel })
+        add("")
+        add("7. Validación de seguridad")
         add("No hay un porcentaje. Comprobado significa que esta aplicación lo revisó. No significa que la camioneta esté segura.")
         SecurityGuide.checks(facts.adapterId, facts.ecuTalking, codes, facts.bleValidated, facts.declaredModel, facts.declaredYear).forEach { check ->
             add("${check.number}. ${check.title}. ${check.result}. ${check.detail}")

@@ -11,17 +11,19 @@ Cómo se usa la app y cuál es el proceso: [README de la raíz](../README.md).
 
 ## Relación con JAC Diagnostic Lab
 
-La aplicación Android operativa vive en [`../jac-diagnostic-lab`](../jac-diagnostic-lab).  
-Este directorio concentra investigación, TARA, lab aislado, hallazgos y hardening.
+La aplicación Android operativa vive en [`../jac-diagnostic-lab`](../jac-diagnostic-lab) (**v1.1.0**).  
+APK pública para dueño/mecánico: [release v1.1.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.1.0).  
+Este directorio concentra investigación, TARA, lab aislado, hallazgos y hardening. **No** transmite al vehículo.
 
-Módulos en la APK (`app.jac.diagnosticlab.security`):
+Módulos en la APK (`app.jac.diagnosticlab.security` y evidencia):
 
 - `BluetoothSecurityAuditor`
 - `Elm327SecurityAnalyzer`
 - `ObdCommandPolicy` (vía `ReadOnlyGate`)
 - `VehicleFaultCorrelation`
 - `ThreatModelEngine` / `HardeningAdvisor` / `SecurityAssessment`
-- Pestaña **Seguridad** en la UI
+- `WorkshopGuide` + monitor ordenado (UI **Monitor** / **Taller**)
+- Validaciones de seguridad embebidas en **Avisos** (sin %)
 
 ## Qué no se publica
 

@@ -167,4 +167,19 @@ class DiagnosticRegressionTest {
         assertTrue(dossier.lines.any { it.contains("0x49") })
         assertFalse(dossier.lines.any { it.contains("ataque por estos bytes").not() && it.contains("es un ataque") })
     }
+
+    @Test
+    fun testWorkshopMonitorOrderAndCycle() {
+        val order = app.jac.diagnosticlab.evidence.WorkshopGuide.monitorOrder.map { it.pid }
+        assertEquals(listOf(0x0C, 0x0D, 0x05, 0x04, 0x11, 0x0B, 0x49, 0x4A, 0x4B, -1), order)
+        assertEquals("Mariposa", app.jac.diagnosticlab.evidence.WorkshopGuide.monitorOrder.first { it.pid == 0x11 }.shortLabel)
+        assertTrue(
+            app.jac.diagnosticlab.evidence.WorkshopGuide.monitorOrder.first { it.pid == 0x11 }.detail.contains("NO es el pedal"),
+        )
+        assertEquals(1, app.jac.diagnosticlab.evidence.WorkshopGuide.current(0))
+        assertEquals(7, app.jac.diagnosticlab.evidence.WorkshopGuide.current(6))
+        assertEquals(7, app.jac.diagnosticlab.evidence.WorkshopGuide.current(99))
+        assertTrue(app.jac.diagnosticlab.evidence.WorkshopGuide.steps.any { it.title.contains("Baseline", ignoreCase = true) })
+        assertTrue(app.jac.diagnosticlab.evidence.WorkshopGuide.steps.any { it.control.contains("RPM", ignoreCase = true) })
+    }
 }

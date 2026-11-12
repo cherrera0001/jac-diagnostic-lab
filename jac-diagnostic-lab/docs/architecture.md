@@ -3,24 +3,36 @@
 La aplicación es un módulo Android. El protocolo OBD no importa clases de Android, así las pruebas JUnit corren en la JVM sin el teléfono.
 
 ```text
-Pantallas Compose
+Pantallas Compose (Hoy / Monitor / Taller / Avisos / Copia)
     DiagnosticViewModel
-        LabController          sesión, permisos, archivo de evidencia
+        LabController          sesión, permisos, evidencia, snapshots
             BluetoothRepository
             ClassicElmTransport    RFCOMM SPP
             BleInspector           GATT, sin escritura hasta validar ATI
             ElmSession
-                ReadOnlyGate       una sola lista de comandos
+                ReadOnlyGate / ObdCommandPolicy
                 ElmParser
                 DtcDecoder / PidDecoder
-                JacAnalysis
-                Export JSON CSV TXT
+                JacAnalysis / FaultIdentification
+                WorkshopGuide + monitor ordenado
+                Export JSON CSV TXT PDF
 ```
 
-`LabController` vive en la `Application`, no en la actividad. Girar la pantalla no corta el socket. Un servicio en primer plano de tipo `connectedDevice` intenta mantener el proceso mientras la sesión está abierta. Si el sistema lo rechaza, la sesión sigue dentro de la aplicación y el fallo queda en la transcripción.
+## Capas relevantes en 1.1.0
 
-Hay una sola solicitud activa: el transporte usa un mutex. El registro de sensores espera a que cada PID termine antes de enviar el siguiente.
+| Pieza | Rol |
+| --- | --- |
+| `WorkshopGuide` | Pasos de taller + canales del monitor (`MonitorChannel`) |
+| `Gauges.kt` / `LiveGaugeCard` | Medidores arco / barra / termómetro / aviso ATRV |
+| `startOrderedMonitor()` | Polling en el orden fijo de taller |
+| `captureSnapshot(antes\|después)` | Baseline y comparación de PID + códigos |
+| `StreetGuide` | Ocho pasos del dueño (pestaña Hoy) |
+| `SecurityGuide` | Nueve validaciones (sin %) |
 
-La secuencia automática (`autodiag`) es la misma sesión de solo lectura que los botones. Primero busca, prefiere `OBDII` por RFCOMM y solo inspecciona `OBDBLE` si el clásico no identificó un adaptador. No presenta datos simulados en esa ruta. `FakeObdTransport` existe únicamente en las pruebas.
+`LabController` vive en la `Application`. Girar la pantalla no corta el socket. Un servicio en primer plano de tipo `connectedDevice` intenta mantener el proceso mientras la sesión está abierta.
 
-La evidencia se escribe después de cada tramo en el almacenamiento privado y, si Android lo permite, en el directorio externo de la aplicación. No hay borrado dentro de la aplicación.
+Hay una sola solicitud activa: el transporte usa un mutex. El registro de sensores espera a que cada PID termine antes del siguiente.
+
+La secuencia automática (`autodiag`) es solo lectura. Prefiere `OBDII` clásico; si no identifica, inspecciona `OBDBLE`. Tras el escaneo **vuelve a fusionar** dispositivos emparejados (`OBDII`/`OBDBLE`) para no perder el dongle si el scan no lo nombró. No presenta datos simulados en esa ruta. `FakeObdTransport` existe solo en pruebas.
+
+La evidencia se escribe tras cada tramo en almacenamiento privado. No hay borrado de DTC ni de sesiones desde la UI.

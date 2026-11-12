@@ -2,6 +2,8 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
+**App actual: JAC Diagnostic Lab 1.1.0.** APK para dueño o mecánico: [release v1.1.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.1.0) (`jac-diagnostic-lab-1.1.0-debug.apk`). Sin ELM327 no hay lectura nueva; sí sirve el ciclo de taller y un PDF ya guardado.
+
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
 ## Cómo está armado
@@ -30,7 +32,7 @@ La app solo envía una lista cerrada de consultas. No borra códigos, no reprogr
 
 ## Cómo se usa
 
-Condición: camioneta **estacionada**, freno de mano puesto, contacto en **ON**. No circular con la app conectada. La pantalla que se usa es **Hoy**. Muestra «Paso N de 8» y un solo botón. Las otras pestañas son el detalle.
+Condición: camioneta **estacionada**, freno de mano puesto, contacto en **ON**. No circular con la app conectada. El dueño empieza en **Hoy** (ocho pasos). El mecánico usa **Monitor** (medidores + antes/después) y **Taller** (ciclo de siete pasos).
 
 ```mermaid
 flowchart TD
@@ -61,10 +63,10 @@ Son ocho trabajos, no ocho programas. El que revisa no es el que lee: tú detien
 | Pestaña | Para qué sirve | Qué no hace |
 |---|---|---|
 | Hoy | Los ocho pasos de la lectura, el resultado en palabras y el PDF | No recomienda cambiar piezas |
-| Seguridad | Nueve pasos de validación, cada uno con su resultado | No da un porcentaje ni certifica la camioneta |
-| Conexión | Buscar OBDII o OBDBLE y ver la identificación del aparato | No demuestra que el aparato sea original |
-| Avisos | Mostrar los números tal como llegaron, y las hipótesis | No inventa el texto de un número desconocido |
-| Copia | Armar, al pulsar, el PDF y la copia cruda JSON, TXT o CSV | No crea un archivo vacío ni sube nada a internet |
+| Monitor | Medidores en orden (RPM, velocidad, refrigerante, carga, mariposa, MAP, APP, ATRV) y capturas antes/después | No inventa un PID de freno; ATRV no es la batería |
+| Taller | Ciclo del mecánico: leer sin borrar → medir → ajustar → comparar → decidir circulación | No borra DTC ni prueba el corte en marcha |
+| Avisos | Códigos, hipótesis y validaciones de seguridad | No da un porcentaje ni certifica la camioneta |
+| Copia | PDF / JSON / TXT / CSV (solo si hay contenido) | No crea un archivo vacío ni sube nada a internet |
 
 **Copia** puede anonimizar el identificador del vehículo y la dirección Bluetooth. **Hoy** no escribe esos datos en el PDF. El informe de una unidad concreta sigue fuera de este repositorio.
 

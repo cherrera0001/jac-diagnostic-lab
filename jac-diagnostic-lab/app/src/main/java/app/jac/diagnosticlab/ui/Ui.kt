@@ -68,12 +68,15 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.jac.diagnosticlab.analysis.Symptom
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
+import app.jac.diagnosticlab.evidence.WorkshopGuide
 import app.jac.diagnosticlab.evidence.interpretationLines
 import app.jac.diagnosticlab.evidence.payloadHasContent
 import app.jac.diagnosticlab.evidence.readingReport
 import app.jac.diagnosticlab.evidence.sha256Hex
 import app.jac.diagnosticlab.obd.FaultIdentification
 import app.jac.diagnosticlab.security.SecurityGuide
+import app.jac.diagnosticlab.ui.LiveGaugeCard
+import app.jac.diagnosticlab.ui.SnapshotDeltaStrip
 import android.Manifest
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -104,6 +107,9 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun readSupported() = lab.readSupported()
     fun startPoll(pids: Set<Int>) = lab.startPoll(pids)
     fun stopPoll() = lab.stopPoll()
+    fun startOrderedMonitor() = lab.startOrderedMonitor()
+    fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
+    fun clearSnapshots() = lab.clearSnapshots()
     fun setSymptom(symptom: Symptom, enabled: Boolean) = lab.setSymptom(symptom, enabled)
     fun setProtocol(code: String) = lab.setProtocol(code)
     fun setInterval(ms: Long) = lab.setInterval(ms)
@@ -156,7 +162,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar {
-                listOf("Hoy", "Seguridad", "Conexión", "Avisos", "Copia").forEachIndexed { index, label ->
+                listOf("Hoy", "Monitor", "Taller", "Avisos", "Copia").forEachIndexed { index, label ->
                     NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
                 }
             }
@@ -203,11 +209,12 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             }
             when (tab) {
                 0 -> TodayScreen(state, model, permissions)
-                1 -> SecurityGuideScreen(state)
-                2 -> LinkScreen(state, model, permissions)
+                1 -> MonitorScreen(state, model, permissions)
+                2 -> WorkshopScreen(state, model)
                 3 -> {
                     CodeScreen(state, model)
                     AnalysisScreen(state, model)
+                    SecurityGuideScreen(state)
                 }
                 else -> EvidenceScreen(state, model)
             }
@@ -338,7 +345,10 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             }
         }
     }
-    Text("Versión 1.0.0. Autodiag captura ~15 s de sensores, freeze frame corregido y ficha de falla para el taller.")
+    Text("Versión 1.1.0. Monitor con medidores · ciclo Taller antes/después · PDF para el mecánico.")
+    OutlinedButton(onClick = { doneThrough = (doneThrough + 1).coerceAtMost(8) }, enabled = !state.busy) {
+        Text("Avanzar paso (sin saltar la lectura)")
+    }
 }
 
 @Composable
@@ -479,28 +489,87 @@ private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
 }
 
 @Composable
-private fun SensorScreen(state: LabState, model: DiagnosticViewModel) {
-    Text("Primero se consultan los PID soportados. El pedal de freno no se asume en un PID genérico. ATRV es la estimación del adaptador.")
-    Button(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Consultar PID soportados") }
-    val names = mapOf(0x0C to "RPM", 0x05 to "Refrigerante", 0x04 to "Carga", 0x0D to "Velocidad", 0x11 to "Mariposa (0x11)", 0x0B to "Colector")
-    Text(if (state.supported.isEmpty()) "Aún no hay mapa de soporte." else "Soportados en el rango leído: ${state.supported.map { "%02X".format(it) }.joinToString()}")
-    names.forEach { (pid, label) ->
-        Text("$label: ${if (pid in state.supported) "el mapa lo incluye" else "no aparece en el mapa leído"}")
+private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPermissions: () -> Unit) {
+    val live = WorkshopGuide.monitorOrder.associate { ch ->
+        ch.pid to state.samples.lastOrNull { it.pid == ch.pid }
     }
-    Row {
-        listOf(1000L to "1 s", 2000L to "2 s", 5000L to "5 s").forEach { (ms, label) ->
-            OutlinedButton(onClick = { model.setInterval(ms) }) { Text(if (state.intervalMs == ms) "[$label]" else label) }
+    val hz = state.sampleEffectiveHz
+    Text("MONITOR VIVO", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
+    Text(
+        if (state.polling) "Actualizando en orden de taller · %.2f Hz efectivo · intervalo %d ms".format(hz, state.intervalMs)
+        else "Detenido. Enciende el monitor con la camioneta quieta. Pedal de freno: no hay PID genérico.",
+        color = Color(0xFFB0B8C0),
+        fontSize = 13.sp,
+    )
+    Text("Enlace: ${state.link.ifBlank { "sin enlace" }} · ${state.statusLine}", fontSize = 12.sp)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = requestPermissions) { Text("Permisos") }
+        OutlinedButton(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Mapa PID") }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(500L to "0,5 s", 1000L to "1 s", 2000L to "2 s").forEach { (ms, label) ->
+            OutlinedButton(onClick = { model.setInterval(ms) }) {
+                Text(if (state.intervalMs == ms) "[$label]" else label)
+            }
         }
     }
-    val chosen = names.keys.filter { it in state.supported }.toSet()
-    Button(onClick = { model.startPoll(chosen) }, enabled = !state.polling && chosen.isNotEmpty()) { Text("Iniciar registro") }
-    OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling) { Text("Detener registro") }
-    state.samples.takeLast(8).forEach { sample ->
-        Text("${sample.name}: ${sample.value?.let { "%.2f".format(it) } ?: "sin valor"} ${sample.unit.orEmpty()} ${if (sample.suspect) "(fuera de rango habitual)" else ""} ${if (!sample.valid) "(no válido)" else ""}")
+    Button(
+        onClick = { model.startOrderedMonitor() },
+        enabled = !state.polling && !state.busy,
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(if (state.supported.isEmpty()) "Iniciar monitor (orden fijo)" else "Iniciar monitor ordenado") }
+    OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling, modifier = Modifier.fillMaxWidth()) {
+        Text("Detener monitor")
     }
-    val series = state.samples.filter { it.pid == 0x0C && it.value != null }.takeLast(40).map { it.value!! }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = { model.captureSnapshot("antes") }, modifier = Modifier.weight(1f), enabled = state.samples.isNotEmpty() || state.dtcs.isNotEmpty()) {
+            Text("Captura ANTES")
+        }
+        Button(onClick = { model.captureSnapshot("después") }, modifier = Modifier.weight(1f), enabled = state.samples.isNotEmpty() || state.dtcs.isNotEmpty()) {
+            Text("Captura DESPUÉS")
+        }
+    }
+    OutlinedButton(onClick = { model.clearSnapshots() }) { Text("Limpiar capturas") }
+    SnapshotDeltaStrip(
+        title = "Control de cambio (antes → después)",
+        before = state.beforeSnapshot?.values,
+        after = state.afterSnapshot?.values,
+        channels = WorkshopGuide.monitorOrder,
+    )
+    if (state.beforeSnapshot != null) {
+        Text(
+            "ANTES códigos: ${state.beforeSnapshot.codes.joinToString().ifBlank { "ninguno" }}",
+            fontSize = 12.sp,
+            color = Color(0xFFB0B8C0),
+        )
+    }
+    if (state.afterSnapshot != null) {
+        Text(
+            "DESPUÉS códigos: ${state.afterSnapshot.codes.joinToString().ifBlank { "ninguno" }}",
+            fontSize = 12.sp,
+            color = Color(0xFFB0B8C0),
+        )
+    }
+    WorkshopGuide.monitorOrder.forEach { channel ->
+        val sample = live[channel.pid]
+        val supported = when {
+            channel.pid < 0 -> true
+            state.supported.isEmpty() -> null
+            else -> channel.pid in state.supported
+        }
+        if (supported == false && sample == null) return@forEach
+        LiveGaugeCard(
+            channel = channel,
+            value = sample?.value,
+            rawHint = sample?.raw,
+            baseline = state.beforeSnapshot?.values?.get(channel.pid),
+            supported = supported,
+        )
+    }
+    val series = state.samples.filter { it.pid == 0x0C && it.value != null }.takeLast(48).map { it.value!! }
     if (series.size >= 2) {
-        Canvas(Modifier.fillMaxWidth().height(120.dp).padding(8.dp)) {
+        Text("Tendencia RPM (esta sesión)", color = Color(0xFFF5C16C))
+        Canvas(Modifier.fillMaxWidth().height(100.dp).padding(4.dp)) {
             val min = series.min()
             val max = series.max().coerceAtLeast(min + 1)
             val path = Path()
@@ -509,11 +578,73 @@ private fun SensorScreen(state: LabState, model: DiagnosticViewModel) {
                 val y = size.height - ((value - min) / (max - min) * size.height).toFloat()
                 if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
-            drawPath(path, Color(0xFFF5C16C), style = Stroke(3f))
-            drawLine(Color.Gray, Offset(0f, size.height), Offset(size.width, size.height))
+            drawPath(path, Color(0xFFF5C16C), style = Stroke(4f))
+            drawLine(Color(0xFF3A4552), Offset(0f, size.height), Offset(size.width, size.height))
         }
-        Text("Gráfico de RPM de esta sesión. No es una prueba de conducción.")
     }
+    Text("Si no hay enlace: pestaña Hoy → autodiagnóstico, o Conexión vía permisos + OBDBLE. GATT 133 es radio, no la UI.", fontSize = 12.sp, color = Color(0xFF9AA3AD))
+    LinkScreen(state, model, requestPermissions)
+}
+
+@Composable
+private fun WorkshopScreen(state: LabState, model: DiagnosticViewModel) {
+    var doneThrough by rememberSaveable { mutableIntStateOf(0) }
+    val step = WorkshopGuide.current(doneThrough)
+    val current = WorkshopGuide.steps.first { it.number == step }
+    Text("CICLO DE TALLER", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
+    Text("Qué hacer · cómo controlar el cambio · qué medir. No prescribe piezas. No borra. No prueba el corte en la calle.")
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Paso ${current.number} · ${current.who}", color = Color(0xFFF5C16C), style = MaterialTheme.typography.titleMedium)
+            Text(current.title, style = MaterialTheme.typography.titleLarge)
+            Text(current.detail)
+            Text("Control: ${current.control}", color = Color(0xFFB0B8C0))
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Button(onClick = { doneThrough = (doneThrough + 1).coerceAtMost(WorkshopGuide.steps.size) }) {
+            Text(if (doneThrough >= WorkshopGuide.steps.size) "Ciclo completo" else "Marcar hecho →")
+        }
+        OutlinedButton(onClick = { doneThrough = (doneThrough - 1).coerceAtLeast(0) }, enabled = doneThrough > 0) {
+            Text("Atrás")
+        }
+        OutlinedButton(onClick = { doneThrough = 0 }) { Text("Reiniciar") }
+    }
+    WorkshopGuide.steps.forEach { item ->
+        val mark = when {
+            item.number < step -> "✓"
+            item.number == step -> "→"
+            else -> "·"
+        }
+        Text("$mark ${item.number}. ${item.title} (${item.who})", color = if (item.number == step) Color(0xFFF5C16C) else Color(0xFF9AA3AD))
+    }
+    Text("Atajos de medición", style = MaterialTheme.typography.titleMedium, color = Color(0xFFF5C16C))
+    Button(onClick = { model.startOrderedMonitor() }, enabled = !state.polling && !state.busy, modifier = Modifier.fillMaxWidth()) {
+        Text("Abrir monitor ordenado")
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = { model.captureSnapshot("antes") }, modifier = Modifier.weight(1f)) { Text("Antes") }
+        OutlinedButton(onClick = { model.captureSnapshot("después") }, modifier = Modifier.weight(1f)) { Text("Después") }
+    }
+    val dossier = FaultIdentification.dossier(
+        storedCodes = state.dtcs.flatMap { it.codes.map { c -> c.code } },
+        freezeDtc = state.freeze.firstOrNull { !it.dtc.isNullOrBlank() }?.dtc,
+        freezeRaw = state.freeze.firstOrNull()?.raw,
+        supportedPids = state.supported,
+        samples = state.samples.map { it.pid to it.value },
+        powerLossOnBrake = Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms,
+        model = state.declaredModel,
+        year = state.declaredYear,
+        time = state.timeMetrics,
+    )
+    Text(dossier.title, color = Color(0xFFFF8A80))
+    dossier.lines.forEach { Text(it, fontSize = 13.sp) }
+    SnapshotDeltaStrip(
+        title = "Comparación de capturas",
+        before = state.beforeSnapshot?.values,
+        after = state.afterSnapshot?.values,
+        channels = WorkshopGuide.monitorOrder,
+    )
 }
 
 @Composable
