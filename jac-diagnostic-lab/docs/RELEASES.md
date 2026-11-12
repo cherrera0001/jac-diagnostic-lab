@@ -2,6 +2,14 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.7.0 — Completar captura (auto-monitor + reconectar)
+
+- **Tag:** `v1.7.0`
+- **versionCode:** 19
+- **Fecha:** 2026-11-12
+
+Tras autodiag con ECU, arranca monitor solo. Botón **Reconectar y continuar captura** (clásico → BLE) sin borrar evidencia. Fallback RFCOMM si BLE no deja ECU. CI unit test. FFE1 aceptado; queries de apps rivales.
+
 ## v1.6.1 — Captura estable (GATT FFF + enlace caído)
 
 - **Tag:** `v1.6.1`

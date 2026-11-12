@@ -4,53 +4,69 @@ package app.jac.diagnosticlab.bt
  * Selección segura de características OBD sobre BLE.
  * Evita el default peligroso: 2A00 (Device Name WRITE) + 2A05 (Service Changed INDICATE),
  * que en muchos dongles aparecen antes que FFF1/FFF2 y producen «validaciones» inútiles.
+ *
+ * Perfiles aceptados:
+ *  - FFF2 escritura + FFF1 aviso (OBDBLE / Vgate y clones).
+ *  - FFE1 escritura+aviso en una sola característica (HM-10 y clones ELM327 BLE).
  */
 object GattObdProfile {
-    private val REJECT_UUID_FRAGMENTS = listOf(
-        "00001800-", // Generic Access
-        "00001801-", // Generic Attribute
-        "0000180a-", // Device Information
-        "0000180f-", // Battery
-        "00001804-", // Tx Power
-        "00002a00-", // Device Name
-        "00002a01-", // Appearance
-        "00002a04-", // Preferred Connection Parameters
-        "00002a05-", // Service Changed
-        "00002a07-", // Tx Power Level
-        "00002a19-", // Battery Level
-        "00002a29-", // Manufacturer Name
-        "00002a24-", // Model Number
-        "00002a25-", // Serial Number
-        "00002a26-", // Firmware Revision
-        "00002a27-", // Hardware Revision
-        "00002a28-", // Software Revision
+    private const val SIG_BASE_SUFFIX = "-0000-1000-8000-00805f9b34fb"
+
+    /** UUID SIG estándar (16 bits) que nunca transportan ELM327. */
+    private val REJECTED_SHORT = setOf(
+        "1800", // Generic Access
+        "1801", // Generic Attribute
+        "180a", // Device Information
+        "180f", // Battery
+        "1804", // Tx Power
+        "2a00", // Device Name
+        "2a01", // Appearance
+        "2a04", // Preferred Connection Parameters
+        "2a05", // Service Changed
+        "2a07", // Tx Power Level
+        "2a19", // Battery Level
+        "2a24", // Model Number
+        "2a25", // Serial Number
+        "2a26", // Firmware Revision
+        "2a27", // Hardware Revision
+        "2a28", // Software Revision
+        "2a29", // Manufacturer Name
     )
 
-    private val PREFERRED_WRITE = listOf("0000fff2-", "fff2")
-    private val PREFERRED_NOTIFY = listOf("0000fff1-", "fff1")
+    private val PREFERRED_WRITE = setOf("fff2", "ffe1")
+    private val PREFERRED_NOTIFY = setOf("fff1", "ffe1")
 
-    fun isRejectedUuid(uuid: String): Boolean {
-        val u = uuid.lowercase()
-        return REJECT_UUID_FRAGMENTS.any { u.startsWith(it) || u.contains(it.trimEnd('-')) }
+    /**
+     * Forma corta de 16 bits si el UUID está en la base SIG (`0000xxxx-0000-1000-8000-00805f9b34fb`)
+     * o ya viene corto (`fff1`); `null` para UUID de 128 bits propietarios.
+     */
+    internal fun shortId(uuid: String): String? {
+        val u = uuid.trim().lowercase()
+        return when {
+            u.length == 4 -> u
+            u.length == 36 && u.startsWith("0000") && u.endsWith(SIG_BASE_SUFFIX) -> u.substring(4, 8)
+            else -> null
+        }
     }
 
-    fun isPreferredWrite(uuid: String): Boolean {
-        val u = uuid.lowercase()
-        return PREFERRED_WRITE.any { u.startsWith(it) || u.endsWith(it) || u.contains(it.trimEnd('-')) }
-    }
+    fun isRejectedUuid(uuid: String): Boolean = shortId(uuid) in REJECTED_SHORT
 
-    fun isPreferredNotify(uuid: String): Boolean {
-        val u = uuid.lowercase()
-        return PREFERRED_NOTIFY.any { u.startsWith(it) || u.endsWith(it) || u.contains(it.trimEnd('-')) }
-    }
+    fun isPreferredWrite(uuid: String): Boolean = shortId(uuid) in PREFERRED_WRITE
 
+    fun isPreferredNotify(uuid: String): Boolean = shortId(uuid) in PREFERRED_NOTIFY
+
+    /**
+     * < 0 solo para pares con UUID SIG estándar (basura). Una misma característica con
+     * WRITE+NOTIFY (FFE1) es válida y no se penaliza por debajo de cero.
+     */
     fun scorePair(writeUuid: String, notifyUuid: String): Int {
-        var score = 0
         if (isRejectedUuid(writeUuid) || isRejectedUuid(notifyUuid)) return -1000
+        var score = 0
         if (isPreferredWrite(writeUuid)) score += 100
         if (isPreferredNotify(notifyUuid)) score += 100
-        if (writeUuid.equals(notifyUuid, true)) score -= 50
-        return score
+        // Pareja canónica FFF2/FFF1 por encima de FFE1/FFE1.
+        if (writeUuid.equals(notifyUuid, ignoreCase = true)) score -= 10
+        return score.coerceAtLeast(0)
     }
 
     fun defaultWrite(rows: List<GattCharView>): String =
@@ -69,13 +85,8 @@ object GattObdProfile {
         pairs
             .filter { scorePair(it.first, it.second) >= 0 }
             .sortedByDescending { scorePair(it.first, it.second) }
-            .ifEmpty {
-                // Último recurso: pares no preferidos pero no claramente basura estándar
-                pairs.filter { scorePair(it.first, it.second) > -1000 }
-                    .sortedByDescending { scorePair(it.first, it.second) }
-            }
 
-    /** Paquetes conocidos que pelean el RFCOMM/GATT del mismo dongle. */
+    /** Paquetes conocidos que pelean el RFCOMM/GATT del mismo dongle (declarados en <queries>). */
     val CONFLICTING_PACKAGES = listOf(
         "com.obdautodoctor",
         "com.digitalcarkeyllc.car.scanner.obd.elm.torque.fixd.carly",

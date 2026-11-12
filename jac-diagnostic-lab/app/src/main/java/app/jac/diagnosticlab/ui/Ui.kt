@@ -86,7 +86,6 @@ import app.jac.diagnosticlab.ui.MechanicSituationCard
 import app.jac.diagnosticlab.ui.MissingSensorBanner
 import app.jac.diagnosticlab.ui.SnapshotDeltaStrip
 import android.Manifest
-import android.content.pm.PackageManager
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -117,6 +116,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun startPoll(pids: Set<Int>) = lab.startPoll(pids)
     fun stopPoll() = lab.stopPoll()
     fun startOrderedMonitor() = lab.startOrderedMonitor()
+    fun reconnectAndResumeMonitor() = lab.reconnectAndResumeMonitor()
     fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
     fun clearSnapshots() = lab.clearSnapshots()
     fun refreshCapabilities() = lab.refreshCapabilities()
@@ -646,6 +646,13 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
         enabled = !state.polling && !state.busy,
         modifier = Modifier.fillMaxWidth(),
     ) { Text(if (state.supported.isEmpty()) "Iniciar monitor (orden fijo)" else "Iniciar monitor ordenado") }
+    OutlinedButton(
+        onClick = { model.reconnectAndResumeMonitor() },
+        enabled = !state.busy,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text("Reconectar y continuar captura")
+    }
     OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling, modifier = Modifier.fillMaxWidth()) {
         Text("Detener monitor")
     }

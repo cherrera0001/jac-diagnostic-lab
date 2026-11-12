@@ -53,4 +53,24 @@ class BluetoothReliabilityTest {
         assertEquals("0000fff2-0000-1000-8000-00805f9b34fb", ranked.first().first)
         assertEquals("0000fff1-0000-1000-8000-00805f9b34fb", ranked.first().second)
     }
+
+    @Test
+    fun testBt005_acceptsSingleFfe1WriteNotifyCharacteristic() {
+        val ffe1 = "0000ffe1-0000-1000-8000-00805f9b34fb"
+        assertTrue(GattObdProfile.scorePair(ffe1, ffe1) >= 0)
+        val rows = listOf(
+            GattCharView("00001801-0000-1000-8000-00805f9b34fb", "00002a05-0000-1000-8000-00805f9b34fb", listOf("INDICATE"), false, true),
+            GattCharView("0000ffe0-0000-1000-8000-00805f9b34fb", ffe1, listOf("WRITE", "NOTIFY"), true, true),
+        )
+        assertEquals(ffe1 to ffe1, LabController.bleCandidates(rows).first())
+    }
+
+    @Test
+    fun testBt006_vendorUuidsAreNotSubstringMatched() {
+        // 128-bit propietario que contiene "fff2" y "2a00" en medio: ni preferido ni rechazado.
+        val vendor = "49535343-fff2-2a00-b8e6-0000ffff2a00"
+        assertFalse(GattObdProfile.isRejectedUuid(vendor))
+        assertFalse(GattObdProfile.isPreferredWrite(vendor))
+        assertTrue(GattObdProfile.isPreferredNotify("FFF1"))
+    }
 }

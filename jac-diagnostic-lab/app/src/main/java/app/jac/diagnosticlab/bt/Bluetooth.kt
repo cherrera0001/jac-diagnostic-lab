@@ -12,6 +12,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
+import android.bluetooth.BluetoothStatusCodes
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
@@ -416,7 +417,7 @@ class BleInspector(
         val bytes = (command.trim() + "\r").toByteArray(Charsets.US_ASCII)
         val queued = withContext(Dispatchers.Main) {
             if (Build.VERSION.SDK_INT >= 33) {
-                g.writeCharacteristic(characteristic, bytes, type) == BluetoothGatt.GATT_SUCCESS
+                g.writeCharacteristic(characteristic, bytes, type) == BluetoothStatusCodes.SUCCESS
             } else {
                 characteristic.writeType = type
                 characteristic.value = bytes

@@ -1,5 +1,6 @@
 package app.jac.diagnosticlab
 
+import android.annotation.SuppressLint
 import android.Manifest
 import android.app.Application
 import android.bluetooth.BluetoothDevice
@@ -59,6 +60,7 @@ import app.jac.diagnosticlab.obd.OperationalState
 import app.jac.diagnosticlab.obd.VoltageAssessment
 import app.jac.diagnosticlab.obd.assessAdapterVoltage
 import app.jac.diagnosticlab.obd.SessionTimeMetrics
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -356,6 +358,8 @@ class LabController(private val app: Application) {
                         val band = VehicleTelemetryEngine.bandFor(pid).name
                         telemetryStore.appendMeasurement(sessionId, sample, latency, band)
                     }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Exception) {
                     telemetry.recordFailure(pid, System.currentTimeMillis() - t0)
                     consecutiveFailures++
@@ -417,6 +421,7 @@ class LabController(private val app: Application) {
             explain("Ningún canal del monitor está en el mapa soportado. Consulta PID otra vez.")
             return
         }
+        // Si el clásico falló o el mapa está vacío pero hay sesión, usar fallback genérico.
         startPoll(if (chosen.isEmpty()) fallback else chosen)
     }
 
@@ -622,6 +627,21 @@ class LabController(private val app: Application) {
                     }
                 }
             }
+            // Fallback: BLE no dejó ECU → reintentar RFCOMM OBDII (a veces el canal se liberó).
+            if (!state.value.ecuTalking && classic != null) {
+                trace("Fallback clásico tras BLE insuficiente.")
+                disconnectQuiet()
+                val device = repo.device(classic.address)
+                if (device != null && connectClassic(device)) {
+                    val report = session?.initialize(state.value.protocol)
+                    if (report != null) {
+                        applyInit(report)
+                        if (report.stoppedBecause == null && (report.ecuTalking || report.adapterIdentity.isNotBlank())) {
+                            finishReads()
+                        }
+                    }
+                }
+            }
         } else if (lowEnergy != null && classicOk) {
             trace("OBDBLE también está visible (${lowEnergy.address}). No se abre una segunda conexión porque el clásico ya respondió.")
         } else if (lowEnergy == null) {
@@ -629,8 +649,97 @@ class LabController(private val app: Application) {
         }
         recompute()
         persist()
-        state.update { it.copy(busy = false, statusLine = "Secuencia terminada. La transcripción quedó guardada.") }
-        trace("FIN autodiagnóstico")
+        val ready = state.value.ecuTalking && session != null
+        if (ready) {
+            state.update { it.copy(busy = false, statusLine = "Lectura lista. Arrancando monitor continuo para captura…") }
+            trace("FIN autodiagnóstico — auto-monitor")
+            startOrderedMonitor()
+        } else {
+            state.update { it.copy(busy = false, statusLine = "Secuencia terminada. Sin ECU: no se inicia monitor. Transcripción guardada.") }
+            trace("FIN autodiagnóstico")
+        }
+    }
+
+    /**
+     * Reabre el dongle sin borrar muestras/DTC ya leídos. Clásico primero; si falla, BLE FFF/FFE.
+     * Pensado para cuando el enlace cae durante la revisión.
+     */
+    fun reconnectAndResumeMonitor() {
+        if (!autodiagGate.compareAndSet(false, true)) return
+        scope.launch {
+            try {
+                reconnectKeepEvidence()
+            } finally {
+                autodiagGate.set(false)
+            }
+        }
+    }
+
+    private suspend fun reconnectKeepEvidence() {
+        stopPoll()
+        trace("RECONEXIÓN sin borrar evidencia (muestras=${samples.size})")
+        state.update {
+            it.copy(
+                busy = true,
+                error = null,
+                statusLine = "Reconectando dongle (clásico → BLE)…",
+            )
+        }
+        if (missingPermissions().isNotEmpty()) {
+            explain("Sin permisos Bluetooth no se puede reconectar.")
+            return
+        }
+        disconnectQuiet()
+        refresh()
+        val bonded = repo.bonded()
+        state.update { it.copy(devices = merge(it.devices, bonded)) }
+        val devices = state.value.devices
+        val classic = devices.firstOrNull { it.name.equals("OBDII", true) }
+            ?: bonded.firstOrNull { it.name.equals("OBDII", true) }
+        val lowEnergy = devices.firstOrNull { it.name.equals("OBDBLE", true) }
+            ?: bonded.firstOrNull { it.name.equals("OBDBLE", true) }
+        var linked = false
+        if (classic != null) {
+            val device = repo.device(classic.address)
+            if (device != null && connectClassic(device)) {
+                val report = session?.initialize(state.value.protocol)
+                if (report != null) {
+                    applyInit(report)
+                    linked = report.ecuTalking || report.adapterIdentity.isNotBlank()
+                }
+            }
+        }
+        if (!linked && lowEnergy != null) {
+            disconnectQuiet()
+            val device = repo.device(lowEnergy.address)
+            if (device != null && inspectBle(device)) {
+                for ((write, notify) in bleCandidates(state.value.gatt).take(3)) {
+                    val inspector = ble ?: break
+                    try {
+                        inspector.selectAndValidate(write, notify)
+                        bindProductionTransport(inspector)
+                        promote()
+                        openSession(inspector.name)
+                        state.update { it.copy(bleValidated = true, error = null) }
+                        val report = session?.initialize("0")
+                        if (report != null) {
+                            applyInit(report)
+                            linked = report.ecuTalking || report.adapterIdentity.isNotBlank()
+                        }
+                        if (linked) break
+                    } catch (error: Exception) {
+                        trace("RECONEXIÓN BLE falló $write: ${error.message}")
+                    }
+                }
+            }
+        }
+        state.update { it.copy(busy = false) }
+        if (linked && session != null) {
+            state.update { it.copy(statusLine = "Reconectado. Reanudando monitor…") }
+            startOrderedMonitor()
+        } else {
+            explain("No se pudo reconectar. Estacione, contacto ON, cierre apps OBD rivales y reintente.")
+        }
     }
 
     private suspend fun finishReads() {
@@ -678,11 +787,20 @@ class LabController(private val app: Application) {
         trace("0101 ${mil.kind}; freeze=${freeze.firstOrNull()?.dtc}; hunt=${interesting.joinToString { "%02X".format(it) }}")
     }
 
+    /** `BluetoothDevice.name` lanza SecurityException en Android 12+ sin BLUETOOTH_CONNECT. */
+    @SuppressLint("MissingPermission")
+    private fun safeName(device: BluetoothDevice): String =
+        try {
+            device.name ?: device.address
+        } catch (_: SecurityException) {
+            device.address
+        }
+
     private suspend fun connectClassic(device: BluetoothDevice): Boolean {
         repo.stopScan()
         val adapter = repo.adapter() ?: return false.also { explain("No hay adaptador Bluetooth.") }
         select(device.address)
-        state.update { it.copy(busy = true, link = "Conectando", statusLine = "Abriendo RFCOMM hacia ${device.name}.") }
+        state.update { it.copy(busy = true, link = "Conectando", statusLine = "Abriendo RFCOMM hacia ${safeName(device)}.") }
         val classic = ClassicElmTransport(device, adapter, ::trace)
         return try {
             classic.connect()
@@ -692,7 +810,7 @@ class LabController(private val app: Application) {
             state.update { it.copy(linkPhase = LinkPhase.TRANSPORT_CONNECTED) }
             true
         } catch (error: Exception) {
-            errors += "RFCOMM ${device.name}: ${error.message}"
+            errors += "RFCOMM ${safeName(device)}: ${error.message}"
             explain(error.message ?: "Falló RFCOMM.")
             false
         }
@@ -703,7 +821,7 @@ class LabController(private val app: Application) {
         select(device.address)
         val inspector = BleInspector(app, device, ::trace)
         ble = inspector
-        state.update { it.copy(busy = true, statusLine = "Descubriendo servicios GATT de ${device.name}. No se escribe todavía.") }
+        state.update { it.copy(busy = true, statusLine = "Descubriendo servicios GATT de ${safeName(device)}. No se escribe todavía.") }
         return try {
             val profile = inspector.connectAndDiscover()
             state.update {
@@ -718,7 +836,7 @@ class LabController(private val app: Application) {
             profile.forEach { row -> trace("GATT ${row.serviceUuid} ${row.uuid} ${row.properties.joinToString("|")}") }
             true
         } catch (error: Exception) {
-            errors += "BLE ${device.name}: ${error.message}"
+            errors += "BLE ${safeName(device)}: ${error.message}"
             explain(error.message ?: "Falló el descubrimiento GATT.")
             false
         }
