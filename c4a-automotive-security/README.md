@@ -2,6 +2,9 @@
 
 Auditoría integral, diagnóstico y hardening de **JAC T8**, basada en evidencia.
 
+Informe de la medición: [reports/INFORME-2026-11-11.md](reports/INFORME-2026-11-11.md).  
+Cómo se usa la app y cuál es el proceso: [README de la raíz](../README.md).
+
 - **Metodología de referencia:** ISO/SAE 21434 (TARA), STRIDE, SDD/TDD, Evidence-Driven Security.
 - **No se declara cumplimiento formal** de ISO/SAE 21434 solo por usarla como guía.
 - **Niveles:** A = vehículo real solo lectura · B = adaptador aislado · C = laboratorio simulado.
