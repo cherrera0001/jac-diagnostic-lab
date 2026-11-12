@@ -14,9 +14,9 @@ La APK instalable está en el **release de GitHub** del hito **v1.1.0** (los mil
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.7.0 |
-| Archivo | `jac-diagnostic-lab-1.7.0-debug.apk` |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.7.0-debug.apk` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.7.1 |
+| Archivo | `jac-diagnostic-lab-1.7.1-debug.apk` |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.7.1-debug.apk` |
 
 ### Limitación real (léala antes de instalar)
 

@@ -1,3 +1,7 @@
 # Lecturas de una unidad. Se quedan en el equipo. No se suben.
 c4a-automotive-security/reports/INFORME-*
 jac-diagnostic-lab/evidence/captured/
+
+# Caché Python local (no versionar)
+**/__pycache__/
+*.py[cod]
