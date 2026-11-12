@@ -2,6 +2,14 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.6.1 — Captura estable (GATT FFF + enlace caído)
+
+- **Tag:** `v1.6.1`
+- **versionCode:** 18
+- **Fecha:** 2026-11-12
+
+Corrige selección por defecto 2A00/2A05 (no OBD). Prefiere FFF2/FFF1. Monitor avisa ENLACE CAÍDO y conflictos con OBD Auto Doctor / clones Torque. La cacería de sensores escribe JSONL. Servicio en primer plano al monitorear.
+
 ## v1.6.0 — Monitor «Qué ocurre» (mecánico)
 
 - **Tag:** `v1.6.0`

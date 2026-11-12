@@ -59,6 +59,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +69,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import app.jac.diagnosticlab.analysis.GaugeFreshness
 import app.jac.diagnosticlab.analysis.LiveSituationEngine
 import app.jac.diagnosticlab.analysis.Symptom
+import app.jac.diagnosticlab.bt.GattObdProfile
 import app.jac.diagnosticlab.evidence.ReadingFacts
 import app.jac.diagnosticlab.evidence.StreetGuide
 import app.jac.diagnosticlab.evidence.WorkshopGuide
@@ -84,6 +86,7 @@ import app.jac.diagnosticlab.ui.MechanicSituationCard
 import app.jac.diagnosticlab.ui.MissingSensorBanner
 import app.jac.diagnosticlab.ui.SnapshotDeltaStrip
 import android.Manifest
+import android.content.pm.PackageManager
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -442,22 +445,35 @@ private fun LinkScreen(state: LabState, model: DiagnosticViewModel, requestPermi
     Button(onClick = { model.initialize() }, enabled = !state.busy) { Text("Inicializar y leer 0100") }
     OutlinedButton(onClick = { model.disconnect() }) { Text("Desconectar") }
     if (state.gatt.isNotEmpty()) {
-        Text("Servicios GATT. No se escribe una característica hasta elegir una con WRITE y otra con NOTIFY.")
-        var write by remember(state.gatt) { mutableStateOf(state.gatt.firstOrNull { it.canWrite }?.uuid.orEmpty()) }
-        var notify by remember(state.gatt) { mutableStateOf(state.gatt.firstOrNull { it.canNotify }?.uuid.orEmpty()) }
+        Text("Servicios GATT. Preferir FFF2 (escritura) + FFF1 (aviso). No use 2A05 ni 2A00.")
+        var write by remember(state.gatt) { mutableStateOf(GattObdProfile.defaultWrite(state.gatt)) }
+        var notify by remember(state.gatt) { mutableStateOf(GattObdProfile.defaultNotify(state.gatt)) }
         state.gatt.forEach { row ->
-            Text("${row.uuid}\n${row.properties.joinToString()} · servicio ${row.serviceUuid}", fontSize = 12.sp)
+            val rejected = GattObdProfile.isRejectedUuid(row.uuid)
+            val mark = when {
+                GattObdProfile.isPreferredWrite(row.uuid) || GattObdProfile.isPreferredNotify(row.uuid) -> " · OBD"
+                rejected -> " · no OBD"
+                else -> ""
+            }
+            Text(
+                "${row.uuid}\n${row.properties.joinToString()} · servicio ${row.serviceUuid}$mark",
+                fontSize = 12.sp,
+                color = if (rejected) Color(0xFF9AA3AD) else Color.White,
+            )
             Row {
-                if (row.canWrite) {
+                if (row.canWrite && !rejected) {
                     OutlinedButton(onClick = { write = row.uuid }) { Text(if (write == row.uuid) "Escritura elegida" else "Elegir escritura") }
                 }
-                if (row.canNotify) {
+                if (row.canNotify && !rejected) {
                     OutlinedButton(onClick = { notify = row.uuid }) { Text(if (notify == row.uuid) "Aviso elegido" else "Elegir aviso") }
                 }
             }
         }
-        Button(onClick = { model.validateBle(write, notify) }, enabled = write.isNotBlank() && notify.isNotBlank() && !state.busy) {
-            Text("Validar BLE con ATI")
+        Button(
+            onClick = { model.validateBle(write, notify) },
+            enabled = write.isNotBlank() && notify.isNotBlank() && !state.busy && GattObdProfile.scorePair(write, notify) >= 0,
+        ) {
+            Text("Validar BLE con ATI (FFF)")
         }
         Text(if (state.bleValidated) "BLE validado." else "BLE aún no validado.")
     }
@@ -503,6 +519,12 @@ private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
 
 @Composable
 private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPermissions: () -> Unit) {
+    val context = LocalContext.current
+    val conflicts = remember {
+        GattObdProfile.CONFLICTING_PACKAGES.filter { pkg ->
+            runCatching { context.packageManager.getPackageInfo(pkg, 0) }.isSuccess
+        }
+    }
     val live = WorkshopGuide.monitorOrder.associate { ch ->
         ch.pid to state.samples.lastOrNull { it.pid == ch.pid }
     }
@@ -570,18 +592,34 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
     val errN = qualityCounts.count { it == GaugeFreshness.READ_ERROR || it == GaugeFreshness.UNSUPPORTED }
 
     Text("MONITOR VIVO", style = MaterialTheme.typography.titleLarge, color = Color(0xFFF5C16C))
+    if (conflicts.isNotEmpty()) {
+        Text(
+            "CONFLICTO BT: apps OBD instaladas que pelean el dongle: ${conflicts.joinToString()}. Ciérrelas (forzar detención) antes de capturar.",
+            color = Color(0xFFFF8A80),
+            fontSize = 13.sp,
+        )
+    }
+    if (state.linkPhase == app.jac.diagnosticlab.bt.LinkPhase.DISCONNECTED || state.sessionId.isBlank() && state.samples.isEmpty()) {
+        Text(
+            "Sin enlace activo no hay captura nueva. Autodiag/Conectar → Inicializar → Iniciar monitor. No re-empareje desde Ajustes en marcha.",
+            color = Color(0xFFFF8A80),
+            fontSize = 13.sp,
+        )
+    }
     Text(
         if (state.polling) {
             "Scheduler 1 comando · base %d ms · Hz sesión ≈%.2f (medido). Calidad: %d VIVO · %d STALE · %d hueco/error.".format(
                 state.intervalMs, hz, liveN, staleN, errN,
             )
         } else {
-            "Detenido. Camioneta quieta. Lea «Qué ocurre» antes de tocar piezas. SAFE-001: sin prueba en movimiento."
+            "Detenido. Para captura continua pulse Iniciar monitor (con sesión OBD). SAFE-001: no provoque el corte en ruta."
         },
         color = Color(0xFFB0B8C0),
         fontSize = 13.sp,
     )
-    Text("Enlace: ${state.linkPhase.label} · ${state.link.ifBlank { "sin enlace" }} · ${state.statusLine}", fontSize = 12.sp)
+    Text("Enlace: ${state.linkPhase.label} · ${state.link.ifBlank { "sin enlace" }} · muestras ${state.samples.size} · ${state.statusLine}", fontSize = 12.sp)
+    state.error?.let { Text("Error: $it", color = Color(0xFFFF8A80), fontSize = 12.sp) }
+    state.recovery?.let { Text("Recuperación: $it", color = Color(0xFFF5C16C), fontSize = 12.sp) }
 
     MechanicSituationCard(
         headline = situation.headline,

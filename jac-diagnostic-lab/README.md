@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.6.0** (`versionCode` 17) — 12-11-2026. Monitor con franja «Qué ocurre», STALE/ERROR y sensores faltantes.
+**Versión actual: 1.6.1** (`versionCode` 18) — 12-11-2026. Captura con FFF1/FFF2, aviso de enlace caído y conflictos OBD.
 
 Auditoría Sprint 0: [docs/audits/current-codebase-assessment.md](docs/audits/current-codebase-assessment.md).
 
@@ -14,9 +14,9 @@ La APK instalable está en el **release de GitHub** del hito **v1.1.0** (los mil
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.6.0 |
-| Archivo | `jac-diagnostic-lab-1.6.0-debug.apk` |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.6.0-debug.apk` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.6.1 |
+| Archivo | `jac-diagnostic-lab-1.6.1-debug.apk` |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.6.1-debug.apk` |
 
 ### Limitación real (léala antes de instalar)
 

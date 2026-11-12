@@ -338,6 +338,11 @@ class BleInspector(
 
     suspend fun selectAndValidate(writeUuid: String, notifyUuid: String): String {
         val g = gatt ?: throw IOException("GATT cerrado.")
+        if (GattObdProfile.scorePair(writeUuid, notifyUuid) < 0) {
+            throw IOException(
+                "UUID no OBD ($writeUuid / $notifyUuid). Elija FFF2 escritura y FFF1 aviso; no use 2A05/2A00.",
+            )
+        }
         val write = find(writeUuid, notify = false)
         val notify = find(notifyUuid, notify = true)
         if (!write.canWrite()) throw IOException("La característica elegida no admite escritura.")

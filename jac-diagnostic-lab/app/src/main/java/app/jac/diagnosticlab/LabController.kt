@@ -20,7 +20,9 @@ import app.jac.diagnosticlab.bt.BtDevice
 import app.jac.diagnosticlab.bt.ClassicElmTransport
 import app.jac.diagnosticlab.bt.DiagnosticConnectionService
 import app.jac.diagnosticlab.bt.GattCharView
+import app.jac.diagnosticlab.bt.GattObdProfile
 import app.jac.diagnosticlab.bt.LinkPhase
+import java.io.IOException
 import app.jac.diagnosticlab.elm.ElmSession
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ObdTransport
@@ -212,16 +214,24 @@ class LabController(private val app: Application) {
 
     fun validateBle(writeUuid: String, notifyUuid: String) = scope.launch {
         val inspector = ble ?: return@launch explain("Primero hay que descubrir el perfil GATT.")
+        if (GattObdProfile.scorePair(writeUuid, notifyUuid) < 0) {
+            explain(
+                "Características GATT no OBD (${writeUuid.takeLast(8)} / ${notifyUuid.takeLast(8)}). " +
+                    "Use FFF2 (escritura) y FFF1 (aviso). 2A05/2A00 no hablan con el ELM.",
+            )
+            return@launch
+        }
         try {
             state.update { it.copy(busy = true, statusLine = "Validando BLE con ATI…") }
             val raw = inspector.selectAndValidate(writeUuid, notifyUuid)
             bindProductionTransport(inspector)
+            promote()
             openSession(inspector.name)
             state.update {
                 it.copy(
                     bleValidated = true,
                     busy = false,
-                    statusLine = "BLE validado.",
+                    statusLine = "BLE validado (FFF). Inicialice o inicie monitor.",
                     error = null,
                     linkPhase = LinkPhase.ELM_READY,
                 )
@@ -263,22 +273,41 @@ class LabController(private val app: Application) {
     fun readSupported() = scope.launch { readSupportedInternal() }
 
     fun startPoll(pids: Set<Int>) {
+        if (session == null) {
+            explain("No hay adaptador en sesión. Conecte OBDII/OBDBLE (FFF1/FFF2), inicialice y luego inicie el monitor.")
+            return
+        }
         pollJob?.cancel()
         telemetry.reset()
         val supported = state.value.supported
         val allowed = pids.filter { it != 0x00 && (supported.isEmpty() || it in supported || it < 0) }.toSet()
         val withAtrv = allowed + (-1)
         telemetry.plan(withAtrv, state.value.intervalMs)
+        promote()
         pollJob = scope.launch {
             state.update {
                 it.copy(
                     polling = true,
-                    statusLine = "Telemetría: una consulta a la vez (FAST/MEDIUM/SLOW). Hz medido, no prometido.",
+                    statusLine = "Telemetría activa · JSONL local · una consulta a la vez. Mantenga la app en primer plano o con la notificación.",
                     channelStats = telemetry.stats(),
+                    error = null,
                 )
             }
+            var consecutiveFailures = 0
             while (true) {
-                val current = session ?: break
+                val current = session
+                if (current == null) {
+                    state.update {
+                        it.copy(
+                            polling = false,
+                            statusLine = "ENLACE CAÍDO: la sesión se perdió. No se siguen capturando muestras. Reconecte el dongle.",
+                            linkPhase = LinkPhase.DISCONNECTED,
+                            error = "Monitor detenido: sin sesión OBD.",
+                            recovery = "Estacione, contacto ON, cierre OBD Auto Doctor/Torque, reconecte OBDBLE (FFF2/FFF1) o OBDII, Inicializar, Iniciar monitor.",
+                        )
+                    }
+                    break
+                }
                 if (telemetry.isPaused()) {
                     delay(80)
                     continue
@@ -293,6 +322,7 @@ class LabController(private val app: Application) {
                 try {
                     if (pid < 0) {
                         val voltage = current.exchange("ATRV", 2500)
+                        if (voltage.kind == ResponseKind.DISCONNECTED) throw IOException("GATT/RFCOMM desconectado durante ATRV")
                         val parsed = parseAdapterVoltage(voltage.raw)
                         val latency = System.currentTimeMillis() - t0
                         if (parsed != null) {
@@ -303,8 +333,10 @@ class LabController(private val app: Application) {
                             samples = (samples + sample).takeLast(480)
                             telemetry.recordSuccess(-1, latency)
                             telemetryStore.appendMeasurement(sessionId, sample, latency, "SLOW")
+                            consecutiveFailures = 0
                         } else {
                             telemetry.recordFailure(-1, latency)
+                            consecutiveFailures++
                         }
                     } else {
                         val reading = current.readPid(pid)
@@ -314,12 +346,37 @@ class LabController(private val app: Application) {
                             reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
                         )
                         samples = (samples + sample).takeLast(480)
-                        if (reading.valid) telemetry.recordSuccess(pid, latency) else telemetry.recordFailure(pid, latency)
+                        if (reading.valid) {
+                            telemetry.recordSuccess(pid, latency)
+                            consecutiveFailures = 0
+                        } else {
+                            telemetry.recordFailure(pid, latency)
+                            consecutiveFailures++
+                        }
                         val band = VehicleTelemetryEngine.bandFor(pid).name
                         telemetryStore.appendMeasurement(sessionId, sample, latency, band)
                     }
-                } catch (_: Exception) {
+                } catch (error: Exception) {
                     telemetry.recordFailure(pid, System.currentTimeMillis() - t0)
+                    consecutiveFailures++
+                    trace("MONITOR fallo pid=$pid: ${error.message}")
+                    if (consecutiveFailures >= 5 || error.message.orEmpty().contains("desconect", ignoreCase = true) ||
+                        error.message.orEmpty().contains("GATT", ignoreCase = true)
+                    ) {
+                        state.update {
+                            it.copy(
+                                polling = false,
+                                samples = samples,
+                                channelStats = telemetry.stats(),
+                                statusLine = "ENLACE CAÍDO tras fallos de lectura. Muestras en RAM: ${samples.size}. Reconecte.",
+                                error = error.message ?: "Enlace OBD perdido durante el monitor.",
+                                recovery = "Cierre apps OBD rivales, no re-empareje desde Ajustes en marcha, reconecte FFF1/FFF2 o RFCOMM.",
+                                linkPhase = LinkPhase.DISCONNECTED,
+                            )
+                        }
+                        pollJob = null
+                        break
+                    }
                 }
                 state.update {
                     it.copy(
@@ -541,19 +598,20 @@ class LabController(private val app: Application) {
             val device = repo.device(lowEnergy.address)
             if (device != null && inspectBle(device)) {
                 val pairs = bleCandidates(state.value.gatt).take(3)
-                trace("Pares GATT candidatos ${pairs.size}")
+                trace("Pares GATT candidatos ${pairs.size}: ${pairs.joinToString { "${it.first.takeLast(8)}/${it.second.takeLast(8)}" }}")
                 for ((write, notify) in pairs) {
                     val inspector = ble ?: break
                     try {
                         val raw = inspector.selectAndValidate(write, notify)
                         bindProductionTransport(inspector)
+                        promote()
                         openSession(inspector.name)
                         state.update { it.copy(bleValidated = true, error = null, statusLine = "BLE validado con ATI.") }
-                        trace("ATI de validación BLE:\n$raw")
+                        trace("ATI de validación BLE ($write / $notify):\n$raw")
                         break
                     } catch (error: Exception) {
                         errors += "Validación BLE $write: ${error.message}"
-                        trace("VALIDACION BLE falló: ${error.message}")
+                        trace("VALIDACION BLE falló $write/$notify: ${error.message}")
                     }
                 }
                 if (state.value.bleValidated) {
@@ -592,16 +650,21 @@ class LabController(private val app: Application) {
         while (System.currentTimeMillis() < deadline) {
             round += 1
             for (pid in interesting) {
+                val t0 = System.currentTimeMillis()
                 val reading = current.readPid(pid)
-                samples = samples + Sample(
+                val latency = System.currentTimeMillis() - t0
+                val sample = Sample(
                     System.currentTimeMillis(), pid, reading.name, reading.value, reading.unit,
                     reading.valid, reading.suspect, reading.raw.joinToString(" ") { "%02X".format(it) },
                 )
+                samples = samples + sample
+                telemetryStore.appendMeasurement(sessionId, sample, latency, VehicleTelemetryEngine.bandFor(pid).name)
             }
             if (interesting.isEmpty()) break
             delay(400)
         }
         samples = samples.takeLast(400)
+        refreshSessionHistory()
         val metrics = SessionTimeMetrics.fromTimestamps(samples.map { it.atEpochMs })
         state.update {
             it.copy(
@@ -975,13 +1038,14 @@ class LabController(private val app: Application) {
     companion object {
         fun bleCandidates(rows: List<GattCharView>): List<Pair<String, String>> {
             val both = rows.filter { it.canWrite && it.canNotify }.map { it.uuid to it.uuid }
-            if (both.isNotEmpty()) return both
             val writes = rows.filter { it.canWrite }
             val notifies = rows.filter { it.canNotify }
             val same = writes.flatMap { write ->
                 notifies.filter { it.serviceUuid == write.serviceUuid }.map { write.uuid to it.uuid }
             }
-            return same.ifEmpty { writes.flatMap { write -> notifies.map { write.uuid to it.uuid } } }.distinct()
+            val cross = writes.flatMap { write -> notifies.map { write.uuid to it.uuid } }
+            val raw = (both + same + cross).distinct()
+            return GattObdProfile.rankCandidates(raw)
         }
     }
 }
