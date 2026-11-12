@@ -36,6 +36,9 @@ import app.jac.diagnosticlab.obd.FreezeNote
 import app.jac.diagnosticlab.obd.decodeFreeze
 import app.jac.diagnosticlab.obd.decodeVin
 import app.jac.diagnosticlab.obd.milFromPayload
+import app.jac.diagnosticlab.elm.InitReport
+import app.jac.diagnosticlab.obd.PidDecoder
+import app.jac.diagnosticlab.obd.parseAdapterVoltage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -219,7 +222,7 @@ class LabController(private val app: Application) {
                     state.update { it.copy(samples = samples, exchanges = current.exchanges.toList()) }
                 }
                 val voltage = current.exchange("ATRV", 2500)
-                val parsed = app.jac.diagnosticlab.obd.parseAdapterVoltage(voltage.raw)
+                val parsed = parseAdapterVoltage(voltage.raw)
                 if (parsed != null) {
                     samples = (samples + Sample(System.currentTimeMillis(), -1, "Tensión estimada del adaptador", parsed, "V", true, parsed < 11.6 || parsed > 15.2, voltage.raw.trim())).takeLast(240)
                 }
@@ -264,7 +267,7 @@ class LabController(private val app: Application) {
         state.update { it.copy(busy = true, statusLine = "Consultando soporte del VIN.") }
         val support = current.exchange("0900", 8000)
         val bitmap = support.frames.firstOrNull { it.payload.size >= 6 && it.payload[0] == 0x49 && it.payload[1] == 0x00 }?.payload?.drop(2)
-        val supported = bitmap != null && bitmap.size >= 4 && app.jac.diagnosticlab.obd.PidDecoder.supported(0x00, bitmap).contains(0x02)
+        val supported = bitmap != null && bitmap.size >= 4 && PidDecoder.supported(0x00, bitmap).contains(0x02)
         if (!supported) {
             state.update { it.copy(busy = false, statusLine = "La ECU no informó soporte del PID 0902. No se pidió el VIN.") }
             persist()
@@ -463,10 +466,10 @@ class LabController(private val app: Application) {
     private suspend fun readSupportedInternal() {
         val current = session ?: return
         val first = current.readPid(0x00)
-        var supported = if (first.valid) app.jac.diagnosticlab.obd.PidDecoder.supported(0x00, first.raw) else emptySet()
+        var supported = if (first.valid) PidDecoder.supported(0x00, first.raw) else emptySet()
         if (0x20 in supported) {
             val next = current.readPid(0x20)
-            if (next.valid) supported = supported + app.jac.diagnosticlab.obd.PidDecoder.supported(0x20, next.raw)
+            if (next.valid) supported = supported + PidDecoder.supported(0x20, next.raw)
         }
         state.update { it.copy(supported = supported, exchanges = current.exchanges.toList(), statusLine = "PIDs soportados: ${supported.size}.") }
     }
@@ -480,7 +483,7 @@ class LabController(private val app: Application) {
         state.update { it.copy(transportKind = kind, link = "Conectado", sessionId = sessionId, error = null, busy = false) }
     }
 
-    private fun applyInit(report: app.jac.diagnosticlab.elm.InitReport) {
+    private fun applyInit(report: InitReport) {
         state.update {
             it.copy(
                 adapterId = report.adapterIdentity,
@@ -504,7 +507,7 @@ class LabController(private val app: Application) {
         val milFrame = current.exchanges.lastOrNull { it.command == "0101" && it.kind == ResponseKind.OBD_DATA }?.frames?.firstOrNull()
         val mil = milFrame?.payload?.let { milFromPayload(it) }?.first
         val rpm = current.samples.lastOrNull { it.pid == 0x0C && it.valid }?.value
-        val voltage = app.jac.diagnosticlab.obd.parseAdapterVoltage(current.voltageText)
+        val voltage = parseAdapterVoltage(current.voltageText)
             ?: current.samples.lastOrNull { it.pid == -1 }?.value
         val report = JacAnalysis.evaluate(
             AnalysisInput(

@@ -88,7 +88,7 @@ Después, si el adaptador respondió, se leen `03`, `07`, `0A` y, si el mapa lo 
 
 Cada sesión se guarda en el almacenamiento privado de la aplicación. Desde la pantalla Evidencia se exporta JSON, CSV o TXT con el selector de archivos de Android. Puede anonimizar el VIN y la dirección Bluetooth antes de exportar. No hay permiso de internet y la copia de seguridad automática está desactivada.
 
-Los archivos de `evidence\samples\` son transcripciones simuladas para las pruebas. No son lecturas de la camioneta. La evidencia del teléfono, si la sesión automática llega a correr, queda en `evidence\captured\`.
+Los archivos de `evidence\samples\` son transcripciones simuladas para las pruebas. No son lecturas de la camioneta. Lo que sí ocurrió con el teléfono está en `evidence\captured\`.
 
 ## Limitaciones
 
@@ -102,4 +102,12 @@ Los archivos de `evidence\samples\` son transcripciones simuladas para las prueb
 
 ## Prueba en el vehículo
 
-Pendiente de completar con la transcripción capturada en esta misma sesión de trabajo.
+Intento del 11 de noviembre de 2026, con la camioneta descrita como JAC T8 encendida y estacionada y el ELM327 Mini Bluetooth en el puerto OBD-II.
+
+El proyecto compiló. `testDebugUnitTest` ejecutó 14 pruebas y ninguna falló. La APK debug quedó en `dist\jac-diagnostic-lab-debug.apk` (11 942 827 bytes, SHA-256 `CE0F84A1C36CAB036D06D24CF5B4FD4223B4B43F97E9037AD81773F446EBD081`).
+
+El teléfono Xiaomi 2512BPNDAG seguía en ADB como `device`. `adb install` no instaló el paquete: HyperOS abrió `AdbInstallActivity` con la pantalla bloqueada (`isKeyguardLocked:true`, actividad no visible) y PackageManager cerró la sesión con `INSTALL_FAILED_USER_RESTRICTED: Install canceled by user`. `pm path app.jac.diagnosticlab` no encontró la aplicación.
+
+Antes de ese intento, `settings get global bluetooth_on` devolvía 0. Se ejecutó `svc bluetooth enable` y el valor pasó a 1. No hubo escaneo OBDII/OBDBLE, ni ATZ, ni 0100, ni lectura de DTC, porque la aplicación no llegó a abrirse. No hay respuesta del adaptador. Eso no dice nada sobre fallas de la camioneta.
+
+Para continuar hace falta desbloquear el teléfono, aceptar en HyperOS la instalación por USB y volver a lanzar la actividad con el extra `autodiag`. La transcripción de este intento está en `evidence\captured\`.

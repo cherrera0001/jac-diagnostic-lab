@@ -1,0 +1,9 @@
+﻿Extracto del logcat del 11 de noviembre de 2026, 21:28 hora local. Solo las líneas que explican por qué no se instaló la APK.
+
+11-11 21:28:15.369 ActivityTaskManager: AdbInstallActivity isKeyguardLocked:true nonFinishingActivityCount:0
+11-11 21:28:15.397 Pm: install msg : Failure [INSTALL_CANCELED_BY_USER]
+11-11 21:28:15.397 PKMSImpl: MIUILOG- assertCallerAndPackage: uid=2000, installerPkg=null, packageName: app.jac.diagnosticlab, msg=Install canceled by user
+11-11 21:28:15.397 PackageInstallerSession: Marking session 963662498 as failed: INSTALL_FAILED_USER_RESTRICTED: Install canceled by user
+11-11 21:28:15.398 PackageInstallerSession: Session [963662498] was destroyed because of [Session marked as failed: INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]
+
+La actividad de confirmación de HyperOS (com.miui.securitycenter/com.miui.permcenter.install.AdbInstallActivity) se creó con isVisible:false e isSleeping:true. No hubo confirmación en pantalla.

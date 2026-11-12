@@ -164,7 +164,6 @@ class ClassicElmTransport(
             }
             socket = opened
             try {
-                opened.soTimeout = 300
                 withTimeout(10_000) {
                     runInterruptible(Dispatchers.IO) { opened.connect() }
                 }
@@ -208,15 +207,17 @@ class ClassicElmTransport(
                 val buffer = ByteArray(512)
                 val deadline = System.currentTimeMillis() + timeoutMs
                 while (System.currentTimeMillis() < deadline) {
-                    try {
-                        val count = input.read(buffer)
-                        if (count < 0) {
-                            return@withContext TransportResult(assembler.partial(), false, false, true, "fin de stream")
-                        }
-                        val done = assembler.append(String(buffer, 0, count, Charsets.ISO_8859_1))
-                        if (done != null) return@withContext TransportResult(done, true, false, false, null)
-                    } catch (_: java.net.SocketTimeoutException) {
+                    val ready = input.available()
+                    if (ready <= 0) {
+                        delay(40)
+                        continue
                     }
+                    val count = input.read(buffer)
+                    if (count < 0) {
+                        return@withContext TransportResult(assembler.partial(), false, false, true, "fin de stream")
+                    }
+                    val done = assembler.append(String(buffer, 0, count, Charsets.ISO_8859_1))
+                    if (done != null) return@withContext TransportResult(done, true, false, false, null)
                 }
                 TransportResult(assembler.partial(), false, true, false, "timeout")
             } catch (error: Exception) {

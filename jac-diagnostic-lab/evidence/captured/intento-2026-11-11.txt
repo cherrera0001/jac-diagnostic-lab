@@ -1,0 +1,36 @@
+Intento real del 11 de noviembre de 2026. No es una lectura del vehículo.
+
+Vehículo declarado por el dueño: JAC T8 (escribió «JACT T8»), encendida y estacionada, ELM327 Mini Bluetooth en el OBD-II.
+Teléfono visto por ADB: Xiaomi 2512BPNDAG, product nezha_global, serial a525a763, estado device.
+
+Compilación
+- Gradle 9.6.0, AGP 9.5.1, Kotlin 2.4.21, compileSdk 37.
+- :app:testDebugUnitTest y :app:assembleDebug terminaron BUILD SUCCESSFUL.
+- ProtocolTest: 14 pruebas, 0 fallos, 0 errores.
+- APK: dist/jac-diagnostic-lab-debug.apk
+- Tamaño: 11942827 bytes
+- SHA-256: CE0F84A1C36CAB036D06D24CF5B4FD4223B4B43F97E9037AD81773F446EBD081
+
+Instalación
+- adb install -r -t devolvió:
+  Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]
+- HyperOS abrió com.miui.securitycenter/com.miui.permcenter.install.AdbInstallActivity.
+- La actividad quedó detrás del bloqueo: isKeyguardLocked:true, isVisible:false, isSleeping:true.
+- PackageManager: INSTALL_CANCELED_BY_USER y luego INSTALL_FAILED_USER_RESTRICTED.
+- pm path app.jac.diagnosticlab no devolvió ruta. La aplicación no quedó instalada.
+
+Bluetooth
+- Al empezar, settings get global bluetooth_on era 0.
+- svc bluetooth enable respondió Success y el valor pasó a 1.
+- No se descubrieron OBDII ni OBDBLE: la aplicación no se ejecutó.
+
+Comandos OBD
+- No se envió ATZ, ATE0, ATL0, ATS0, ATH1, ATI, ATSP0, ATDP, ATDPN, ATRV, 0100, 03, 07 ni 0A.
+- No hay respuesta capturada del adaptador.
+- Este archivo no afirma que la camioneta esté sin fallas ni que el enlace Bluetooth funcione.
+
+Siguiente paso bloqueado
+- Desbloquear el teléfono y aceptar la instalación por USB de HyperOS.
+- Repetir adb install y abrir MainActivity con el extra autodiag true.
+
+Detalle del log: instalacion-usb-log.txt
