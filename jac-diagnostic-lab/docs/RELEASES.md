@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.2.0 — Aislamiento lab + cierre DIAG P0
+
+- **Tag:** `v1.2.0`
+- **versionCode:** 13
+- **Fecha:** 2026-11-12
+- **APK:** `jac-diagnostic-lab-1.2.0-debug.apk`
+- **URL:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.2.0
+
+`TransportKind` + `ResearchLabTransport` + `TransportIsolation` (LAB-CAN-001). Docs SEC-BT / TARA unidad. Issues DIAG-002…006 cerrados. SAFE-001 sigue abierto hasta taller.
+
 ## v1.1.0 — Monitor de taller + APK pública
 
 - **Tag:** `v1.1.0`

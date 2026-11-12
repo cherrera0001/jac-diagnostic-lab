@@ -2,17 +2,20 @@
 
 **PROHIBIDO** conectar estos simuladores al vehículo real.
 
-Estructura prevista:
+| Carpeta | Rol | Estado |
+| --- | --- | --- |
+| `elm327-emulator/` | Respuestas AT/OBD scriptables | Fixtures + `ResearchLabTransport` |
+| `can-simulator/` | Bus / vcan simulado | Política + aislamiento documentado |
+| `ecu-simulator/` | ECU ISO-TP mínima | Pendiente |
+| `gateway-policy/` | Filtrado OBD→CAN (diseño) | Pendiente |
+| `security-test-cases/` | Casos adversariales | Pendiente |
 
-| Carpeta | Rol |
-|---|---|
-| `elm327-emulator/` | Respuestas AT/OBD scriptables |
-| `ecu-simulator/` | ECU ISO-TP mínima |
-| `can-simulator/` | Bus simulado |
-| `gateway-policy/` | Políticas de filtrado OBD→CAN (diseño) |
-| `security-test-cases/` | Casos adversariales reproducibles |
+## Separación de transportes (LAB-CAN-001)
 
-Estado 2026-11-11: esqueleto + política de aislamiento documentada.
-Implementación de emuladores: Hito 5 (pendiente).
+En `jac-diagnostic-lab`:
 
-Criterio de aislamiento: el código de lab no importa el transporte Bluetooth de `jac-diagnostic-lab` ni escribe a sockets RFCOMM/GATT del teléfono conectado al vehículo.
+- `TransportKind.ProductionVehicle` — RFCOMM/GATT reales (`ClassicElmTransport`, `BleInspector`).
+- `TransportKind.ResearchLab` — `ResearchLabTransport` / `FakeObdTransport` en tests.
+- `LabController.bindProductionTransport` llama a `TransportIsolation.assertProductionOnly`.
+
+Criterio de aislamiento: el código de lab no escribe a sockets RFCOMM/GATT del teléfono conectado al vehículo.

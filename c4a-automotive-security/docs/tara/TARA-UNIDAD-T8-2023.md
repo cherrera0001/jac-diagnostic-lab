@@ -1,9 +1,10 @@
 # TARA — unidad declarada JAC T8 2023
 
-**Estado:** borrador con evidencia parcial  
+**Estado:** cerrado como TARA de unidad con límites de confianza explícitos (sin CVSS de vehículo inventado)  
 **Issue:** [#10 SEC-TARA-001](https://github.com/cherrera0001/jac-diagnostic-lab/issues/10)  
 **Fecha:** 2026-11-12  
-**Unidad:** JAC T8, año **declarado** 2023 (no leído de la ECU)
+**Unidad:** JAC T8, año **declarado** 2023 (no leído de la ECU)  
+**Complemento BT:** [SEC-BT-001](../bluetooth/SEC-BT-001-caracterizacion.md)
 
 ## Activos
 
