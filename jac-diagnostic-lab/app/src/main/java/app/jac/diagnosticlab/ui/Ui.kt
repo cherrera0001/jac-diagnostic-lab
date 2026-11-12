@@ -117,6 +117,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun stopPoll() = lab.stopPoll()
     fun startOrderedMonitor() = lab.startOrderedMonitor()
     fun reconnectAndResumeMonitor() = lab.reconnectAndResumeMonitor()
+    fun forceResetAll() = lab.forceResetAll()
     fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
     fun clearSnapshots() = lab.clearSnapshots()
     fun refreshCapabilities() = lab.refreshCapabilities()
@@ -212,6 +213,20 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             if (tab != 0) {
                 Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
                 Text("Fase: ${state.linkPhase.label}", fontSize = 12.sp, color = Color(0xFF9AA3AD))
+            }
+            if (state.busy) {
+                Text(
+                    "Ocupada: ${state.statusLine}. Si no responde, use Limpiar todo / Reset.",
+                    color = Color(0xFFFF8A80),
+                    fontSize = 13.sp,
+                )
+            }
+            // Siempre habilitado: sale del pegado busy/compuerta sin forzar detención del sistema.
+            OutlinedButton(
+                onClick = { model.forceResetAll() },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (state.busy) "Limpiar todo / Reset (desbloquear ahora)" else "Limpiar todo / Reset")
             }
             if (state.error != null) {
                 Card(Modifier.fillMaxWidth()) {
@@ -653,8 +668,11 @@ private fun MonitorScreen(state: LabState, model: DiagnosticViewModel, requestPe
     ) {
         Text("Reconectar y continuar captura")
     }
-    OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling, modifier = Modifier.fillMaxWidth()) {
+    OutlinedButton(onClick = { model.stopPoll() }, enabled = state.polling || state.busy, modifier = Modifier.fillMaxWidth()) {
         Text("Detener monitor")
+    }
+    OutlinedButton(onClick = { model.forceResetAll() }, modifier = Modifier.fillMaxWidth()) {
+        Text("Limpiar todo / Reset")
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         Button(onClick = { model.captureSnapshot("antes") }, modifier = Modifier.weight(1f), enabled = state.samples.isNotEmpty() || state.dtcs.isNotEmpty()) {

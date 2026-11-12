@@ -525,6 +525,7 @@ class LabController(private val app: Application) {
 
     fun disconnect() {
         stopPoll()
+        autodiagGate.set(false)
         scope.launch(Dispatchers.IO) {
             try {
                 transport?.disconnect()
@@ -535,16 +536,81 @@ class LabController(private val app: Application) {
         session = null
         ble = null
         app.stopService(Intent(app, DiagnosticConnectionService::class.java))
-        state.update { it.copy(link = "Desconectado", bleValidated = false, busy = false, statusLine = "Desconectado. La evidencia guardada no se borró.") }
+        state.update {
+            it.copy(
+                link = "Desconectado",
+                bleValidated = false,
+                busy = false,
+                polling = false,
+                linkPhase = LinkPhase.DISCONNECTED,
+                statusLine = "Desconectado. La evidencia guardada no se borró.",
+            )
+        }
+    }
+
+    /**
+     * Escape hatch: cancela monitor, libera la compuerta de autodiag, corta BT y limpia RAM.
+     * Los archivos ya guardados en sessions/telemetry no se borran.
+     * Siempre usable aunque [LabState.busy] esté pegado.
+     */
+    fun forceResetAll() {
+        trace("RESET TOTAL: liberando busy/compuerta/enlace")
+        pollJob?.cancel()
+        pollJob = null
+        telemetry.pause()
+        telemetry.reset()
+        autodiagGate.set(false)
+        val oldTransport = transport
+        transport = null
+        session = null
+        ble = null
+        scope.launch(Dispatchers.IO) {
+            runCatching { oldTransport?.disconnect() }
+            runCatching { app.stopService(Intent(app, DiagnosticConnectionService::class.java)) }
+        }
+        dtcs = emptyList()
+        freeze = emptyList()
+        samples = emptyList()
+        errors.clear()
+        sessionId = newId()
+        startedAt = System.currentTimeMillis()
+        state.update {
+            LabState(
+                bluetoothOn = it.bluetoothOn,
+                devices = it.devices,
+                selectedAddress = it.selectedAddress,
+                sessionId = sessionId,
+                symptoms = it.symptoms,
+                declaredModel = it.declaredModel,
+                declaredYear = it.declaredYear,
+                authorizeVin = it.authorizeVin,
+                protocol = it.protocol,
+                intervalMs = it.intervalMs,
+                statusLine = "Reset completo. UI desbloqueada. Archivos previos siguen en el teléfono.",
+                link = "Desconectado",
+                linkPhase = LinkPhase.DISCONNECTED,
+                busy = false,
+                polling = false,
+                bleValidated = false,
+                error = null,
+                recovery = "Puede volver a Leer / Reconectar. No hace falta forzar detención de la app.",
+                sessionHistory = telemetryStore.listSessions(),
+            )
+        }
+        refreshSessionHistory()
     }
 
     fun startAutodiag() {
-        if (!autodiagGate.compareAndSet(false, true)) return
+        if (!autodiagGate.compareAndSet(false, true)) {
+            explain("Hay otra secuencia en curso o la UI quedó bloqueada. Pulse «Limpiar todo / Reset» y reintente.")
+            return
+        }
         scope.launch {
             try {
                 autodiagnose()
             } finally {
                 autodiagGate.set(false)
+                state.update { it.copy(busy = false) }
             }
         }
     }
@@ -665,12 +731,16 @@ class LabController(private val app: Application) {
      * Pensado para cuando el enlace cae durante la revisión.
      */
     fun reconnectAndResumeMonitor() {
-        if (!autodiagGate.compareAndSet(false, true)) return
+        if (!autodiagGate.compareAndSet(false, true)) {
+            explain("Reconexión bloqueada por otra tarea. Pulse «Limpiar todo / Reset» y luego Reconectar.")
+            return
+        }
         scope.launch {
             try {
                 reconnectKeepEvidence()
             } finally {
                 autodiagGate.set(false)
+                state.update { it.copy(busy = false) }
             }
         }
     }

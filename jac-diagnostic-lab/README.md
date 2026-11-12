@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.7.0** (`versionCode` 19) — 12-11-2026. Auto-monitor tras lectura, reconexión con fallback clásico y CI.
+**Versión actual: 1.7.1** (`versionCode` 20) — 12-11-2026. Botón Limpiar todo / Reset siempre visible para desbloquear la UI.
 
 Auditoría Sprint 0: [docs/audits/current-codebase-assessment.md](docs/audits/current-codebase-assessment.md).
 

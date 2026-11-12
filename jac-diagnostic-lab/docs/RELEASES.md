@@ -2,6 +2,14 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.7.1 — Limpiar todo / Reset
+
+- **Tag:** `v1.7.1`
+- **versionCode:** 20
+- **Fecha:** 2026-11-12
+
+Botón siempre habilitado en todas las pestañas: corta BT, cancela monitor, libera `busy`/compuerta de autodiag y limpia RAM. No borra sessions/telemetry ya guardados. Evita forzar detención desde Android.
+
 ## v1.7.0 — Completar captura (auto-monitor + reconectar)
 
 - **Tag:** `v1.7.0`
