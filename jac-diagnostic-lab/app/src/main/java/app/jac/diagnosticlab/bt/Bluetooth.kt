@@ -415,16 +415,26 @@ class BleInspector(
             BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
         }
         val bytes = (command.trim() + "\r").toByteArray(Charsets.US_ASCII)
-        val queued = withContext(Dispatchers.Main) {
-            if (Build.VERSION.SDK_INT >= 33) {
-                g.writeCharacteristic(characteristic, bytes, type) == BluetoothStatusCodes.SUCCESS
-            } else {
-                characteristic.writeType = type
-                characteristic.value = bytes
-                g.writeCharacteristic(characteristic)
+        // La pila BLE puede quedar ocupada un instante (ERROR_GATT_WRITE_REQUEST_BUSY). Se reintenta;
+        // si sigue rechazando, el enlace se declara caído para que la app reconecte (antes quedaba en
+        // TIMEOUT de 0 ms para siempre: sesión real 2026-11-18 tras 020200).
+        var lastStatus = -1
+        var queued = false
+        for (attempt in 1..4) {
+            queued = withContext(Dispatchers.Main) {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    lastStatus = g.writeCharacteristic(characteristic, bytes, type)
+                    lastStatus == BluetoothStatusCodes.SUCCESS
+                } else {
+                    characteristic.writeType = type
+                    characteristic.value = bytes
+                    g.writeCharacteristic(characteristic)
+                }
             }
+            if (queued) break
+            kotlinx.coroutines.delay(150L * attempt)
         }
-        if (!queued) return TransportResult("", false, false, false, "Android rechazó la escritura GATT")
+        if (!queued) return TransportResult("", false, false, true, "Android rechazó la escritura GATT 4 veces (estado $lastStatus): enlace BLE bloqueado")
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             val wait = deadline - System.currentTimeMillis()
@@ -436,7 +446,26 @@ class BleInspector(
             val done = assembler.append(String(chunk, Charsets.ISO_8859_1))
             if (done != null) return TransportResult(done, true, false, false, null)
         }
+        // El ELM sigue ocupado con este comando: un CR lo cancela y se espera su «>» para que el
+        // siguiente comando no choque con la respuesta tardía.
+        abortPending(g, characteristic, type)
         TransportResult(assembler.partial(), false, true, false, "timeout BLE")
+    }
+
+    private suspend fun abortPending(g: BluetoothGatt, characteristic: BluetoothGattCharacteristic, type: Int) {
+        val cr = "\r".toByteArray(Charsets.US_ASCII)
+        withContext(Dispatchers.Main) {
+            if (Build.VERSION.SDK_INT >= 33) g.writeCharacteristic(characteristic, cr, type)
+            else { characteristic.writeType = type; characteristic.value = cr; g.writeCharacteristic(characteristic) }
+        }
+        kotlinx.coroutines.withTimeoutOrNull(1500) {
+            while (true) {
+                val chunk = incoming.receive()
+                if (String(chunk, Charsets.ISO_8859_1).contains('>')) break
+            }
+        }
+        while (incoming.tryReceive().getOrNull() != null) {
+        }
     }
 
     private fun find(uuid: String, notify: Boolean): BluetoothGattCharacteristic {

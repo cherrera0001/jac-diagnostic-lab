@@ -78,17 +78,40 @@ class WorkshopReportTest {
 
         assertFalse(text.contains("INCOMPLETO"))
         assertTrue(text.contains("JAC Diagnostic Lab v1.10.0 (23)"))
-        assertTrue(text.contains("VIN (leído de la ECU, 0902): SYNTHETICP0000001. Año modelo según ISO 3779: 2023"))
-        assertTrue(text.contains("• P0087 (almacenado): Presión de riel muy baja — causó el cuadro congelado"))
-        assertTrue(text.contains("PID 23: ahora sin dato · congelado"))
-        assertTrue(text.contains("PID 0C: ahora"))
-        // Unidades con «%» no rompen el texto (antes se pasaba por String.format).
-        assertFalse(text.contains("Exception"))
+        assertTrue(text.contains("SYNTHETICP0000001 · año modelo 2023 (ISO 3779)"))
+        assertTrue(text.contains("Requiere revisión: 1 código(s) de falla — P0087"))
+        assertTrue(text.contains("P0087 | almacenado | Presión de riel muy baja — guardó el cuadro congelado"))
         assertTrue(text.contains("presión de riel real contra deseada"))
-        assertTrue(text.contains("Mode 06 FUERA de límite: Presión de riel = 9 MPa (mín 10, máx 20)"))
+        assertTrue(text.contains("85/01 | Presión de riel | 9 MPa | 10 | 20 | FUERA"))
         assertTrue(text.contains("REVISAR Combustible: Presión baja"))
-        assertTrue(text.contains("ECU 7E8: SYNTCAL01"))
-        assertTrue(text.contains("0902 → NO_DATA"))
+        assertTrue(text.contains("0904 | 7E8 | SYNTCAL01"))
+        assertTrue(text.contains("0902 | NO_DATA"))
         assertTrue(text.contains(WorkshopReport.SCOPE_NOTE))
+    }
+
+    @Test
+    fun r16_realSessionIssuesAreHandled() {
+        // Sesión real 2026-11-18 (bytes reales, VIN omitido): P0579 almacenado y pendiente, 0A rechazado, ceros del cuadro congelado.
+        val p0579s = DtcHit("P0579", 0x05, 0x79, DtcScope.GENERIC, "", "7E8", DtcCategory.STORED)
+        val dtcs = listOf(
+            DtcReadResult(DtcCategory.STORED, app.jac.diagnosticlab.elm.ResponseKind.OBD_DATA, listOf(p0579s, p0579s.copy(code = "P2299", hi = 0x22, lo = 0x99)), false, "7E806430205792299", ""),
+            DtcReadResult(DtcCategory.PENDING, app.jac.diagnosticlab.elm.ResponseKind.OBD_DATA, listOf(p0579s.copy(category = DtcCategory.PENDING)), false, "7E80447010579", ""),
+            DtcReadResult(DtcCategory.PERMANENT, app.jac.diagnosticlab.elm.ResponseKind.OBD_DATA, emptyList(), false, "7E8037F0A13", ""),
+        )
+        val freeze = listOf(
+            FreezeFrame.decode(0x0C, ex("020C00", "7E8 05 42 0C 00 15 99"))!!,
+            FreezeFrame.decode(0x33, ex("023300", "7E8 04 42 33 00 00"))!!,
+            FreezeFrame.decode(0x49, ex("024900", "7E8 04 42 49 00 00"))!!,
+        )
+        val input = empty().copy(dtcs = dtcs, freezeValues = freeze, freezeNotes = listOf(FreezeNote("7E8054202000579", "P0579", "")))
+        assertEquals(listOf("P0579", "P2299"), WorkshopReport.codes(input).map { it.first })
+        assertTrue(WorkshopReport.refused(dtcs[2]))
+        assertTrue(WorkshopReport.freezeZerosUnreliable(input))
+        val text = WorkshopReport.build(input, ZoneId.of("UTC")).lines.joinToString("\n")
+        assertTrue(text.contains("Requiere revisión: 2 código(s) de falla — P0579, P2299"))
+        assertTrue(text.contains("P0579 (almacenado, pendiente) + P2299 (almacenado)"))
+        assertTrue(text.contains("la ECU no admite este servicio"))
+        assertTrue(text.contains("0 % · no capturado"))
+        assertTrue(text.contains("Tope de goma del pedal de freno"))
     }
 }

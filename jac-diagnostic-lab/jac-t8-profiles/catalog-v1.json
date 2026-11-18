@@ -216,9 +216,10 @@
     {
       "id": "DELPHI_DCM62_PN",
       "supplier": "Delphi",
-      "family": "DCM6.2 (JAC P/N 1026400FD020, variante no determinada)",
+      "family": "DCM6.2 (familia; JAC P/N 1026400FD020; variante AP / AP-6D no determinada)",
       "engine_scope": "JAC T6/T8; T8 2.0TDI 2024 137 hp (ecufiles)",
       "identifiers": [
+        "DCM6.2",
         "1026400FD020",
         "1026400FD020B054",
         "1MJACLSA_A010D11"
@@ -228,7 +229,7 @@
         "S35",
         "S34"
       ],
-      "note": "Número de pieza JAC y software listados por catálogo de tuning y repuestos. No dice si es AP o AP-6D."
+      "note": "Familia DCM6.2 (S21) y número de pieza JAC. Unidad real 2026-11-18: CALID 0904 = «DCM6.2». No dice si es AP o AP-6D: confirmar con la etiqueta."
     },
     {
       "id": "DELPHI_MT80",

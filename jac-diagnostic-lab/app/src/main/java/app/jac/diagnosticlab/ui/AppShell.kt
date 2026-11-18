@@ -123,7 +123,7 @@ fun AppShell(
         ) {
             state.error?.let { ErrorStrip(it, state.recovery) }
             when (tab) {
-                0 -> StatusTab(state, actions)
+                0 -> StatusTab(state, actions) { tab = 3 }
                 1 -> LiveTab(state, actions)
                 2 -> TestsTab(state, actions)
                 3 -> DataTab(state)
@@ -187,7 +187,7 @@ private fun ErrorStrip(error: String, recovery: String?) {
 /* ─────────────────────────── Estado ─────────────────────────── */
 
 @Composable
-private fun StatusTab(state: LabState, actions: ShellActions) {
+private fun StatusTab(state: LabState, actions: ShellActions, openData: () -> Unit) {
     val connected = state.ecuTalking && state.linkPhase != LinkPhase.DISCONNECTED
     if (state.health.isEmpty()) {
         Hero(
@@ -221,10 +221,44 @@ private fun StatusTab(state: LabState, actions: ShellActions) {
         color = tone(overall),
     )
 
+    OutlinedButton(onClick = openData, modifier = Modifier.fillMaxWidth()) { Text("Ver los ${state.scanSignals.size} datos leídos", color = Text1) }
+
+    // Cada problema y aviso se puede abrir: qué es, con qué dato se detectó y qué hacer.
+    val findings = state.health.filter { it.status == HealthStatus.CHECK || it.status == HealthStatus.ATTENTION }.sortedByDescending { it.status.rank }
+    if (findings.isNotEmpty()) {
+        SectionTitle("Problemas y avisos (toque para ver el detalle)")
+        var openFinding by rememberSaveable { mutableStateOf<Int?>(null) }
+        findings.forEachIndexed { idx, item ->
+            val isOpen = openFinding == idx
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (isOpen) Panel2 else Panel)
+                    .clickable { openFinding = if (isOpen) null else idx }.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.status.label, color = tone(item.status), fontWeight = FontWeight.Bold, fontSize = 12.sp, modifier = Modifier.width(84.dp))
+                    Text("${item.system}: ${item.title}", color = Text1, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                    Text(if (isOpen) "▲" else "▼", color = Text2, fontSize = 12.sp)
+                }
+                if (isOpen) {
+                    Text(item.detail, color = Text1, fontSize = 13.sp)
+                    Text("Dato: ${item.evidence}", color = Text2, fontSize = 12.sp)
+                }
+            }
+        }
+    }
+
     if (stored.isNotEmpty() || pending.isNotEmpty()) {
-        SectionTitle("Códigos de falla")
-        stored.forEach { DtcRow(it, "Guardado", HealthStatus.CHECK) }
-        pending.forEach { DtcRow(it, "Pendiente", HealthStatus.ATTENTION) }
+        SectionTitle("Códigos de falla (toque para ver qué revisar)")
+        var openCode by rememberSaveable { mutableStateOf<String?>(null) }
+        (stored.map { it to "Guardado" } + pending.map { it to "Pendiente" }).forEach { (code, kind) ->
+            val key = "$code-$kind"
+            val alsoPending = kind == "Guardado" && state.dtcs.any { r -> r.category == DtcCategory.PENDING && r.codes.any { it.code == code } }
+            DtcRow(code, if (alsoPending) "Guardado y pendiente (volvió a detectarse)" else kind, if (kind == "Guardado") HealthStatus.CHECK else HealthStatus.ATTENTION) {
+                openCode = if (openCode == key) null else key
+            }
+            if (openCode == key) DtcDetail(code, state)
+        }
     }
 
     SectionTitle("Sistemas")
@@ -296,9 +330,35 @@ private fun Hero(title: String, subtitle: String, color: Color) {
 }
 
 @Composable
-private fun DtcRow(code: String, kind: String, status: HealthStatus) {
+private fun DtcDetail(code: String, state: LabState) {
+    val hint = app.jac.diagnosticlab.report.WorkshopReport.hints[code]
+    val byPid = state.scanSignals.groupBy { it.pid }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel2).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (hint == null) {
+            Text("La app no tiene guía para $code. Buscarlo en el manual de taller JAC con el cuadro congelado (Informe → PDF de taller).", color = Text1, fontSize = 13.sp)
+            return@Column
+        }
+        Text(hint.meaning, color = Text1, fontSize = 13.sp)
+        Text("Ahora / al guardarse la falla", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        hint.related.forEach { pid ->
+            val now = byPid[pid]?.firstOrNull()
+            val frz = state.freezeValues.firstOrNull { it.pid == pid }?.signals?.firstOrNull()
+            if (now != null || frz != null) {
+                val name = now?.name ?: frz?.name.orEmpty()
+                fun v(s: app.jac.diagnosticlab.obd.Signal?) = s?.let { it.text ?: "${it.value?.let { x -> if (x % 1.0 == 0.0) x.toLong().toString() else "%.1f".format(x) } ?: "—"} ${it.unit}" } ?: "—"
+                Text("• $name: ${v(now)}  ·  falla: ${v(frz)}", color = Text2, fontSize = 12.sp)
+            }
+        }
+        Text("Qué revisar, en orden", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        hint.checks.forEachIndexed { i, c -> Text("${i + 1}. $c", color = Text1, fontSize = 13.sp) }
+        Text("Verificación genérica (SAE J2012 + práctica de taller), no procedimiento JAC.", color = Text2, fontSize = 11.sp)
+    }
+}
+
+@Composable
+private fun DtcRow(code: String, kind: String, status: HealthStatus, onClick: () -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Panel).clickable(onClick = onClick).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(code, color = tone(status), fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.width(76.dp))

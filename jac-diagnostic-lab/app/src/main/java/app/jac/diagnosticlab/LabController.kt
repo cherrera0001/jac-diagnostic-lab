@@ -203,6 +203,8 @@ class LabController(private val app: Application) {
     private var freeze: List<FreezeNote> = emptyList()
     private var samples: List<Sample> = emptyList()
     private val errors = mutableListOf<String>()
+    /** Reconexiones automáticas tras enlace BLE bloqueado (el clon v2.1 se cuelga cada pocos minutos). */
+    private var autoReconnects = 0
     private var startedAt = System.currentTimeMillis()
     private var sessionId = newId()
     private val vehicleNote =
@@ -524,6 +526,28 @@ class LabController(private val app: Application) {
                         pollJob = null
                         break
                     }
+                }
+                // Lecturas inválidas seguidas sin excepción también son enlace caído (antes repetía para siempre).
+                if (consecutiveFailures >= 12) {
+                    trace("MONITOR detenido: $consecutiveFailures lecturas fallidas seguidas")
+                    if (autoReconnects < 3) {
+                        autoReconnects++
+                        trace("RECONEXIÓN automática $autoReconnects/3")
+                        scope.launch { delay(1500); reconnectAndResumeMonitor() }
+                    }
+                    state.update {
+                        it.copy(
+                            polling = false,
+                            samples = samples,
+                            channelStats = telemetry.stats(),
+                            statusLine = "ENLACE CAÍDO: $consecutiveFailures lecturas seguidas sin respuesta. Pulse Reconectar.",
+                            error = "El adaptador dejó de responder durante el monitor.",
+                            recovery = "Pulse Reconectar. Si se repite, desenchufe y vuelva a enchufar el adaptador.",
+                            linkPhase = LinkPhase.DISCONNECTED,
+                        )
+                    }
+                    pollJob = null
+                    break
                 }
                 state.update {
                     it.copy(
@@ -1069,6 +1093,17 @@ class LabController(private val app: Application) {
             val readiness = raw[0x01]?.let { ReadinessDecoder.decode(it) }
             val cycle = raw[0x41]?.let { ReadinessDecoder.decode(it, thisCycle = true) }
             trace("ESCANEO pids=${pids.size} recibidos=${raw.size} señales=${signals.size} multiPid=${current.multiPidWorks}")
+            // Enlace muerto: no reemplazar un escaneo bueno por uno vacío (sesión real 2026-11-18 20:42).
+            if (raw.isEmpty() && pids.isNotEmpty()) {
+                state.update {
+                    it.copy(
+                        error = "El adaptador no respondió al escaneo. Se conservan los datos del escaneo anterior.",
+                        recovery = "Pulse Reconectar. Si se repite, desenchufe y vuelva a enchufar el adaptador.",
+                        statusLine = "Escaneo sin respuesta: datos anteriores conservados.",
+                    )
+                }
+                return
+            }
             raw.forEach { (pid, data) -> trace("PID %02X = %s".format(pid, data.joinToString(" ") { "%02X".format(it) })) }
 
             state.update { it.copy(statusLine = "Escaneo completo: pruebas a bordo (Mode 06)…") }
@@ -1183,6 +1218,7 @@ class LabController(private val app: Application) {
             health = st.health,
             exchanges = st.exchanges,
             errors = errors.toList(),
+            tests = st.testResults,
         )
     }
 

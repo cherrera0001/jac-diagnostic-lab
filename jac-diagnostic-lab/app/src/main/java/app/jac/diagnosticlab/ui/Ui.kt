@@ -1265,13 +1265,15 @@ private fun factsFromState(
 private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var pending by remember { mutableStateOf(false) }
+    var saving by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf("") }
     val connected = state.ecuTalking
     val missing = remember(state.scanAtMs, state.dtcs, state.ecuIdentification) { app.jac.diagnosticlab.report.WorkshopReport.missing(model.workshopInput()) }
     fun generate() {
+        if (saving) return
+        saving = true
         runCatching {
-            val doc = app.jac.diagnosticlab.report.WorkshopReport.build(model.workshopInput())
-            val pdf = renderReadingPdf(doc.title, doc.lines, state.appVersion)
+            val pdf = app.jac.diagnosticlab.report.WorkshopPdf.render(app.jac.diagnosticlab.report.WorkshopReport.buildDoc(model.workshopInput()))
             val stamp = state.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
             val name = "JAC-taller-$stamp.pdf"
             val hash = sha256Hex(pdf)
@@ -1280,6 +1282,7 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
             saveDownload(context, "JAC-taller-$stamp.json", model.sessionJson().toByteArray(Charsets.UTF_8), "application/json")
             result = "Guardado en $where (PDF + .sha256 + JSON con el registro completo)."
         }.onFailure { result = "No se pudo guardar el informe. ${it.message.orEmpty()}" }
+        saving = false
     }
     LaunchedEffect(state.busy, state.scanAtMs, pending) {
         if (pending && !state.busy) {
@@ -1298,7 +1301,7 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
                     result = ""
                     if (missing.isEmpty()) generate() else { pending = true; model.fullScan() }
                 },
-                enabled = !state.busy && (missing.isEmpty() || connected),
+                enabled = !saving && !state.busy && (missing.isEmpty() || connected),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (missing.isEmpty()) "Generar informe de taller (PDF)" else "Leer todo y generar informe") }
             if (missing.isNotEmpty() && !connected) Text("Conecte primero con «Conectar y diagnosticar» en Estado.", fontSize = 12.sp)

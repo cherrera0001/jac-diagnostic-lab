@@ -316,9 +316,9 @@ object JacT8Catalog {
                 "Variante distinta de DCM6.2AP. Aplicabilidad a JAC sin fuente descargada.",
             ),
             EcuCandidate(
-                "DELPHI_DCM62_PN", "Delphi", "DCM6.2 (JAC P/N 1026400FD020, variante no determinada)", "JAC T6/T8; T8 2.0TDI 2024 137 hp (ecufiles)",
-                listOf("1026400FD020", "1026400FD020B054", "1MJACLSA_A010D11"), listOf("S21", "S35", "S34"),
-                "Número de pieza JAC y software listados por catálogo de tuning y repuestos. No dice si es AP o AP-6D.",
+                "DELPHI_DCM62_PN", "Delphi", "DCM6.2 (familia; JAC P/N 1026400FD020; variante AP / AP-6D no determinada)", "JAC T6/T8; T8 2.0TDI 2024 137 hp (ecufiles)",
+                listOf("DCM6.2", "1026400FD020", "1026400FD020B054", "1MJACLSA_A010D11"), listOf("S21", "S35", "S34"),
+                "Familia DCM6.2 (S21) y número de pieza JAC. Unidad real 2026-11-18: CALID 0904 = «DCM6.2». No dice si es AP o AP-6D: confirmar con la etiqueta.",
             ),
             EcuCandidate(
                 "DELPHI_MT80", "Delphi", "MT80", "JAC T8 2.0L Turbo gasolina 130 kW (Dimsport)",

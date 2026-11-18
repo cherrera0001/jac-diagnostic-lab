@@ -88,6 +88,17 @@ object GuidedTests {
             listOf("Primeros 15 s: todo apagado.", "Luego encender luces altas, ventilador al máximo, desempañador y A/C.", "Mantener hasta el final; la app mide la caída y la recuperación."),
         ) { m -> stationary(m) ?: running(m) },
         GuidedTest(
+            "BRAKE", "Freno contra acelerador (P2299 / P0579)", TestContext.STATIONARY, 60_000,
+            listOf(0x0C, 0x49, 0x4A, 0x61, 0x62, 0x04, 0x0D, 0x11),
+            "Detenido, freno de mano puesto, NEUTRO. Nadie delante. Solo acelerador suave (≤ 1800 rpm).",
+            listOf(
+                "Pisar el acelerador suave hasta ~1500 rpm y mantenerlo.",
+                "Sin soltar el acelerador, pisar el freno firme 3 s.",
+                "Soltar el freno y mantener el acelerador 3 s más. Soltar todo 5 s.",
+                "Repetir 3 veces. La app mide si la ECU corta al detectar el freno.",
+            ),
+        ) { m -> stationary(m) ?: running(m) },
+        GuidedTest(
             "ROAD", "Registro en ruta / banco de rodillos", TestContext.ROAD, null,
             listOf(0x0C, 0x0D, 0x04, 0x49, 0x61, 0x62, 0x42, 0x05, 0x70, 0x6D, 0x59, 0x7A, 0x8B, 0x78, 0x5E, 0x0B, 0x10),
             "Solo con un acompañante que opere el teléfono, o en banco de rodillos. El conductor no toca el teléfono. " +
@@ -137,12 +148,62 @@ object GuidedTests {
             "WARMUP" -> warmup(frames)
             "SNAP" -> snap(frames)
             "ELECTRIC" -> electric(frames)
+            "BRAKE" -> brake(frames)
             else -> road(frames)
         }
         val allEvents = (events + manualEvents).sortedBy { it.atMs }
         val verdict = if (frames.size < 5) HealthStatus.NO_DATA else worst(metrics, allEvents)
         return TestResult(test.id, test.title, start, dur, frames.size, hz(frames), metrics, allEvents, verdict,
             if (frames.size < 5) "Muy pocas muestras (${frames.size}). Repetir con el enlace estable." else summary)
+    }
+
+    /**
+     * P2299 = freno y acelerador incompatibles; P0579 en muchos diésel es la plausibilidad del
+     * interruptor de freno de doble contacto. El ELM327 no puede leer el interruptor (dato
+     * propietario), pero sí ver si la ECU corta el par al pisar el freno con el acelerador pisado.
+     */
+    private fun brake(fr: List<TraceFrame>): Triple<List<TestMetric>, List<TraceEvent>, String> {
+        val events = mutableListOf<TraceEvent>()
+        val d = vals(fr, PEDAL)
+        val rest = d.minOrNull()
+        var held = 0
+        var cuts = 0
+        var inHold = false
+        var peak = 0.0
+        for (f in fr) {
+            val p = f.values[PEDAL] ?: continue
+            val r = f.values[RPM] ?: continue
+            val pressed = rest != null && p > rest + 6
+            if (pressed && !inHold) { inHold = true; held++; peak = r }
+            if (pressed && inHold) {
+                if (r > peak) peak = r
+                if (peak > 1250 && r < peak - 350) {
+                    cuts++
+                    events += TraceEvent(f.atMs, "CORTE POR FRENO", "RPM %.0f → %.0f con el acelerador aún pisado (%.0f %%)".format(Locale.ROOT, peak, r, p))
+                    peak = r
+                }
+            }
+            if (!pressed) inHold = false
+        }
+        val e = vals(fr, "4A")
+        val ratios = fr.mapNotNull { f -> val a = f.values[PEDAL]; val b = f.values["4A"]; if (a != null && b != null && b > 1) a / b else null }
+        val rm = mean(ratios); val rs = std(ratios)
+        val ratioBad = rm != null && rs != null && rm > 0 && rs / rm > 0.12
+        val metrics = listOf(
+            TestMetric("Aceleraciones mantenidas", held.toDouble(), "", if (held == 0) HealthStatus.NO_DATA else HealthStatus.INFO, "Se esperaban 3."),
+            TestMetric("Cortes de par al frenar", cuts.toDouble(), "", when { held == 0 -> HealthStatus.NO_DATA; cuts == 0 -> HealthStatus.ATTENTION; else -> HealthStatus.OK },
+                "Corte = la ECU recibió la señal de freno."),
+            TestMetric("Pedal pista D en reposo", rest, "%", if (rest == null) HealthStatus.NO_DATA else HealthStatus.INFO),
+            TestMetric("Relación pistas D/E", rm, "", if (rm == null) HealthStatus.NO_DATA else st(ratioBad, false),
+                if (rs != null && rm != null) "Variación %.0f %%. Las dos pistas deben moverse en proporción fija.".format(Locale.ROOT, rs / rm * 100) else ""),
+            TestMetric("Pista E mínima", e.minOrNull(), "%", if (e.isEmpty()) HealthStatus.NO_DATA else HealthStatus.INFO),
+        )
+        val summary = when {
+            held == 0 -> "No se detectó acelerador mantenido. Repetir siguiendo los pasos."
+            cuts > 0 -> "La ECU cortó el par $cuts vez/veces al pisar el freno: recibe la señal principal del freno. Con P0579/P2299 revisar el SEGUNDO contacto del interruptor (plausibilidad) y su ajuste contra el pedal."
+            else -> "La ECU no cortó el par al frenar en $held intento(s). O no recibe la señal de freno, o esta calibración no corta en neutro. Medir el interruptor de freno (ambos contactos) y comprobar que encienden las luces de freno."
+        }
+        return Triple(metrics, events, summary + if (ratioBad) " Las pistas del pedal no se mueven en proporción: revisar el pedal." else "")
     }
 
     private fun idle(fr: List<TraceFrame>): Triple<List<TestMetric>, List<TraceEvent>, String> {

@@ -99,6 +99,11 @@ class VehicleProfileTest {
         assertFalse(ProfileResolver.containsIdentifier("EDC17C810", "EDC17C81"))
         assertFalse(ProfileResolver.containsIdentifier("XEDC17C81", "EDC17C81"))
         assertEquals(ResolutionStatus.PARTIAL, ProfileResolver.resolve(fp(calid = listOf("EDC17C810"))).status)
+        // Unidad real 2026-11-18: la ECU devolvió CALID «DCM6.2» (familia). Resuelve a la familia, sin elegir AP ni AP-6D.
+        val family = ProfileResolver.resolve(fp(calid = listOf("DCM6.2")))
+        assertEquals(ResolutionStatus.IDENTIFIED, family.status)
+        assertEquals(setOf("DELPHI_DCM62_PN"), family.matchedCandidateIds)
+        assertEquals(setOf("DELPHI_DCM62AP"), ProfileResolver.resolve(fp(calid = listOf("DCM6.2AP"))).matchedCandidateIds)
     }
 
     @Test
