@@ -5,3 +5,7 @@ jac-diagnostic-lab/evidence/captured/
 # Caché Python local (no versionar)
 **/__pycache__/
 *.py[cod]
+
+# Copias de trabajo de fuentes con derechos (manuales, PDFs, páginas). Solo se versionan metadatos y hashes.
+research/_downloads/
+research/_extract/

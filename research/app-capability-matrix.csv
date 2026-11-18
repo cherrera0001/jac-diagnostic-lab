@@ -1,0 +1,19 @@
+funcion_observada,producto,fuente,prueba_de_la_observacion,compatibilidad_T8_2023,diseno_propio,dificultad,licencia_permisos,estado
+Emparejar VCI Bluetooth sin PIN y abrir app,JDS,S16 diap.6/13,lectura del material,desconocida,Vincular ELM327 SPP/BLE con LinkPhase,baja,ninguna,IMPLEMENTADO (previo)
+Selección de plataforma/modelo/configuración,JDS,S16 diap.14-15,lectura del material,desconocida,Modelo/año declarados + resolvedor SPEC-031,media,ninguna,IMPLEMENTADO 1.9.0
+Identificación automática del vehículo,JDS,S16 diap.15,lectura del material,desconocida,VehicleFingerprint (Mode 09 + etiqueta ECU + año VIN ISO 3779),media,ninguna,IMPLEMENTADO 1.9.0 / PROBADO EN REPLAY
+Info ECU: número de pieza y código de proveedor,JDS,S16 diap.19,lectura del material,desconocida,Cruce de CALID/etiqueta con identificadores documentados (EDC17C81/DCM6.2AP/1026400FD020),media,ninguna,IMPLEMENTADO 1.9.0 / PROBADO EN REPLAY
+Escaneo de todo el vehículo,JDS,S16 diap.16,lectura del material,desconocida,Escaneo completo ECU motor (OBD genérico),alta para otras ECUs,ninguna,PARCIAL (solo 7E8)
+Borrado global de DTC,JDS,S16 diap.16,lectura del material,desconocida,No: Mode 04 bloqueado por política,—,—,DESCARTADO
+DTC actual e histórico,JDS,S16 diap.20,lectura del material,desconocida,Modes 03/07/0A,baja,ninguna,IMPLEMENTADO (previo)
+Escritura de VIN/configuración,JDS,S16 diap.21-22,lectura del material,—,No (escritura),—,requiere autorización OEM,DESCARTADO
+Flujos de calibración / control I/O / reflash,JDS,S16 diap.23-25,lectura del material,—,No (actuadores/programación),—,requiere autorización OEM,DESCARTADO
+Datos en vivo con límite de 6 ítems,JDS,S16 diap.26/37,lectura del material,desconocida,Monitor con Hz real por PID y bandas,baja,ninguna,IMPLEMENTADO (previo)
+Grabación de bus en SD (JCL binario),JDS,S16 diap.32-33,lectura del material,desconocida,JSONL append-only por medición,baja,ninguna,IMPLEMENTADO (previo)
+Descarga de archivos de diagnóstico desde servidor,JDS,S16 diap.7,lectura del material,desconocida,Catálogo versionado offline con prueba de deriva,media,ninguna,IMPLEMENTADO 1.9.0 (paquetes firmados: pendiente)
+Documentos RMI OBD/reparación por modelo,JAC Global web,S25/S30,GET público HTTP 200,NO (sin T8),Reconsultar por release,baja,datos RMI publicados,DOCUMENTADO
+Control remoto (bloqueo/A/C/carga),com.jac.global,S13,ficha Play,NO declarada,No aplica (no diagnóstico),—,cuenta del usuario,DESCARTADO
+Lectura básica y ubicación,JAC MX,S14/S15,términos,NO (lista México),No aplica,—,cuenta del usuario,DESCARTADO
+Señales ampliadas DPF/boost/inyección por nombre,OBD Lens,S12/S28,páginas públicas,sin años,Referencia UNKNOWN_ENCODING no consultable,alta (sin request/fórmula),licencia personal,DOCUMENTADO (no integrado)
+Pruebas de actuador por ECU (crucero/DPF/EGR),XTOOL,S18,PDF lista de funciones,familia HFC4DB,No (actuadores),—,propietario,DESCARTADO
+Validación de PIDs frente a escáner comercial,Tesis UPS,S09 p.47,tesis,otra unidad (EURO 3),Perfil por evidencia; advertencia de perfil de norma,baja,cita académica,IMPLEMENTADO 1.9.0 (nota en catálogo)
