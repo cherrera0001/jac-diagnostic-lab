@@ -60,7 +60,27 @@ import app.jac.diagnosticlab.obd.OperationalState
 import app.jac.diagnosticlab.obd.VoltageAssessment
 import app.jac.diagnosticlab.obd.assessAdapterVoltage
 import app.jac.diagnosticlab.obd.SessionTimeMetrics
+import app.jac.diagnosticlab.analysis.HealthAssessment
+import app.jac.diagnosticlab.analysis.HealthInput
+import app.jac.diagnosticlab.analysis.HealthItem
+import app.jac.diagnosticlab.dynamic.GuidedTests
+import app.jac.diagnosticlab.dynamic.TestResult
+import app.jac.diagnosticlab.dynamic.TraceEvent
+import app.jac.diagnosticlab.dynamic.TraceFrame
+import app.jac.diagnosticlab.obd.Mode06Decoder
+import app.jac.diagnosticlab.obd.Mode06Result
+import app.jac.diagnosticlab.obd.Mode09Decoder
+import app.jac.diagnosticlab.obd.MonitorState
+import app.jac.diagnosticlab.obd.PidCatalog
+import app.jac.diagnosticlab.obd.Readiness
+import app.jac.diagnosticlab.obd.ReadinessDecoder
+import app.jac.diagnosticlab.obd.Signal
+import app.jac.diagnosticlab.obd.VehicleInfo
+import app.jac.diagnosticlab.obd.canFromProtocol
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,6 +145,26 @@ data class LabState(
     val channelStats: Map<Int, ChannelStats> = emptyMap(),
     val linkPhase: LinkPhase = LinkPhase.DISCONNECTED,
     val sessionHistory: List<SessionSummary> = emptyList(),
+    // v1.8 — escaneo completo y salud
+    val scanSignals: List<Signal> = emptyList(),
+    val scanAtMs: Long? = null,
+    val readiness: Readiness? = null,
+    val readinessCycle: Readiness? = null,
+    val mode06: List<Mode06Result> = emptyList(),
+    val vehicleInfo: VehicleInfo? = null,
+    val health: List<HealthItem> = emptyList(),
+    val multiPid: Boolean? = null,
+    // v1.8 — pruebas guiadas / ruta
+    val activeTest: String? = null,
+    val testLive: TraceFrame? = null,
+    val testFrameCount: Int = 0,
+    val testElapsedMs: Long = 0L,
+    val testHz: Double = 0.0,
+    val testCue: String? = null,
+    val testEvents: List<TraceEvent> = emptyList(),
+    val testResults: List<TestResult> = emptyList(),
+    /** Últimas rondas para mini-gráficos (En vivo / prueba en curso). */
+    val testHistory: List<TraceFrame> = emptyList(),
 )
 
 class LabController(private val app: Application) {
@@ -266,6 +306,7 @@ class LabController(private val app: Application) {
             )
             state.update { it.copy(dtcs = dtcs, busy = false, exchanges = current.exchanges.toList()) }
             recompute()
+            recomputeHealth()
             persist()
         } finally {
             telemetry.resume()
@@ -555,6 +596,8 @@ class LabController(private val app: Application) {
      */
     fun forceResetAll() {
         trace("RESET TOTAL: liberando busy/compuerta/enlace")
+        testJob?.cancel()
+        testJob = null
         pollJob?.cancel()
         pollJob = null
         telemetry.pause()
@@ -602,9 +645,11 @@ class LabController(private val app: Application) {
 
     fun startAutodiag() {
         if (!autodiagGate.compareAndSet(false, true)) {
-            explain("Hay otra secuencia en curso o la UI quedó bloqueada. Pulse «Limpiar todo / Reset» y reintente.")
+            // Ya hay una lectura en curso: un segundo toque o un intent duplicado no es un error.
+            trace("Lectura ya en curso; se ignora la petición duplicada.")
             return
         }
+        state.update { it.copy(error = null, recovery = null) }
         scope.launch {
             try {
                 autodiagnose()
@@ -732,7 +777,7 @@ class LabController(private val app: Application) {
      */
     fun reconnectAndResumeMonitor() {
         if (!autodiagGate.compareAndSet(false, true)) {
-            explain("Reconexión bloqueada por otra tarea. Pulse «Limpiar todo / Reset» y luego Reconectar.")
+            trace("Reconexión ignorada: ya hay una tarea en curso.")
             return
         }
         scope.launch {
@@ -855,6 +900,373 @@ class LabController(private val app: Application) {
             )
         }
         trace("0101 ${mil.kind}; freeze=${freeze.firstOrNull()?.dtc}; hunt=${interesting.joinToString { "%02X".format(it) }}")
+        fullScanInternal()
+    }
+
+    /* ═════════════════════ v1.8 — Escaneo completo y salud ═════════════════════ */
+
+    private var testJob: Job? = null
+    private var testFrames = mutableListOf<TraceFrame>()
+    private var testManual = mutableListOf<TraceEvent>()
+
+    private fun isCan(): Boolean = canFromProtocol(state.value.protocolNumber) == true ||
+        state.value.protocolText.contains("15765", ignoreCase = true) ||
+        // Cabecera CAN 11 bits (7E8…7EF) o 29 bits (18DAF1xx) en respuestas reales.
+        session?.exchanges?.takeLast(40)?.flatMap { it.frames }?.any { f ->
+            val h = f.header?.uppercase() ?: return@any false
+            h.matches(Regex("7E[89A-F]")) || h.startsWith("18DAF1")
+        } == true
+
+    fun fullScan() {
+        if (session == null) return explain("No hay adaptador en sesión. Pulse Leer la camioneta o Reconectar.")
+        if (!autodiagGate.compareAndSet(false, true)) return state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
+        stopPoll()
+        scope.launch {
+            try {
+                fullScanInternal()
+            } finally {
+                autodiagGate.set(false)
+                state.update { it.copy(busy = false) }
+            }
+        }
+    }
+
+    /**
+     * Lee TODO lo que la ECU declara: cada PID Mode 01 soportado, monitores (0101/0141),
+     * Mode 06 (pruebas a bordo) y Mode 09 (calibración, CVN, nombre ECU, rendimiento en uso).
+     * El VIN (0902) solo si el usuario lo autorizó.
+     */
+    private suspend fun fullScanInternal() {
+        val current = session ?: return
+        // Siempre se relee el mapa: un mapa parcial de 0100 dejaba fuera las páginas 0160/0180.
+        readSupportedInternal()
+        // Si la lectura de códigos falló (ECU despertando), se repite ahora que responde.
+        if (state.value.bitmapRead && (dtcs.isEmpty() || dtcs.any { it.kind != ResponseKind.OBD_DATA })) {
+            dtcs = listOf(
+                current.readDtc(DtcCategory.STORED),
+                current.readDtc(DtcCategory.PENDING),
+                current.readDtc(DtcCategory.PERMANENT),
+            )
+            state.update { it.copy(dtcs = dtcs, ecuTalking = true) }
+            trace("DTC releídos en escaneo: ${dtcs.joinToString { "${it.category}=${it.kind}/${it.codes.size}" }}")
+        }
+        // Actualizar protocolo si quedó en «buscando» (A0) al inicio.
+        if (canFromProtocol(state.value.protocolNumber) == null) {
+            val dpn = current.exchange("ATDPN", 2500)
+            val dp = current.exchange("ATDP", 2500)
+            if (dpn.kind == ResponseKind.RECOGNIZED) state.update {
+                it.copy(protocolNumber = dpn.raw.trim().lineSequence().firstOrNull().orEmpty(), protocolText = dp.raw.trim().lineSequence().firstOrNull().orEmpty())
+            }
+        }
+        telemetry.pause()
+        state.update { it.copy(busy = true, statusLine = "Escaneo completo: leyendo ${state.value.supported.size} PIDs declarados…") }
+        try {
+            val pids = state.value.supported.filter { !PidCatalog.isBitmap(it) && it != 0x02 }.sorted()
+            val raw = current.readPidsRaw(pids, isCan())
+            val signals = raw.flatMap { (pid, data) -> PidCatalog.decode(pid, data) }
+            val readiness = raw[0x01]?.let { ReadinessDecoder.decode(it) }
+            val cycle = raw[0x41]?.let { ReadinessDecoder.decode(it, thisCycle = true) }
+            trace("ESCANEO pids=${pids.size} recibidos=${raw.size} señales=${signals.size} multiPid=${current.multiPidWorks}")
+            raw.forEach { (pid, data) -> trace("PID %02X = %s".format(pid, data.joinToString(" ") { "%02X".format(it) })) }
+
+            state.update { it.copy(statusLine = "Escaneo completo: pruebas a bordo (Mode 06)…") }
+            val mids = mutableSetOf<Int>()
+            for (base in listOf(0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0, 0xE0)) {
+                if (base != 0x00 && base !in mids) break
+                mids += Mode06Decoder.supported(base, current.exchange("06%02X".format(base), 5000))
+            }
+            val m06 = mids.filter { !Mode06Decoder.isSupportMid(it) }.sorted()
+                .flatMap { Mode06Decoder.decode(current.exchange("06%02X".format(it), 6000)) }
+            trace("MODE06 mids=${mids.size} resultados=${m06.size} fuera=${m06.count { !it.passed }}")
+            var mode06 = m06
+            val truncated = current.exchanges.any { ex -> ex.command.startsWith("06") && ex.frames.any { it.truncated } }
+            val onlyEngine = current.exchanges.flatMap { it.frames }.mapNotNull { it.header }.all { it == "7E8" }
+            if (truncated && onlyEngine && isCan()) {
+                val ok = current.applyStandardFlowControl()
+                trace("ISO-TP truncado detectado (clon corta tras 4 CF). FC estándar aplicado=$ok")
+                if (ok) {
+                    val again = mids.filter { !Mode06Decoder.isSupportMid(it) }.sorted()
+                        .flatMap { Mode06Decoder.decode(current.exchange("06%02X".format(it), 6000)) }
+                    val stillCut = current.exchanges.takeLast(mids.size).any { ex -> ex.frames.any { it.truncated } }
+                    trace("MODE06 tras FC: resultados=${again.size} (antes ${m06.size}) truncado=$stillCut")
+                    if (again.size >= m06.size) mode06 = again
+                }
+            }
+
+            state.update { it.copy(statusLine = "Escaneo completo: identificación (Mode 09)…") }
+            val sup09 = Mode09Decoder.supported(current.exchange("0900", 6000))
+            val diesel = readiness?.compressionIgnition == true
+            val info = VehicleInfo(
+                calibrationIds = if (0x04 in sup09) Mode09Decoder.calibrationIds(current.exchange("0904", 8000)) else emptyList(),
+                cvns = if (0x06 in sup09) Mode09Decoder.cvns(current.exchange("0906", 8000)) else emptyList(),
+                ecuName = if (0x0A in sup09) Mode09Decoder.ecuName(current.exchange("090A", 8000)) else null,
+                inUsePerformance = when {
+                    diesel && 0x0B in sup09 -> Mode09Decoder.inUsePerformance(current.exchange("090B", 8000), true)
+                    !diesel && 0x08 in sup09 -> Mode09Decoder.inUsePerformance(current.exchange("0908", 8000), false)
+                    else -> emptyList()
+                },
+                supported = sup09,
+            )
+            if (state.value.authorizeVin && 0x02 in sup09) {
+                decodeVin(current.exchange("0902", 10000))?.let { vin -> state.update { it.copy(vin = vin) } }
+            }
+            // Las señales del escaneo también alimentan la matriz de capacidad y el monitor.
+            val now = System.currentTimeMillis()
+            val scanSamples = signals.groupBy { it.pid }.mapNotNull { (pid, list) ->
+                val first = list.first()
+                Sample(now, pid, first.name, first.value, first.unit, first.value != null, false,
+                    raw[pid].orEmpty().joinToString(" ") { "%02X".format(it) })
+            }
+            samples = (samples + scanSamples).takeLast(600)
+            state.update {
+                it.copy(
+                    scanSignals = signals,
+                    scanAtMs = now,
+                    readiness = readiness,
+                    readinessCycle = cycle,
+                    mode06 = mode06,
+                    vehicleInfo = info,
+                    multiPid = current.multiPidWorks,
+                    ecuTalking = it.ecuTalking || raw.isNotEmpty(),
+                    error = if (raw.isNotEmpty()) null else it.error,
+                    recovery = if (raw.isNotEmpty()) null else it.recovery,
+                    linkPhase = if (raw.isNotEmpty()) LinkPhase.DIAGNOSTIC_READY else it.linkPhase,
+                    samples = samples,
+                    exchanges = current.exchanges.toList(),
+                    statusLine = "Escaneo completo: ${raw.size}/${pids.size} PIDs, ${signals.size} señales, ${m06.size} pruebas Mode 06.",
+                )
+            }
+            recomputeHealth()
+            refreshCapabilities()
+            recompute()
+            persist()
+        } finally {
+            telemetry.resume()
+        }
+    }
+
+    private fun recomputeHealth() {
+        val st = state.value
+        val values = st.scanSignals.associate { it.key to it.value }
+        val texts = st.scanSignals.filter { it.text != null }.associate { it.key to it.text!! }
+        val reads = dtcs.ifEmpty { st.dtcs }
+        val health = HealthAssessment.evaluate(
+            HealthInput(
+                values = values,
+                texts = texts,
+                readiness = st.readiness,
+                readinessThisCycle = st.readinessCycle,
+                storedDtcs = reads.filter { it.category == DtcCategory.STORED }.flatMap { r -> r.codes.map { it.code } },
+                pendingDtcs = reads.filter { it.category == DtcCategory.PENDING }.flatMap { r -> r.codes.map { it.code } },
+                mode06 = st.mode06,
+                vehicleInfo = st.vehicleInfo,
+                adapterVoltage = parseAdapterVoltage(st.voltageText),
+            ),
+        )
+        state.update { it.copy(health = health) }
+    }
+
+    /* ═════════════════════ v1.8 — Pruebas guiadas y ruta ═════════════════════ */
+
+    private suspend fun sampleRound(current: ElmSession, pids: List<Int>): TraceFrame? {
+        val raw = current.readPidsRaw(pids, isCan())
+        if (raw.isEmpty()) return null
+        val values = linkedMapOf<String, Double>()
+        raw.forEach { (pid, data) -> PidCatalog.decode(pid, data).forEach { s -> s.value?.let { values[s.key] = it } } }
+        return TraceFrame(System.currentTimeMillis(), values)
+    }
+
+    private fun cueFor(testId: String, elapsedMs: Long): String? {
+        if (testId == "SNAP") {
+            val t = elapsedMs / 1000
+            return when (t) {
+                in 0L..4L -> "Prepárese: neutro, freno de mano, pie fuera del pedal."
+                in 5L..6L, in 15L..16L, in 25L..26L -> "¡PISAR A FONDO AHORA y soltar al llegar al corte!"
+                in 7L..14L, in 17L..24L, in 27L..34L -> "Soltar. Esperar que vuelva a ralentí."
+                else -> "Terminando. No tocar el pedal."
+            }
+        }
+        if (testId == "ELECTRIC") {
+            return if (elapsedMs < 15_000) "Todo apagado. No encender nada aún." else "Encender luces altas, ventilador máximo, desempañador y A/C."
+        }
+        return null
+    }
+
+    fun startGuidedTest(id: String) {
+        val test = runCatching { GuidedTests.byId(id) }.getOrNull() ?: return explain("Prueba desconocida: $id")
+        val current = session ?: return explain("No hay adaptador en sesión. Pulse Leer la camioneta o Reconectar antes de la prueba.")
+        if (!autodiagGate.compareAndSet(false, true)) return state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
+        stopPoll()
+        val supported = state.value.supported
+        val pids = test.pids.filter { supported.isEmpty() || it in supported }
+        testFrames = mutableListOf()
+        testManual = mutableListOf()
+        testJob = scope.launch {
+            var started = false
+            try {
+                val first = sampleRound(current, pids)
+                if (first == null) {
+                    explain("La ECU no respondió a la primera ronda de la prueba.")
+                    return@launch
+                }
+                test.precondition(first.values)?.let { reason ->
+                    explain("No se inicia «${test.title}»: $reason")
+                    return@launch
+                }
+                started = true
+                testFrames += first
+                trace("PRUEBA ${test.id} inicio pids=${pids.joinToString { "%02X".format(it) }}")
+                state.update { it.copy(activeTest = test.id, testEvents = emptyList(), testFrameCount = 1, testLive = first, testHistory = listOf(first), error = null, busy = false, statusLine = "Prueba en curso: ${test.title}") }
+                val t0 = first.atMs
+                var misses = 0
+                // Ruta / en vivo: señales rápidas (1 trama) cada ronda; las de varias tramas, 1 de cada 4.
+                val fastSet = setOf(0x0C, 0x0D, 0x49, 0x61, 0x62, 0x04, 0x42, 0x0B)
+                val split = test.id == "ROAD" || test.id == "LIVE"
+                val fast = pids.filter { it in fastSet }
+                val slow = pids.filter { it !in fastSet }
+                var round = 0
+                while (isActive) {
+                    val elapsed = System.currentTimeMillis() - t0
+                    if (test.durationMs != null && elapsed >= test.durationMs) break
+                    round++
+                    val roundPids = if (split && fast.isNotEmpty()) fast + (if (round % 4 == 0) slow else emptyList()) else pids
+                    val frame = sampleRound(current, roundPids)
+                    if (frame == null) {
+                        misses++
+                        if (misses >= 5) {
+                            explain("Enlace perdido durante la prueba (5 rondas sin respuesta). Se guarda lo capturado.")
+                            break
+                        }
+                        continue
+                    }
+                    misses = 0
+                    testFrames += frame
+                    if (testFrames.size > 30_000) testFrames.removeAt(0)
+                    if (test.id == "WARMUP" && (frame.values[GuidedTests.ECT] ?: 0.0) >= 85.0) break
+                    val events = if (test.id == "ROAD" && testFrames.size % 10 == 0) GuidedTests.road(testFrames.takeLast(600)).second else state.value.testEvents
+                    val window = testFrames.takeLast(20)
+                    val hz = if (window.size > 1) (window.size - 1) * 1000.0 / (window.last().atMs - window.first().atMs).coerceAtLeast(1) else 0.0
+                    state.update {
+                        it.copy(
+                            // Pantalla: último valor conocido de cada señal. El CSV guarda solo lo leído en la ronda.
+                            testLive = TraceFrame(frame.atMs, it.testLive?.values.orEmpty() + frame.values),
+                            testHistory = (it.testHistory + frame).takeLast(90),
+                            testFrameCount = testFrames.size,
+                            testElapsedMs = frame.atMs - t0,
+                            testHz = hz,
+                            testCue = cueFor(test.id, frame.atMs - t0),
+                            testEvents = (events.filter { e -> it.testEvents.none { o -> o.atMs == e.atMs && o.kind == e.kind } } + it.testEvents)
+                                .distinctBy { e -> e.atMs to e.kind }.sortedBy { e -> e.atMs },
+                        )
+                    }
+                    if (test.id == "ROAD" && testFrames.size % 100 == 0) withContext(Dispatchers.IO) { saveTrace(test.id, null) }
+                }
+            } finally {
+                withContext(NonCancellable) {
+                    if (started) finishTest(test.id)
+                    autodiagGate.set(false)
+                    state.update { it.copy(activeTest = null, testCue = null, busy = false) }
+                }
+            }
+        }
+    }
+
+    fun stopGuidedTest() {
+        testJob?.cancel()
+        testJob = null
+    }
+
+    fun markEvent(label: String = "Marcado por el acompañante") {
+        val at = System.currentTimeMillis()
+        val ev = TraceEvent(at, "MARCA", label, manual = true)
+        testManual += ev
+        state.update { it.copy(testEvents = (it.testEvents + ev).sortedBy { e -> e.atMs }) }
+        trace("MARCA $label")
+    }
+
+    private suspend fun finishTest(id: String) {
+        if (id == "LIVE") {
+            withContext(Dispatchers.IO) { saveTrace(id, null) }
+            state.update { it.copy(statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.") }
+            return
+        }
+        val test = GuidedTests.byId(id)
+        val result = GuidedTests.analyze(test, testFrames.toList(), testManual.toList())
+        trace("PRUEBA $id fin frames=${result.frames} hz=%.2f veredicto=${result.verdict} ${result.summary}".format(result.effectiveHz))
+        result.metrics.forEach { m -> trace("  ${m.name}: ${m.value?.let { "%.3f".format(it) } ?: "—"} ${m.unit} [${m.status.label}]") }
+        result.events.forEach { e -> trace("  EVENTO ${e.kind}: ${e.detail}") }
+        withContext(Dispatchers.IO) { saveTrace(id, result) }
+        state.update { it.copy(testResults = (it.testResults + result).takeLast(20), statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}") }
+        persist()
+    }
+
+    private fun saveTrace(id: String, result: TestResult?) {
+        val name = "$sessionId-$id"
+        val csv = GuidedTests.toCsv(testFrames.toList(), (result?.events ?: state.value.testEvents))
+        val dirs = listOfNotNull(File(app.filesDir, "traces"), app.getExternalFilesDir("traces"))
+        dirs.forEach { dir ->
+            runCatching {
+                dir.mkdirs()
+                File(dir, "$name.csv").writeText(csv)
+            }
+        }
+    }
+
+    private fun extendedMap(): Map<String, Any?> {
+        val st = state.value
+        if (st.scanSignals.isEmpty() && st.testResults.isEmpty()) return emptyMap()
+        return linkedMapOf(
+            "basis" to HealthAssessment.BASIS,
+            "scanAtMs" to st.scanAtMs,
+            "multiPid" to st.multiPid,
+            "readiness" to st.readiness?.let { r -> linkedMapOf("milOn" to r.milOn, "dtcCount" to r.dtcCount, "diesel" to r.compressionIgnition, "monitors" to r.monitors.map { mapOf("name" to it.name, "state" to it.state.name) }) },
+            "readinessThisCycle" to st.readinessCycle?.monitors?.map { mapOf("name" to it.name, "state" to it.state.name) },
+            "signals" to st.scanSignals.map { linkedMapOf("key" to it.key, "pid" to "%02X".format(it.pid), "name" to it.name, "value" to it.value, "unit" to it.unit, "text" to it.text) },
+            "mode06" to st.mode06.map { linkedMapOf("mid" to "%02X".format(it.mid), "tid" to "%02X".format(it.tid), "uasid" to "%02X".format(it.uasid), "monitor" to it.monitorName, "value" to it.value, "min" to it.min, "max" to it.max, "unit" to it.unit, "passed" to it.passed) },
+            "vehicleInfo" to st.vehicleInfo?.let { v -> linkedMapOf("calid" to v.calibrationIds, "cvn" to v.cvns, "ecuName" to v.ecuName, "ipt" to v.inUsePerformance.map { mapOf("name" to it.first, "count" to it.second) }) },
+            "health" to st.health.map { linkedMapOf("system" to it.system, "status" to it.status.name, "title" to it.title, "detail" to it.detail, "evidence" to it.evidence) },
+            "tests" to st.testResults.map { t ->
+                linkedMapOf(
+                    "id" to t.testId, "title" to t.title, "startedAtMs" to t.startedAtMs, "durationMs" to t.durationMs,
+                    "frames" to t.frames, "hz" to t.effectiveHz, "verdict" to t.verdict.name, "summary" to t.summary,
+                    "metrics" to t.metrics.map { m -> linkedMapOf("name" to m.name, "value" to m.value, "unit" to m.unit, "status" to m.status.name, "note" to m.note) },
+                    "events" to t.events.map { e -> linkedMapOf("atMs" to e.atMs, "kind" to e.kind, "detail" to e.detail, "manual" to e.manual) },
+                )
+            },
+        )
+    }
+
+    private fun extendedText(): List<String> {
+        val st = state.value
+        if (st.scanSignals.isEmpty() && st.testResults.isEmpty()) return emptyList()
+        return buildList {
+            add(HealthAssessment.BASIS)
+            st.readiness?.let { r ->
+                add("Motor: ${if (r.compressionIgnition) "DIÉSEL (encendido por compresión)" else "gasolina (chispa)"} · MIL ${if (r.milOn == true) "ENCENDIDA" else "apagada"} · códigos ${r.dtcCount}")
+                r.monitors.filter { it.state != MonitorState.NOT_SUPPORTED }.forEach { add("  Monitor ${it.name}: ${it.state.label}") }
+            }
+            add("-- Salud --")
+            st.health.forEach { add("[${it.status.label}] ${it.system}: ${it.title}. ${it.detail} (${it.evidence})") }
+            add("-- Señales (${st.scanSignals.size}) --")
+            st.scanSignals.forEach { s -> add("  %s %s = %s %s".format(s.key, s.name, s.text ?: s.value?.let { "%.3f".format(it) } ?: "—", s.unit)) }
+            if (st.mode06.isNotEmpty()) {
+                add("-- Mode 06 --")
+                st.mode06.forEach { m -> add("  %s TID %02X: %.3f %s [%.3f…%.3f] %s".format(m.monitorName, m.tid, m.value, m.unit, m.min, m.max, if (m.passed) "OK" else "FUERA")) }
+            }
+            st.vehicleInfo?.let { v ->
+                add("-- Mode 09 --")
+                v.ecuName?.let { add("  ECU: $it") }
+                v.calibrationIds.forEach { add("  CALID: $it") }
+                v.cvns.forEach { add("  CVN: $it") }
+                v.inUsePerformance.forEach { add("  IPT ${it.first}: ${it.second}") }
+            }
+            st.testResults.forEach { t ->
+                add("-- Prueba ${t.title}: ${t.verdict.label} --")
+                add("  ${t.summary} (${t.frames} rondas, %.2f Hz)".format(t.effectiveHz))
+                t.metrics.forEach { m -> add("  ${m.name}: ${m.value?.let { "%.2f".format(it) } ?: "—"} ${m.unit} [${m.status.label}] ${m.note}") }
+                t.events.forEach { e -> add("  EVENTO ${e.kind}: ${e.detail}") }
+            }
+        }
     }
 
     /** `BluetoothDevice.name` lanza SecurityException en Android 12+ sin BLUETOOTH_CONNECT. */
@@ -1085,6 +1497,8 @@ class LabController(private val app: Application) {
             simulated = false,
             vehicleNote = vehicleNote,
             analysis = current.analysis,
+            extended = extendedMap(),
+            extendedText = extendedText(),
         )
     }
 

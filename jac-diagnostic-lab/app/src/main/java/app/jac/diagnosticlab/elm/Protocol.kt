@@ -30,6 +30,8 @@ data class ObdFrame(
     val payload: List<Int>,
     val pciStripped: Boolean,
     val rawLine: String,
+    /** ISO-TP: la primera trama anunció más bytes de los que llegaron. */
+    val truncated: Boolean = false,
 )
 
 data class ParsedResponse(
@@ -232,7 +234,7 @@ object ElmParser {
         val done = mutableListOf<ObdFrame>()
         var open: Open? = null
         fun close(frame: Open) {
-            done += ObdFrame(frame.header, frame.data.toList(), frame.pci, frame.raw)
+            done += ObdFrame(frame.header, frame.data.toList(), frame.pci, frame.raw, truncated = frame.expected > 0 && frame.data.size < frame.expected)
         }
         for (line in lines) {
             if (line.uppercase().contains("SEARCHING")) continue

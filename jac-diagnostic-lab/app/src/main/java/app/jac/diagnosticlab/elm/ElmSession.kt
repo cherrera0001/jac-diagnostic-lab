@@ -106,7 +106,16 @@ class ElmSession(
             }
             if (command == "ATZ") delay(300)
         }
+        // La ECU puede tardar en despertar (arranque, contacto recién en ON): reintentar 0100.
         if (stopped == null) {
+            var tries = 0
+            while (tries < 3 && exchanges.lastOrNull { it.command == "0100" }?.kind != ResponseKind.OBD_DATA) {
+                tries++
+                log("0100 sin datos de la ECU; reintento $tries/3 en 2 s")
+                delay(2000)
+                val again = exchange("0100", 12000)
+                if (again.kind == ResponseKind.DISCONNECTED) break
+            }
             exchange("ATDP", 2500)
             exchange("ATDPN", 2500)
         }
@@ -154,5 +163,48 @@ class ElmSession(
     suspend fun readPid(pid: Int): PidReading {
         val command = "01%02X".format(pid)
         return PidDecoder.decode(pid, exchange(command, 4000))
+    }
+
+    /**
+     * Algunos clones ELM327 v2.1 cortan respuestas ISO-TP tras 4 tramas consecutivas.
+     * Fija un FC estándar (BS=0, STmin=0) dirigido a 7E0. Devuelve true si el adaptador lo aceptó.
+     */
+    suspend fun applyStandardFlowControl(): Boolean {
+        val a = exchange("ATFCSH7E0", 2500)
+        val b = exchange("ATFCSD300000", 2500)
+        val c = exchange("ATFCSM1", 2500)
+        return listOf(a, b, c).all { it.kind == ResponseKind.RECOGNIZED && !it.raw.contains("?") }
+    }
+
+    /** Si la ECU dejó de aceptar multi-PID, no se vuelve a intentar en esta sesión. */
+    var multiPidWorks: Boolean? = null
+        private set
+
+    /**
+     * Lee varios PIDs Mode 01. En CAN agrupa hasta 6 por petición (J1979) y separa la
+     * respuesta por largo conocido; lo que no vuelva se pide de a uno. Devuelve los bytes
+     * de datos por PID (sin `41 PID`).
+     */
+    suspend fun readPidsRaw(pids: List<Int>, can: Boolean): Map<Int, List<Int>> {
+        val out = linkedMapOf<Int, List<Int>>()
+        val groupable = pids.filter { app.jac.diagnosticlab.obd.PidCatalog.size(it) != null }
+        if (can && multiPidWorks != false && groupable.size > 1) {
+            for (chunk in groupable.chunked(6)) {
+                val cmd = "01" + chunk.joinToString("") { "%02X".format(it) }
+                val ex = exchange(cmd, 4000)
+                if (ex.kind != ResponseKind.OBD_DATA) continue
+                val parts = ex.frames.filter { it.payload.firstOrNull() == 0x41 }
+                    .flatMap { app.jac.diagnosticlab.obd.PidCatalog.splitMulti(it.payload, chunk).entries }
+                parts.forEach { (k, v) -> out[k] = v }
+                if (multiPidWorks == null) multiPidWorks = parts.size >= 2
+            }
+        }
+        for (pid in pids) {
+            if (pid in out) continue
+            val ex = exchange("01%02X".format(pid), 4000)
+            val payload = ex.frames.firstOrNull { it.payload.size >= 2 && it.payload[0] == 0x41 && it.payload[1] == pid }?.payload
+            if (ex.kind == ResponseKind.OBD_DATA && payload != null) out[pid] = payload.drop(2)
+        }
+        return out
     }
 }

@@ -133,6 +133,10 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() = lab.disconnect()
     fun startAutodiag() = lab.startAutodiag()
     fun declareVehicle(model: String, year: String) = lab.declareVehicle(model, year)
+    fun fullScan() = lab.fullScan()
+    fun startGuidedTest(id: String) = lab.startGuidedTest(id)
+    fun stopGuidedTest() = lab.stopGuidedTest()
+    fun markEvent() = lab.markEvent()
 }
 
 class MainActivity : ComponentActivity() {
@@ -142,13 +146,20 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { JacTheme { JacApp(model) } }
-        if (intent.getBooleanExtra("autodiag", false)) model.startAutodiag()
+        // Solo en la primera creación; al rotar o recrear no se vuelve a disparar la lectura.
+        if (savedInstanceState == null && intent.getBooleanExtra("autodiag", false)) {
+            intent.removeExtra("autodiag")
+            model.startAutodiag()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra("autodiag", false)) model.startAutodiag()
+        if (intent.getBooleanExtra("autodiag", false)) {
+            intent.removeExtra("autodiag")
+            model.startAutodiag()
+        }
     }
 }
 
@@ -164,93 +175,38 @@ private fun JacTheme(content: @Composable () -> Unit) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JacApp(model: DiagnosticViewModel = viewModel()) {
     val state by model.state.collectAsState()
-    var tab by remember { mutableIntStateOf(0) }
     val permissions = rememberLauncherPermissions()
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar {
-                listOf("Hoy", "Monitor", "Capacidad", "Historial", "Copia").forEachIndexed { index, label ->
-                    NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = {}, label = { Text(label) })
-                }
-            }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    app.jac.diagnosticlab.ui.AppShell(
+        state = state,
+        actions = app.jac.diagnosticlab.ui.ShellActions(
+            connect = {
+                if (bluetoothReady(context)) model.startAutodiag() else permissions()
+            },
+            reconnect = { model.reconnectAndResumeMonitor() },
+            fullScan = { model.fullScan() },
+            reset = { model.forceResetAll() },
+            startTest = { model.startGuidedTest(it) },
+            stopTest = { model.stopGuidedTest() },
+            mark = { model.markEvent() },
+        ),
+        exportSection = { EvidenceScreen(state, model, compact = true) },
+        advancedSection = {
+            Text("Lectura guiada (versión anterior)", style = MaterialTheme.typography.titleMedium)
+            TodayScreen(state, model, permissions)
+            MonitorScreen(state, model, permissions)
+            CapabilityScreen(state, model)
+            HistoryScreen(state, model)
+            WorkshopScreen(state, model)
+            CodeScreen(state, model)
+            AnalysisScreen(state, model)
+            SecurityGuideScreen(state)
+            EvidenceScreen(state, model)
         },
-    ) { padding ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Card(Modifier.fillMaxWidth()) {
-                Text(
-                    "Solo lectura, con la camioneta detenida. Esta aplicación no borra avisos y no arregla nada. Que logre conectar no significa que puedas seguir circulando.",
-                    Modifier.padding(12.dp),
-                    color = Color(0xFFF5C16C),
-                )
-            }
-            if (Symptom.BRAKE_POWER_LOSS in state.symptoms || Symptom.RETURNS_WITH_BRAKE in state.symptoms) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "CORTE DE POTENCIA AL FRENAR",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = Color(0xFFFF8A80),
-                        )
-                        Text(
-                            "Si al manejar se corta la energía o la potencia al frenar, no uses esta camioneta en la calle hasta que un servicio JAC lea los avisos sin borrarlos y mida el freno y el acelerador con el vehículo quieto. Esta aplicación no certifica que puedas circular. No pruebes el corte en movimiento.",
-                            color = Color(0xFFFFCDD2),
-                        )
-                    }
-                }
-            }
-            if (tab != 0) {
-                Text(state.statusLine, style = MaterialTheme.typography.titleMedium)
-                Text("Fase: ${state.linkPhase.label}", fontSize = 12.sp, color = Color(0xFF9AA3AD))
-            }
-            if (state.busy) {
-                Text(
-                    "Ocupada: ${state.statusLine}. Si no responde, use Limpiar todo / Reset.",
-                    color = Color(0xFFFF8A80),
-                    fontSize = 13.sp,
-                )
-            }
-            // Siempre habilitado: sale del pegado busy/compuerta sin forzar detención del sistema.
-            OutlinedButton(
-                onClick = { model.forceResetAll() },
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(if (state.busy) "Limpiar todo / Reset (desbloquear ahora)" else "Limpiar todo / Reset")
-            }
-            if (state.error != null) {
-                Card(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(12.dp)) {
-                        Text("Qué ocurrió: ${state.error}")
-                        Text("Qué hacer: ${state.recovery.orEmpty()}")
-                    }
-                }
-            }
-            when (tab) {
-                0 -> TodayScreen(state, model, permissions)
-                1 -> MonitorScreen(state, model, permissions)
-                2 -> CapabilityScreen(state, model)
-                3 -> HistoryScreen(state, model)
-                else -> {
-                    EvidenceScreen(state, model)
-                    WorkshopScreen(state, model)
-                    CodeScreen(state, model)
-                    AnalysisScreen(state, model)
-                    SecurityGuideScreen(state)
-                }
-            }
-        }
-    }
+    )
 }
 
 @Composable
@@ -919,7 +875,7 @@ private fun WorkshopScreen(state: LabState, model: DiagnosticViewModel) {
 }
 
 @Composable
-private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
+private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel, compact: Boolean = false) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var anonymize by remember { mutableStateOf(true) }
     val liveCodes = state.dtcs.sumOf { it.codes.size }
@@ -938,12 +894,12 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
     val jsonBlock = payloadHasContent("json", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
     val txtBlock = payloadHasContent("txt", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
     val csvBlock = payloadHasContent("csv", state.exchanges.size, liveCodes, confirmed, errors, state.samples.size, state.adapterId)
-    Text("La lectura ocurre en Hoy, paso 5. El archivo se arma ahora, al pulsar. No se arma solo y no se sube.")
-    Text("Sesión en pantalla: ${state.sessionId.ifBlank { "todavía no hay" }}.")
-    if (pdfFromSaved) Text("Esta sesión en pantalla no tiene contenido. El PDF usará la lectura guardada ${saved?.sessionId}. JSON, TXT y CSV de esta sesión vacía no se crean.")
+    if (!compact) Text("La lectura ocurre en Hoy, paso 5. El archivo se arma ahora, al pulsar. No se arma solo y no se sube.")
+    if (!compact) Text("Sesión en pantalla: ${state.sessionId.ifBlank { "todavía no hay" }}.")
+    if (pdfFromSaved && !compact) Text("Esta sesión en pantalla no tiene contenido. El PDF usará la lectura guardada ${saved?.sessionId}. JSON, TXT y CSV de esta sesión vacía no se crean.")
     Row {
         Checkbox(checked = anonymize, onCheckedChange = { anonymize = it })
-        Text("Anonimizar identificador y dirección Bluetooth en JSON y TXT", Modifier.padding(top = 12.dp))
+        Text(if (compact) "Ocultar VIN y dirección Bluetooth" else "Anonimizar identificador y dirección Bluetooth en JSON y TXT", Modifier.padding(top = 12.dp))
     }
     val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -971,11 +927,15 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel) {
         if (uri != null) model.export(uri, "txt", anonymize)
     }
     Button(onClick = { pdf.launch("jac-informe.pdf") }, enabled = livePdf == null || pdfFromSaved, modifier = Modifier.fillMaxWidth()) { Text("PDF del informe") }
-    if (livePdf != null && !pdfFromSaved) Text(livePdf)
+    if (livePdf != null && !pdfFromSaved && !compact) Text(livePdf)
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Button(onClick = { json.launch("jac-sesion.json") }, enabled = jsonBlock == null) { Text("JSON") }
         Button(onClick = { txt.launch("jac-diagnostico.txt") }, enabled = txtBlock == null) { Text("TXT") }
         Button(onClick = { csv.launch("jac-sensores.csv") }, enabled = csvBlock == null) { Text("CSV") }
+    }
+    if (compact) {
+        Text("JSON y TXT incluyen el diagnóstico completo, la salud y las pruebas. Las pruebas también quedan como CSV.", fontSize = 12.sp, color = Color(0xFF8A96A3))
+        return
     }
     listOfNotNull(jsonBlock, txtBlock, csvBlock).distinct().forEach { Text(it) }
     Text("Si el selector crea el archivo y no hay contenido, la aplicación lo borra.")

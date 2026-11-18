@@ -262,6 +262,15 @@ object PidDecoder {
             return PidReading(pid, "PIDs soportados", data.take(4), null, null, true, false, "Mapa de soporte, no es una medición física.")
         }
         if (spec == null) {
+            val signals = PidCatalog.decode(pid, data)
+            val first = signals.firstOrNull()
+            if (first != null) {
+                val catalogName = PidCatalog.name(pid)
+                val note = "Fórmula SAE J1979 (catálogo). " + signals.joinToString(" · ") { s ->
+                    s.text?.let { "${s.name}: $it" } ?: "${s.name}: ${s.value?.let { v -> "%.2f".format(v) } ?: "—"} ${s.unit}"
+                }
+                return PidReading(pid, first.name, data, first.value, first.unit, true, false, note, catalogName, InterpretationStatus.SUPPORTED, first.name)
+            }
             return PidReading(pid, name, data, null, null, false, false, "Bytes originales conservados. Fórmula SAE J1979 no incluida para este PID.", name, InterpretationStatus.UNKNOWN, name)
         }
         if (data.size < spec.size) {
@@ -279,8 +288,10 @@ object PidDecoder {
     }
 
     /** DIAG-002: nota contextual; no condena falla. */
-    fun plausibilityNote(pid: Int, value: Double?, rpm: Double?, speedKmh: Double?): String? {
+    fun plausibilityNote(pid: Int, value: Double?, rpm: Double?, speedKmh: Double?, compressionIgnition: Boolean = false): String? {
         if (pid != 0x11 || value == null) return null
+        // En diésel (0101 byte B bit 3) la mariposa de admisión queda abierta en ralentí: no es anomalía.
+        if (compressionIgnition) return null
         if (rpm != null && rpm in 500.0..1200.0 && (speedKmh == null || speedKmh == 0.0) && value >= 70.0) {
             return "Nota de plausibilidad contextual (DIAG-002): PID 0x11 (posición absoluta de mariposa) ≈ %.1f %% con ~%.0f rpm y 0 km/h. " +
                 "No se clasifica automáticamente como falla. Revisar mapeo de señal, ECU origen y convención del vehículo.".format(value, rpm)

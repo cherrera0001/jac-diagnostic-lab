@@ -44,6 +44,10 @@ data class SessionRecord(
     val simulated: Boolean,
     val vehicleNote: String,
     val analysis: AnalysisReport?,
+    /** v1.8: escaneo completo, monitores, Mode 06/09, salud y pruebas guiadas (JSON). */
+    val extended: Map<String, Any?> = emptyMap(),
+    /** v1.8: mismo contenido en texto legible para el TXT. */
+    val extendedText: List<String> = emptyList(),
 )
 
 fun anonymize(record: SessionRecord): SessionRecord {
@@ -103,6 +107,10 @@ fun toTxt(record: SessionRecord): String {
         sb.append(ex.raw.ifBlank { "(sin bytes)" }).append('\n')
         sb.append(ex.detail).append('\n')
     }
+    if (record.extendedText.isNotEmpty()) {
+        sb.append("\n== Salud, escaneo completo y pruebas ==\n")
+        record.extendedText.forEach { sb.append(it).append('\n') }
+    }
     sb.append("\n== DTC ==\n")
     if (record.dtcs.isEmpty()) sb.append("No se ejecutó la lectura de códigos.\n")
     record.dtcs.forEach { read ->
@@ -154,6 +162,7 @@ private fun sessionMap(record: SessionRecord): Map<String, Any?> = linkedMapOf(
     "vin" to record.vin,
     "symptoms" to record.symptoms.map { it.name },
     "safety" to "Solo lectura. No se envió el servicio 04. Una conexión no autoriza a circular.",
+    "extended" to record.extended,
     "exchanges" to record.exchanges.map { ex ->
         linkedMapOf(
             "atEpochMs" to ex.atEpochMs,
@@ -441,7 +450,7 @@ object Json {
             null -> append("null")
             is String -> append('"').append(escape(value)).append('"')
             is Boolean, is Int, is Long -> append(value.toString())
-            is Double -> append(if (value % 1.0 == 0.0) value.toLong().toString() else value.toString())
+            is Double -> append(if (value.isNaN() || value.isInfinite()) "null" else if (value % 1.0 == 0.0) value.toLong().toString() else value.toString())
             is Map<*, *> -> {
                 append("{\n")
                 value.entries.forEachIndexed { index, entry ->
