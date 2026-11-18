@@ -176,6 +176,24 @@ object ObdCapabilityDiscoveryEngine {
     /** Páginas Mode 01 a consultar en cadena si el bit «next» está set. */
     val supportPages: List<Int> = listOf(0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0)
 
+    data class PageWalk(val supported: Set<Int>, val bitmapRead: Boolean, val pagesRead: List<Int>)
+
+    /**
+     * SPEC-031 R10 (cierra SPEC-022 req. 5). [read] devuelve los 4 bytes de datos de la página o null
+     * si no hubo respuesta válida. 0x00 siempre; las siguientes solo si su bit vino en 1 en la anterior.
+     */
+    inline fun walkSupportPages(read: (Int) -> List<Int>?): PageWalk {
+        var supported = emptySet<Int>()
+        val pagesRead = mutableListOf<Int>()
+        for (page in supportPages) {
+            if (page != 0x00 && page !in supported) break
+            val data = read(page) ?: break
+            pagesRead += page
+            supported = supported + PidDecoder.supported(page, data)
+        }
+        return PageWalk(supported, pagesRead.isNotEmpty(), pagesRead)
+    }
+
     private fun entry(
         interest: Interest,
         status: SupportStatus,

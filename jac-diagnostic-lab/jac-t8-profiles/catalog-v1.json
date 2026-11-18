@@ -1,0 +1,570 @@
+{
+  "version": "jac-t8-catalog-v1",
+  "decoder_version": "j1979-decoders-1.9.0",
+  "generated_from": "app/src/main/java/app/jac/diagnosticlab/profile/VehicleProfiles.kt",
+  "rule": "Un perfil de ECU se resuelve solo con un identificador documentado observado en Mode 09 o en la etiqueta. Ver ADR-002.",
+  "sources": [
+    {
+      "id": "J1979",
+      "title": "SAE J1979 / ISO 15031-5, servicios y PIDs de emisiones",
+      "url": "https://saemobilus.sae.org/standards/j1979",
+      "retrieved_at": "2026-11-18",
+      "sha256": null,
+      "source_page": null,
+      "level": "STANDARD_PUBLIC",
+      "applies_to": "Cualquier vehículo OBD-II/EOBD"
+    },
+    {
+      "id": "S03",
+      "title": "JAC Chile — ficha Pickup T8",
+      "url": "https://www.jacautoschile.cl/modelos/pickup/t8/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "1e4a2733476cb454723f068c9b24616a24e2203cc19cee30135cc664ddf7ad14",
+      "source_page": null,
+      "level": "OEM_OTHER_VARIANT",
+      "applies_to": "Gama T8 Chile 2024 (2.0 CTI 147 HP / 360 Nm). No identifica la unidad 2023."
+    },
+    {
+      "id": "S09",
+      "title": "Tesis UPS 2024 TTS1919 — panel CAN JAC T8 (LabVIEW, NI 9862)",
+      "url": "https://dspace.ups.edu.ec/bitstream/123456789/28396/1/TTS1919.pdf",
+      "retrieved_at": "2026-11-18",
+      "sha256": "c9ef2bdcadf004cf2a8318d6df77231c759ffc6aadb645e61f2146f0862fad68",
+      "source_page": "17, 28, 47, 54",
+      "level": "ACADEMIC_VALIDATED",
+      "applies_to": "Una JAC T8 diésel en Quito, EURO 3. Otra unidad y otra norma."
+    },
+    {
+      "id": "S11",
+      "title": "Alientech — BOOT DCM6.2AP en JAC T8 Pro 2.0D",
+      "url": "https://www.alientech-tools.com/en/upgrade-2-27/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "8a3c5958dcb70e6132aba208a942861bba9d357d0b0e955c22642e39171cc495",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "T8 Pro 4x4 2.0 diésel desde 2023. No T8 estándar."
+    },
+    {
+      "id": "S12",
+      "title": "OBD Lens — perfil T8 2.0 CTI (HFC4DB2-2E)",
+      "url": "https://obdlens.com/vehicles/profiles/legacy-1153-jac-5a69bb1e45/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "6526b3f2463305ab02aca36c7ab3d1d2196847802d1c09bb62209b0dc3bfcb04",
+      "source_page": null,
+      "level": "COMMUNITY_REPRODUCED",
+      "applies_to": "Años no especificados; «library metadata is not a road-test claim»."
+    },
+    {
+      "id": "S18",
+      "title": "XTOOL — lista de funciones JAC V21.18 (CN)",
+      "url": "https://www.xtooltech.com/official/pack_pdf/PD_JAC/PD_JAC_V21_18_CN.pdf",
+      "retrieved_at": "2026-11-18",
+      "sha256": "b46d51de13a973037e66bca1a3498f7823c9873a08be5a052cd23b57fb0c1b42",
+      "source_page": "1–2",
+      "level": "VENDOR_CATALOG",
+      "applies_to": "Familias de ECU diésel JAC por motor; no por VIN."
+    },
+    {
+      "id": "S19",
+      "title": "JAC China — ficha 江淮T8",
+      "url": "https://pickup.jac.com.cn/jhT8/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "5e3fb625eb8f672a6eb4e8dcd751424dbff5f8c2f20159332115b4ccfdcddefd",
+      "source_page": null,
+      "level": "OEM_OTHER_VARIANT",
+      "applies_to": "Mercado China: HFC4DB2-2E2, 110 kW, 400 Nm, 国VIb."
+    },
+    {
+      "id": "S22",
+      "title": "ecutools BitBox — lista de ECUs (Delphi DCM6.2AP JAC; DCM6.2AP-6D SsangYong FID 89)",
+      "url": "https://ecutools.eu/chip-tuning/bitbox/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "a9bae147299a5aa73a7a483f388147a283507e886aa7df29b6116f806f106e1b",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "DCM6.2AP-6D figura para SsangYong, no para JAC."
+    },
+    {
+      "id": "S32",
+      "title": "Dimsport — aplicaciones JAC T8",
+      "url": "https://www.dimsport.it/en/applications-list/unique/auto/jac/t8-2/",
+      "retrieved_at": "2026-11-18",
+      "sha256": "94a1efae69543cad7f2a7507021ee9bdd5b40a8a5536b91dfd6ced34250733a2",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "T8 2.0 TD 100 kW DCM6.2AP; T8 PRO 2.0 TD 107 kW MD1CS089; T8 2.0 Turbo 130 kW Delphi MT80."
+    },
+    {
+      "id": "S33",
+      "title": "AutoTuner — blog Delphi DCM3.7AP / DCM6.2AP",
+      "url": "https://www.autotuner.com/blogs/news/deplhi-dcm3-7ap-dcm6-2ap",
+      "retrieved_at": "2026-11-18",
+      "sha256": "3113351ebff98cda799d55f1345aa525349f784cf6d394b5880988faa34eea74",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "JAC T8 (2020+) 2.0 diésel con DCM6.2AP (SPC5674)."
+    },
+    {
+      "id": "S34",
+      "title": "iMotriz — ECU JAC JT8 1026400FD020B054",
+      "url": "https://www.imotriz.com/producto/603dbb1046412a58df2e8faebc11f735/1026400fd020b054/ecu-jac-jt8",
+      "retrieved_at": "2026-11-18",
+      "sha256": "513daf2a35c73b1afa9203233374de4e4254b4cdba882b41bde6e8d6b587e543",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "Repuesto; no nombra proveedor ni año."
+    },
+    {
+      "id": "S35",
+      "title": "Inversiones Diesel — Computadora JAC T6 T8 Delphi 1026400FD020",
+      "url": "https://www.invdieselpzo.com/product-page/computadora-jac-hfc1037-t6-t8-delphi-1026400fd020",
+      "retrieved_at": "2026-11-18",
+      "sha256": "329ab3de09244ecc7a02283f00345b5804b7fd8bc36fb2f0eb018d1c80f6116e",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "Repuesto; Delphi; T6/T8 sin año ni variante DCM."
+    },
+    {
+      "id": "S36",
+      "title": "MDC Repuestos (Chile) — ECU computador de motor JAC T8-T6",
+      "url": "https://mdcrepuestos.cl/?s=1026400FD020&post_type=product",
+      "retrieved_at": "2026-11-18",
+      "sha256": "d23fbedda748ef5b7d10d9d2790dc053a126cd491dfbc48b3027c9e1678ca18f",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "«JAC Delphi DCM6.2 AP, código OEM 1026400FD020B-007». Repuesto en Chile; no prueba la unidad."
+    },
+    {
+      "id": "S38",
+      "title": "Desarmaduría IPAR — 1026400FD020 T8 2023 HFC4DB2 (aportada por el usuario)",
+      "url": "https://www.desarmaduriaipar.cl/",
+      "retrieved_at": "2026-11-18",
+      "sha256": null,
+      "source_page": null,
+      "level": "UNVERIFIED",
+      "applies_to": "La búsqueda en el sitio no mostró la pieza; no verificada."
+    },
+    {
+      "id": "S21",
+      "title": "ecufiles.io — tipos Delphi DCM6.2 (fila JAC T8 2.0TDI 2024)",
+      "url": "https://ecufiles.io/ecu-types/delphi-dcm6-2",
+      "retrieved_at": "2026-11-18",
+      "sha256": "58db070f9f13ad61045fcd03d9b8df3b3ccaae8edb62cf02449a4324a74b4518",
+      "source_page": null,
+      "level": "VENDOR_CATALOG",
+      "applies_to": "T8 2.0TDI 2024 137 hp / 320 Nm. Variante distinta de la ficha Chile."
+    }
+  ],
+  "ecu_candidates": [
+    {
+      "id": "BOSCH_EDC17C81",
+      "supplier": "Bosch",
+      "family": "EDC17C81",
+      "engine_scope": "HFC4DE / HFC4DA / HFC4DB (国四/国五, con o sin DPF)",
+      "identifiers": [
+        "EDC17C81"
+      ],
+      "sources": [
+        "S18"
+      ],
+      "note": "Catálogo de herramienta: la familia de motor usa esta ECU en alguna variante."
+    },
+    {
+      "id": "BOSCH_MD1CS089",
+      "supplier": "Bosch",
+      "family": "MD1CS089",
+      "engine_scope": "JAC T8 PRO 2.0L 16V TD 107 kW / 144 HP (Dimsport)",
+      "identifiers": [
+        "MD1CS089"
+      ],
+      "sources": [
+        "S32"
+      ],
+      "note": "Una fuente de herramienta, solo para T8 PRO. No se mezcla con EDC17C81."
+    },
+    {
+      "id": "DELPHI_DCM62AP",
+      "supplier": "Delphi",
+      "family": "DCM6.2AP",
+      "engine_scope": "HFC4DB common-rail 国五 (XTOOL); T8 2.0 TD 100 kW (Dimsport); T8 2020+ (AutoTuner); T8 Pro 4x4 desde 2023 (Alientech)",
+      "identifiers": [
+        "DCM6.2AP",
+        "1026400FD020B-007"
+      ],
+      "sources": [
+        "S18",
+        "S11",
+        "S32",
+        "S33",
+        "S36"
+      ],
+      "note": "Cinco fuentes de herramienta/repuesto; MDC (Chile) asocia el código OEM 1026400FD020B-007. Ninguna es la ficha de esta unidad."
+    },
+    {
+      "id": "DELPHI_DCM62AP_6D",
+      "supplier": "Delphi",
+      "family": "DCM6.2AP-6D",
+      "engine_scope": "Documentada para SsangYong (BitBox FID 89); para JAC T8 solo aportada por el usuario",
+      "identifiers": [
+        "DCM6.2AP-6D"
+      ],
+      "sources": [
+        "S22"
+      ],
+      "note": "Variante distinta de DCM6.2AP. Aplicabilidad a JAC sin fuente descargada."
+    },
+    {
+      "id": "DELPHI_DCM62_PN",
+      "supplier": "Delphi",
+      "family": "DCM6.2 (JAC P/N 1026400FD020, variante no determinada)",
+      "engine_scope": "JAC T6/T8; T8 2.0TDI 2024 137 hp (ecufiles)",
+      "identifiers": [
+        "1026400FD020",
+        "1026400FD020B054",
+        "1MJACLSA_A010D11"
+      ],
+      "sources": [
+        "S21",
+        "S35",
+        "S34"
+      ],
+      "note": "Número de pieza JAC y software listados por catálogo de tuning y repuestos. No dice si es AP o AP-6D."
+    },
+    {
+      "id": "DELPHI_MT80",
+      "supplier": "Delphi",
+      "family": "MT80",
+      "engine_scope": "JAC T8 2.0L Turbo gasolina 130 kW (Dimsport)",
+      "identifiers": [
+        "MT80"
+      ],
+      "sources": [
+        "S32"
+      ],
+      "note": "Motor de gasolina. Si aparece en un T8 diésel, revisar la etiqueta."
+    }
+  ],
+  "signals": [
+    {
+      "key": "01-04",
+      "name": "Calculated Load Value",
+      "unit": "%",
+      "service": "01",
+      "pid_or_did": "04",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A*100/255",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-05",
+      "name": "Engine Coolant Temperature",
+      "unit": "°C",
+      "service": "01",
+      "pid_or_did": "05",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A-40",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-0B",
+      "name": "Intake Manifold Absolute Pressure",
+      "unit": "kPa",
+      "service": "01",
+      "pid_or_did": "0B",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-0C",
+      "name": "Engine RPM",
+      "unit": "rpm",
+      "service": "01",
+      "pid_or_did": "0C",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "(256*A+B)/4",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-0D",
+      "name": "Vehicle Speed",
+      "unit": "km/h",
+      "service": "01",
+      "pid_or_did": "0D",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-0F",
+      "name": "Intake Air Temperature",
+      "unit": "°C",
+      "service": "01",
+      "pid_or_did": "0F",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A-40",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": "S09 p.47: con perfil de norma equivocado (EURO 5 sobre EURO 3) un escáner mostró IAT fuera de rango."
+    },
+    {
+      "key": "01-10",
+      "name": "MAF Air Flow Rate",
+      "unit": "g/s",
+      "service": "01",
+      "pid_or_did": "10",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "(256*A+B)/100",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979",
+        "S09"
+      ],
+      "note": "S09 p.17 escribe /32; J1979 define /100. Se usa J1979. S09 p.47 reporta MAF inusual con perfil equivocado."
+    },
+    {
+      "key": "01-11",
+      "name": "Absolute Throttle Position",
+      "unit": "%",
+      "service": "01",
+      "pid_or_did": "11",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A*100/255",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": "Mariposa, no pedal (REQ-DIAG-001)."
+    },
+    {
+      "key": "01-23",
+      "name": "Fuel Rail Gauge Pressure",
+      "unit": "kPa",
+      "service": "01",
+      "pid_or_did": "23",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "10*(256*A+B)",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": "Diésel common-rail. S09 p.48 cita 26 300 kPa en ralentí leído con escáner; no es un rango de esta unidad."
+    },
+    {
+      "key": "01-33",
+      "name": "Absolute Barometric Pressure",
+      "unit": "kPa",
+      "service": "01",
+      "pid_or_did": "33",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-42",
+      "name": "Control Module Voltage",
+      "unit": "V",
+      "service": "01",
+      "pid_or_did": "42",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "(256*A+B)/1000",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": ""
+    },
+    {
+      "key": "01-49",
+      "name": "Accelerator Pedal Position D",
+      "unit": "%",
+      "service": "01",
+      "pid_or_did": "49",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A*100/255",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": "P2299: comparar con freno solo con escáner de marca; la diferencia D/E no es falla por sí sola."
+    },
+    {
+      "key": "01-4A",
+      "name": "Accelerator Pedal Position E",
+      "unit": "%",
+      "service": "01",
+      "pid_or_did": "4A",
+      "ecu": "ANY",
+      "encoding": "J1979_MODE01",
+      "formula": "A*100/255",
+      "read_allowlisted": true,
+      "sources": [
+        "J1979"
+      ],
+      "note": ""
+    },
+    {
+      "key": "OEM-DPF-SOOT",
+      "name": "[ECM] DPF Soot mass",
+      "unit": "g",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-DPF-DP",
+      "name": "[ECM] DPF pressure drop",
+      "unit": "hPa",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-DPF-REGEN-N",
+      "name": "[ECM] Number of DPF regenerations",
+      "unit": null,
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-FUEL-TEMP",
+      "name": "[ECM] Fuel temperature",
+      "unit": "°C",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-BOOST-SP",
+      "name": "[ECM] Boost pressure setpoint",
+      "unit": "hPa",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-INJ-QTY",
+      "name": "[ECM] Actual fuel injection quantity",
+      "unit": "mg/stroke",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-GLOW-V",
+      "name": "[ECM] Glow plug voltage",
+      "unit": "mV",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    },
+    {
+      "key": "OEM-WSS-FL",
+      "name": "[ESP] Front left wheel speed",
+      "unit": "km/h",
+      "service": null,
+      "pid_or_did": null,
+      "ecu": "UNKNOWN",
+      "encoding": "UNKNOWN_ENCODING",
+      "formula": null,
+      "read_allowlisted": false,
+      "sources": [
+        "S12"
+      ],
+      "note": "Listada por un tercero para «T8 2.0 CTI HFC4DB2-2E». Sin request ni fórmula publicadas; licencia personal. No se consulta."
+    }
+  ]
+}
