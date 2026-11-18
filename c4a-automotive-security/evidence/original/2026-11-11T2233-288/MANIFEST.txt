@@ -8,3 +8,4 @@ note: Integridad del archivo PDF. No prueba autenticidad de datos del vehículo.
 csv: jac-sensores.csv
 json_session: 2026-11-11T2233-288.json
 environment: REAL_VEHICLE_READ_ONLY (según informe de la app; tramas crudas completas pendientes de auditoría independiente)
+anonymized: 2026-11-18. VIN (texto, respuesta 0902 cruda y bytes) y MAC del adaptador reemplazados en los JSON. El PDF y el CSV no los contienen; su hash no cambia.
