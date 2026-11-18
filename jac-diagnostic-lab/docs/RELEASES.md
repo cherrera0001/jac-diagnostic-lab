@@ -2,6 +2,18 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.11.0 — Validada en la unidad real: ECU DCM6.2 e informe profesional
+
+- **Tag:** `v1.11.0`
+- **versionCode:** 25
+- **Fecha:** 2026-11-18
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.11.0
+- **SHA-256:** `623c0faf089e6dec9ecc0f3e31a155709367e69ccd1ca9195f18363ce4d64d7a`
+
+Lectura real: P0579 (alm.+pend.) y P2299, ECU Delphi DCM6.2, códigos borrados hace 311 km. PDF profesional, detalle tocable, prueba freno contra acelerador, reconexión BLE automática. 101 pruebas JVM. Instalada y usada en la unidad.
+
+## v1.10.1 — Enlace BLE trabado (sin release propio; incluido en 1.11.0)
+
 ## v1.10.0 — Informe de taller y dimensiones
 
 - **Tag:** `v1.10.0`

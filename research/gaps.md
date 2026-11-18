@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|
 | G-01 | Manual de taller T8 2023 Chile, mapa de módulos, versión de ECU, cobertura JDS | Sin esto no hay DIDs, rangos ni texto JAC de P0579/P2299 | JAC Autos Chile (S05) / JAC Customer Service | Solicitud técnica (borrador abajo) | Mode 09 + etiqueta ECU (SPEC-031); J1979 genérico |
 | G-02 | Paquete RMI T8 en la API JAC Global | Hoy solo 6 modelos (S25) | JAC Motors | Que JAC lo publique | Reconsultar S25 en cada release |
-| G-03 | Identificación de la ECU de esta unidad | Bosch EDC17C81 vs Delphi DCM6.2/6.2AP (S18, S11, S21) | Propietario | Escaneo completo (0904/090A) o foto/texto de la etiqueta | Perfil `PARTIAL` con lecturas J1979 |
+| G-03 | ~~Proveedor de ECU~~ **cerrado 2026-11-18**: CALID 0904 = `DCM6.2` (Delphi). Abierto: variante AP vs AP-6D | Delphi DCM6.2AP vs DCM6.2AP-6D | Propietario | Foto/texto de la etiqueta física | Perfil `IDENTIFIED` (familia DCM6.2) — `research/validation/2026-11-18-unidad-real.md` |
 | G-04 | Norma de emisiones de la unidad | La tesis S09 muestra lecturas falsas con perfil de norma equivocado | Propietario / homologación chilena | Placa de homologación o certificado | No se aplica ninguna norma por defecto |
 | G-05 | Señal del interruptor de freno / crucero | P2299/P0579 apuntan a esas señales; no hay PID genérico | JAC (DIDs) | DID documentado o medición con multímetro por técnico | Medición externa registrada como evidencia distinta de OBD |
 | G-06 | Codificación de señales ampliadas T8 (DPF, boost, inyección) | Diagnóstico DPF / pérdida de potencia | JAC / proveedor ECU; OBD Lens no publica | Request + fórmula + vector de prueba con fuente | `UNKNOWN_ENCODING`, no se consulta (R7) |

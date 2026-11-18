@@ -1,6 +1,6 @@
 # JAC T8 — qué se sabe, de dónde sale y qué NO prueba de esta unidad
 
-Revisión: 2026-11-18. Unidad de referencia: JAC T8 2023 **declarada** por el propietario (Chile). VIN, motor, proveedor y versión de ECU **sin identificar por lectura**.
+Revisión: 2026-11-18. Unidad de referencia: JAC T8 2023 del propietario (Chile). **Actualización 2026-11-18 (lectura real):** VIN leído (año 2023 por ISO 3779), ECU **Delphi DCM6.2** por CALID 0904, CVN `A7BB65AE`, CAN 11/500 en 7E8. Variante AP / AP-6D sin determinar. Ver `research/validation/2026-11-18-unidad-real.md`.
 Cada afirmación cita un id de `source-manifest.json`. Estados: `DOCUMENTADO` (fuente), `DESCARGADO` (archivo con hash), `ANALIZADO` (extraído y leído), `IMPLEMENTADO` (en la app), `PROBADO EN REPLAY` (prueba JVM), `PROBADO EN HARDWARE` (ninguno en esta iteración), `NO VERIFICADO`.
 
 ## 1. Identidad de la familia (no de la unidad)
@@ -42,7 +42,7 @@ Cada afirmación cita un id de `source-manifest.json`. Estados: `DOCUMENTADO` (f
 
 ## 4. Qué haría falta para cerrar la identificación
 
-0. **Nota sobre el CHANGELOG v1.8.0:** dice «ECU Delphi DCM6.2». No hay en el repositorio ni en `evidence/captured/` una respuesta Mode 09 que lo respalde. Se trata como NO VERIFICADO hasta tener el registro de identificación de la v1.9.0.
+0. **CHANGELOG v1.8.0 «ECU Delphi DCM6.2»: VERIFICADO el 2026-11-18** con 0904 = `DCM6.2` en la unidad real.
 1. **Botón «Identificar ECU (Mode 09)» o escaneo completo** (`0904` CALID, `090A` nombre ECU) en la unidad. La app ya lo hace y ahora lo cruza con los candidatos.
 2. **Foto o texto de la etiqueta de la ECU** (campo nuevo en Capacidad → Perfil del vehículo).
 3. **VIN**: se lee directamente (0902) cuando la ECU lo declara; se usa el carácter 10 para comparar el año. La exportación ofrece anonimizarlo si el archivo se comparte.

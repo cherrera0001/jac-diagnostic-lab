@@ -10,6 +10,7 @@
 | [oem-re-analysis.md](oem-re-analysis.md) | OSINT/REA realizado, con qué acceso, y lo no realizado con su motivo |
 | [app-capability-matrix.csv](app-capability-matrix.csv) | Función observada → fuente → diseño propio → estado |
 | [gaps.md](gaps.md) | Brechas abiertas y borrador de solicitud a JAC Chile |
+| [validation/2026-11-18-unidad-real.md](validation/2026-11-18-unidad-real.md) | Lectura real de la unidad: bytes, ECU confirmada, códigos, fallos de la app corregidos |
 | [tools/build_manifest.py](tools/build_manifest.py) | Regenera el manifiesto desde los registros de descarga |
 | `_fetch-log.tsv`, `_fetch-log-extra.tsv` | Registro crudo de cada descarga (HTTP, bytes, SHA-256, hora UTC) |
 

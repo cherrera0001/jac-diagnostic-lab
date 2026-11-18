@@ -2,7 +2,9 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.10.0** (`versionCode` 23), 18-11-2026. Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
+**Versión actual: 1.11.0** (`versionCode` 25), 18-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática. APK: [release v1.11.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.11.0).
+
+Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
 Versión 1.9.0 (`versionCode` 22): Identificación de ECU por Mode 09 (raw por ECU, VIN directo), perfil JAC T8 por evidencia observable con fuentes y niveles de confianza (SPEC-031). La versión en uso aparece en el pie de todas las pantallas y en cada PDF/JSON/TXT. APK: [release v1.9.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.9.0) · copia en `dist/jac-diagnostic-lab-1.9.0-debug.apk` + `.sha256`.
 
@@ -16,10 +18,10 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0 |
-| Archivo | `jac-diagnostic-lab-1.10.0-debug.apk` (con su `.sha256`) |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.10.0-debug.apk` |
-| Milestone | «v1.10.0 — Informe de taller y dimensiones» |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.11.0 |
+| Archivo | `jac-diagnostic-lab-1.11.0-debug.apk` (con su `.sha256`) |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.11.0-debug.apk` |
+| Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
 
@@ -30,12 +32,12 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.10.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.11.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.10.0-debug.apk
+adb install -r jac-diagnostic-lab-1.11.0-debug.apk
 ```
 
 ## Pantallas (1.8.0, ampliadas en 1.9.0)

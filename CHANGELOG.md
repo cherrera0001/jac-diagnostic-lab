@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.11.0 — 2026-11-18 (JAC Diagnostic Lab) — validada en la unidad real
+
+Primera lectura completa de la unidad con la app nueva: [research/validation/2026-11-18-unidad-real.md](research/validation/2026-11-18-unidad-real.md).
+
+- **ECU confirmada por lectura: Delphi DCM6.2** (CALID 0904 = `DCM6.2`, CVN `A7BB65AE`). El catálogo suma «DCM6.2» como identificador de familia (S21): el perfil pasa de `PARTIAL` a `IDENTIFIED`. La variante AP / AP-6D sigue sin determinar.
+- **Informe de taller profesional:** PDF con diseño propio (`report/WorkshopPdf.kt`): encabezado con ficha del vehículo, resumen con semáforo y códigos, **diagnóstico principal primero** (significado práctico del grupo de códigos, contexto del cuadro congelado, historial de borrado, pasos en orden), hallazgos con etiquetas de gravedad, tablas con columnas, «página X de Y» y espacio de firma del taller.
+- Correcciones con datos reales: código con varias categorías una sola vez; `7F 0A 13` = «servicio no admitido»; ceros imposibles del cuadro congelado marcados «no capturado»; sin alerta de frío con el motor recién encendido; el PDF se guarda una sola vez.
+- **Pestaña Estado con detalle:** cada problema, aviso y código se toca para ver qué es, con qué dato se detectó y qué revisar; botón «Ver los N datos leídos».
+- **Prueba nueva «Freno contra acelerador» (P2299/P0579):** detecta si la ECU corta el par al frenar con el acelerador pisado y si las pistas del pedal van en proporción. Pendiente de ejecutar en la unidad.
+- **Enlace BLE:** reconexión automática (hasta 3) cuando el clon v2.1 se cuelga; un escaneo sin respuesta ya no borra los datos buenos.
+
+## v1.10.1 — 2026-11-18 (JAC Diagnostic Lab)
+
+Corrección encontrada en el vehículo: tras un comando sin respuesta (020200) Android rechazaba las escrituras GATT y la app registraba «TIMEOUT 0 ms» para siempre. Ahora reintenta, declara el enlace caído, cancela el comando pendiente del ELM con CR y detiene el monitor tras 12 fallos seguidos.
+
 ## v1.10.0 — 2026-11-18 (JAC Diagnostic Lab)
 
 Informe para el taller y ajuste de dimensiones. [SPEC-033](specs/033-workshop-report/spec.md)

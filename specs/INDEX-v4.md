@@ -1,4 +1,4 @@
-# Specs Master Prompt v4.0 — índice (revisado 2026-11-18, app 1.10.0)
+# Specs Master Prompt v4.0 — índice (revisado 2026-11-18, app 1.11.0)
 
 | Spec | Estado |
 | --- | --- |
@@ -17,7 +17,7 @@
 | 030-validation-and-release | CI con pruebas, lint, APK y SHA-256 |
 | **031-vehicle-fingerprint-profiles** | **1.9.0** — huella, perfil de ECU por evidencia, identificación Mode 09 (R5–R11) |
 | **032-app-version-visible** | **1.9.0** — versión en el pie y en PDF/JSON/TXT (R12) |
-| **033-workshop-report** | **1.10.0** — informe de taller tras leer todo, cuadro congelado completo, dimensiones (R13–R15) |
+| **033-workshop-report** | **1.10.0–1.11.0** — informe de taller tras leer todo, cuadro congelado, dimensiones, PDF profesional, datos reales (R13–R17; R17 pendiente en unidad) |
 
 Auditorías:
 - `jac-diagnostic-lab/docs/audits/current-codebase-assessment.md`

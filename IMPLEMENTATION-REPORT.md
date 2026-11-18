@@ -61,6 +61,22 @@ Base: rama `cursor/jac-diagnostic-lab`, HEAD `e44be61` (v1.8.0, `versionCode` 21
 
 Build: 100 pruebas, 0 fallos; lint 8 avisos, 0 errores; APK `jac-diagnostic-lab-1.10.0-debug.apk` 12817802 bytes, SHA-256 `5c60b0445a231e40da36e263fad14448688d22fd65fece45da326ac40b6f81ed`; `adb install -r` Success.
 
+## v1.10.1–1.11.0 — Validación en la unidad real (2026-11-18)
+
+Detalle y bytes: `research/validation/2026-11-18-unidad-real.md`. ECU **Delphi DCM6.2** confirmada (0904), P0579 alm.+pend., P2299 alm., 0A rechazado, códigos borrados hace 311 km. Fallos de la app encontrados en el vehículo y corregidos: escritura GATT rechazada tomada como timeout (1.10.1), monitor sin fin (1.10.1), escaneo vacío que borraba datos, perfil `PARTIAL` con CALID real, duplicados (1.11.0).
+
+| Cambio | Ruta | Prueba |
+|---|---|---|
+| Documento estructurado + diagnóstico principal | `report/WorkshopReport.kt` (`buildDoc`) | `r13`, `r14`, `r16_realSessionIssuesAreHandled` |
+| PDF profesional (2 pasadas, página X de Y) | `report/WorkshopPdf.kt` | PDF real revisado (6 páginas) |
+| Familia DCM6.2 en catálogo | `profile/VehicleProfiles.kt`, `jac-t8-profiles/catalog-v1.json` | `r6` (CALID real «DCM6.2») |
+| Prueba freno contra acelerador | `dynamic/GuidedTests.kt` (`brake`) | pendiente en unidad |
+| Detalle tocable en Estado | `ui/AppShell.kt` (`DtcDetail`, hallazgos) | revisión en teléfono |
+| GATT rechazado → enlace caído, CR de cancelación | `bt/Bluetooth.kt` | sesión real |
+| Monitor 12 fallos + reconexión automática; escaneo vacío no borra | `LabController.kt` | sesión real |
+
+Build 1.11.0: 101 pruebas, 0 fallos; APK 12884904 bytes, SHA-256 `623c0faf089e6dec9ecc0f3e31a155709367e69ccd1ca9195f18363ce4d64d7a`.
+
 ## Qué no fue posible verificar
 
 - **Nada se probó en hardware en esta iteración.** Todas las pruebas son replays JVM con fixtures sintéticos etiquetados.
