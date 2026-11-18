@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.10.0 — Informe de taller y dimensiones
+
+- **Tag:** `v1.10.0`
+- **versionCode:** 23
+- **Fecha:** 2026-11-18
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0 (`jac-diagnostic-lab-1.10.0-debug.apk` + `.sha256`)
+- **SHA-256:** `5c60b0445a231e40da36e263fad14448688d22fd65fece45da326ac40b6f81ed`
+
+Informe de taller generado después de leer todo (DTC, cuadro congelado Mode 02, todos los PID, monitores, Mode 06, Mode 09, registro), con detalle y verificación por código. Cabecera y pestañas ajustadas. 100 pruebas JVM. Instalado en teléfono; **no probado en el vehículo**.
+
 ## v1.9.0 — Identificación de ECU y perfil JAC T8
 
 - **Tag:** `v1.9.0`

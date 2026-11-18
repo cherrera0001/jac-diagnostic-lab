@@ -50,6 +50,17 @@ Base: rama `cursor/jac-diagnostic-lab`, HEAD `e44be61` (v1.8.0, `versionCode` 21
 | Instalación en teléfono | `adb install -r` → Success; `dumpsys package`: versionName 1.9.0, versionCode 22. pie central «JAC Diagnostic Lab v1.9.0 (22) · solo lectura» verificado en pantalla (captura + volcado uiautomator) |
 | Hardware vehículo | **No ejecutado** (SKIP) |
 
+## v1.10.0 — Informe de taller (SPEC-033)
+
+| Cambio | Ruta | Prueba |
+|---|---|---|
+| Informe completo, espera lectura total, detalle por código | `jac-diagnostic-lab/app/src/main/java/app/jac/diagnosticlab/report/WorkshopReport.kt` | `r13_reportWaitsForTheFullReadAndSaysWhatIsMissing`, `r14_reportGivesTheWorkshopCodeContextFreezeLiveDataAndChecks` |
+| Cuadro congelado Mode 02 (`02PP00`) | `obd/FreezeFrame.kt`, `LabController.kt` (`fullScanInternal`, `workshopInput`) | r14 (decodificación + política de comandos) |
+| Tarjeta «Informe para el taller» (PDF + .sha256 + JSON) | `ui/Ui.kt` (`WorkshopReportCard`) | revisión en teléfono (captura) |
+| Dimensiones: `statusBarsPadding`, pestañas 60 dp | `ui/AppShell.kt` | revisión en teléfono (captura) |
+
+Build: 100 pruebas, 0 fallos; lint 8 avisos, 0 errores; APK `jac-diagnostic-lab-1.10.0-debug.apk` 12817802 bytes, SHA-256 `5c60b0445a231e40da36e263fad14448688d22fd65fece45da326ac40b6f81ed`; `adb install -r` Success.
+
 ## Qué no fue posible verificar
 
 - **Nada se probó en hardware en esta iteración.** Todas las pruebas son replays JVM con fixtures sintéticos etiquetados.
