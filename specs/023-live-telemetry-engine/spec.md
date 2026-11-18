@@ -1,6 +1,6 @@
 # SPEC-023 — VehicleTelemetryEngine
 
-**Estado:** en implementación  
+**Estado:** verificado en replay (`TelemetryEngineTest` testTel001…005, 2026-11-18)  
 **Depende de:** SPEC-022  
 **AC:** AC-004
 
@@ -15,11 +15,11 @@
 
 ## Criterios de aceptación
 
-- [ ] `TEST-TEL-001` `nextDue` no propone dos PIDs a la vez (una decisión = un PID).  
-- [ ] `TEST-TEL-002` FAST gana a SLOW si ambos están vencidos.  
-- [ ] `TEST-TEL-003` Hz efectivo se calcula desde gaps reales.  
-- [ ] `TEST-TEL-004` en pause, `nextDue` = null.  
-- [ ] `TEST-TEL-005` canal MEDIUM no queda en starvation indefinida si está vencido.
+- [x] `TEST-TEL-001` `nextDue` no propone dos PIDs a la vez (una decisión = un PID).  
+- [x] `TEST-TEL-002` FAST gana a SLOW si ambos están vencidos.  
+- [x] `TEST-TEL-003` Hz efectivo se calcula desde gaps reales.  
+- [x] `TEST-TEL-004` en pause, `nextDue` = null.  
+- [x] `TEST-TEL-005` canal MEDIUM no queda en starvation indefinida si está vencido.
 
 ## Fuera de alcance
 

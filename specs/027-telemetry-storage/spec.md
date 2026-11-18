@@ -1,6 +1,6 @@
 # SPEC-027 — Telemetry storage (AC-009 / AC-010)
 
-**Estado:** en implementación (1.5.0)
+**Estado:** verificado en replay (`TelemetryStoreTest` testStore001/002, 2026-11-18)
 
 ## Requisitos
 

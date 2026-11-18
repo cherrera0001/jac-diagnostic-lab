@@ -2,7 +2,9 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.8.0** (`versionCode` 21), 18-11-2026. Rediseño completo, escaneo de todos los PID que declara la ECU, salud por sistema y pruebas dinámicas.
+**Versión actual: 1.9.0** (`versionCode` 22), 18-11-2026. Identificación de ECU por Mode 09 (raw por ECU, VIN directo), perfil JAC T8 por evidencia observable con fuentes y niveles de confianza (SPEC-031). La versión en uso aparece en el pie de todas las pantallas y en cada PDF/JSON/TXT. APK: [release v1.9.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.9.0) · copia en `dist/jac-diagnostic-lab-1.9.0-debug.apk` + `.sha256`.
+
+Versión anterior publicada: 1.8.0 (`versionCode` 21). Rediseño completo, escaneo de todos los PID que declara la ECU, salud por sistema y pruebas dinámicas.
 
 No borra códigos (no Mode 04), no reprograma la ECU y no ejecuta actuadores. Una conexión exitosa **no** autoriza a circular.
 
@@ -12,10 +14,10 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0 |
-| Archivo | `jac-diagnostic-lab-1.8.0-debug.apk` (con su `.sha256`) |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.8.0-debug.apk` |
-| Milestone | «v1.8.0 — Salud, escaneo completo y pruebas» |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.9.0 |
+| Archivo | `jac-diagnostic-lab-1.9.0-debug.apk` (con su `.sha256`) |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.9.0-debug.apk` |
+| Milestone | «v1.9.0 — Identificación de ECU y perfil JAC T8» |
 
 ### Antes de instalar
 
@@ -26,15 +28,17 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.8.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.9.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.8.0-debug.apk
+adb install -r jac-diagnostic-lab-1.9.0-debug.apk
 ```
 
-## Pantallas (1.8.0)
+## Pantallas (1.8.0, ampliadas en 1.9.0)
+
+**Nuevo en 1.9.0:** pie con la versión en uso en todas las pantallas; en Herramientas avanzadas → Capacidad, tarjeta «Perfil del vehículo» con «Identificar ECU (Mode 09)», respuestas por ECU, campo para la etiqueta física de la ECU, estado del perfil (IDENTIFIED / SUPPLIER_ONLY / AMBIGUOUS / PARTIAL), chequeo del año del VIN y cobertura del catálogo. «Consultar VIN» ya no pide autorización.
 
 | Pestaña | Para qué sirve |
 | --- | --- |

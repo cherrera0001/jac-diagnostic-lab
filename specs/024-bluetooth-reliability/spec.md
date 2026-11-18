@@ -1,6 +1,6 @@
 # SPEC-024 — Bluetooth reliability / LinkPhase
 
-**Estado:** en implementación (1.5.0)  
+**Estado:** verificado en replay (`BluetoothReliabilityTest` testBt001…006, 2026-11-18); E2E con hardware pendiente  
 **AC:** AC-001…004
 
 ## Requisitos

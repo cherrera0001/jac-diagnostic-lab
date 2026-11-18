@@ -2,6 +2,17 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.9.0 — Identificación de ECU y perfil JAC T8
+
+- **Tag:** `v1.9.0`
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.9.0 (`jac-diagnostic-lab-1.9.0-debug.apk` + `.sha256`)
+- **versionCode:** 22
+- **Fecha:** 2026-11-18
+- **APK local:** `dist/jac-diagnostic-lab-1.9.0-debug.apk` + `.sha256`
+- **SHA-256:** `f050d6985ab08d30baf5aa8678f2ecd57cd20ac89a2cc15c72a1a3f328863865`
+
+Versión visible en el pie y en PDF/JSON/TXT (corrige el «1.0.0» fijo del PDF). Mode 09 por ECU con raw y timestamps, VIN directo, perfil por evidencia (DCM6.2AP / DCM6.2AP-6D / P/N 1026400FD020 / MT80 / EDC17C81 / MD1CS089), catálogo versionado con fuentes. Probado en replay (JVM). **No probado en hardware** en esta iteración.
+
 ## v1.8.0 — Salud, escaneo completo y pruebas
 
 - **Tag:** `v1.8.0`

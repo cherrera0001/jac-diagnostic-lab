@@ -24,5 +24,19 @@ jobs:
           java-version: "21"
       - name: Unit tests
         run: ./gradlew :app:testDebugUnitTest --no-daemon
+      - name: Lint
+        run: ./gradlew :app:lintDebug --no-daemon
       - name: Assemble debug
         run: ./gradlew :app:assembleDebug --no-daemon
+      - name: SHA-256 del APK
+        run: |
+          APK=$(realpath "$(find . -path '*outputs/apk/debug/*.apk' | head -n1)")
+          echo "APK=$APK"
+          sha256sum "$APK" | tee app-debug.apk.sha256
+          echo "APK_PATH=$APK" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jac-diagnostic-lab-debug-apk
+          path: |
+            ${{ env.APK_PATH }}
+            ${{ github.workspace }}/jac-diagnostic-lab/app-debug.apk.sha256
