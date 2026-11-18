@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -102,7 +103,7 @@ fun AppShell(
         topBar = { ConnectionBar(state, actions) },
         bottomBar = {
             Column(Modifier.fillMaxWidth().background(Panel)) {
-                NavigationBar(containerColor = Panel, windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
+                NavigationBar(containerColor = Panel, windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0), modifier = Modifier.height(60.dp)) {
                     tabs.forEachIndexed { i, label ->
                         NavigationBarItem(
                             selected = tab == i,
@@ -157,7 +158,7 @@ private fun ConnectionBar(state: LabState, actions: ShellActions) {
         else -> Accent to state.linkPhase.label
     }
     Row(
-        Modifier.fillMaxWidth().background(Panel).padding(start = 16.dp, end = 8.dp, top = 36.dp, bottom = 10.dp),
+        Modifier.fillMaxWidth().background(Panel).statusBarsPadding().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(color))

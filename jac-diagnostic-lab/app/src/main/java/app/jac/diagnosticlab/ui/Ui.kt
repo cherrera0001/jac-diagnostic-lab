@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -136,6 +137,8 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun setEcuLabel(text: String) = lab.setEcuLabel(text)
     fun identifyEcu() = lab.identifyEcu()
     fun fullScan() = lab.fullScan()
+    fun workshopInput() = lab.workshopInput()
+    fun sessionJson() = lab.sessionJson()
     fun startGuidedTest(id: String) = lab.startGuidedTest(id)
     fun stopGuidedTest() = lab.stopGuidedTest()
     fun markEvent() = lab.markEvent()
@@ -195,7 +198,10 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             stopTest = { model.stopGuidedTest() },
             mark = { model.markEvent() },
         ),
-        exportSection = { EvidenceScreen(state, model, compact = true) },
+        exportSection = {
+            WorkshopReportCard(state, model)
+            EvidenceScreen(state, model, compact = true)
+        },
         advancedSection = {
             Text("Lectura guiada (versión anterior)", style = MaterialTheme.typography.titleMedium)
             TodayScreen(state, model, permissions)
@@ -966,7 +972,7 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel, compact:
     if (pdfFromSaved && !compact) Text("Esta sesión en pantalla no tiene contenido. El PDF usará la lectura guardada ${saved?.sessionId}. JSON, TXT y CSV de esta sesión vacía no se crean.")
     Row {
         Checkbox(checked = anonymize, onCheckedChange = { anonymize = it })
-        Text(if (compact) "Ocultar VIN y dirección Bluetooth" else "Anonimizar identificador y dirección Bluetooth en JSON y TXT", Modifier.padding(top = 12.dp))
+        Text(if (compact) "Ocultar VIN y dirección Bluetooth" else "Anonimizar identificador y dirección Bluetooth en JSON y TXT", Modifier.padding(top = 12.dp), color = Color(0xFFE6EAF0))
     }
     val pdf = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -1249,6 +1255,57 @@ private fun factsFromState(
         samplePairs = state.samples.map { it.pid to it.value }.ifEmpty { saved?.samplePairs.orEmpty() },
         timeMetrics = state.timeMetrics ?: saved?.timeMetrics,
     )
+}
+
+/**
+ * SPEC-033: el informe de taller se arma después de leer todo (escaneo completo con DTC, cuadro
+ * congelado, Mode 06 y Mode 09). Si falta algo, el botón primero lo lee y al terminar genera el PDF.
+ */
+@Composable
+private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pending by remember { mutableStateOf(false) }
+    var result by remember { mutableStateOf("") }
+    val connected = state.ecuTalking
+    val missing = remember(state.scanAtMs, state.dtcs, state.ecuIdentification) { app.jac.diagnosticlab.report.WorkshopReport.missing(model.workshopInput()) }
+    fun generate() {
+        runCatching {
+            val doc = app.jac.diagnosticlab.report.WorkshopReport.build(model.workshopInput())
+            val pdf = renderReadingPdf(doc.title, doc.lines, state.appVersion)
+            val stamp = state.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
+            val name = "JAC-taller-$stamp.pdf"
+            val hash = sha256Hex(pdf)
+            val where = saveDownload(context, name, pdf, "application/pdf")
+            saveDownload(context, "$name.sha256", "$hash  $name\n".toByteArray(Charsets.UTF_8), "text/plain")
+            saveDownload(context, "JAC-taller-$stamp.json", model.sessionJson().toByteArray(Charsets.UTF_8), "application/json")
+            result = "Guardado en $where (PDF + .sha256 + JSON con el registro completo)."
+        }.onFailure { result = "No se pudo guardar el informe. ${it.message.orEmpty()}" }
+    }
+    LaunchedEffect(state.busy, state.scanAtMs, pending) {
+        if (pending && !state.busy) {
+            pending = false
+            if (state.scanAtMs != null) generate() else result = "El escaneo no terminó. Revise la conexión y vuelva a intentar."
+        }
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Informe para el taller", style = MaterialTheme.typography.titleMedium)
+            Text("Se genera después de leer todo: códigos almacenados, pendientes y permanentes, cuadro congelado, todos los PID, monitores, Mode 06, identificación de la ECU y el registro de comunicación. Incluye qué verificar por cada código.", fontSize = 13.sp)
+            if (missing.isEmpty()) Text("Datos completos. Escaneo ${state.scanAtMs?.let { java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.ROOT).format(java.util.Date(it)) }}.", fontSize = 13.sp, color = Color(0xFF66BB6A))
+            else Text("Falta leer: ${missing.joinToString("; ")}.", fontSize = 13.sp, color = Color(0xFFF5C16C))
+            Button(
+                onClick = {
+                    result = ""
+                    if (missing.isEmpty()) generate() else { pending = true; model.fullScan() }
+                },
+                enabled = !state.busy && (missing.isEmpty() || connected),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (missing.isEmpty()) "Generar informe de taller (PDF)" else "Leer todo y generar informe") }
+            if (missing.isNotEmpty() && !connected) Text("Conecte primero con «Conectar y diagnosticar» en Estado.", fontSize = 12.sp)
+            if (pending && state.busy) Text(state.statusLine, fontSize = 12.sp)
+            if (result.isNotBlank()) Text(result, fontSize = 12.sp)
+        }
+    }
 }
 
 private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {

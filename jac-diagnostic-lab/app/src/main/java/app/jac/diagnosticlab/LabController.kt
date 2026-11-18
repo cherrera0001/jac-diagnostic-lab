@@ -1,5 +1,8 @@
 package app.jac.diagnosticlab
 
+import app.jac.diagnosticlab.obd.FreezeFrame
+import app.jac.diagnosticlab.obd.FreezeValue
+import app.jac.diagnosticlab.report.WorkshopInput
 import android.annotation.SuppressLint
 import android.Manifest
 import android.app.Application
@@ -139,6 +142,8 @@ data class LabState(
     val recovery: String? = null,
     val sessionId: String = "",
     val freeze: List<FreezeNote> = emptyList(),
+    /** Cuadro congelado completo (Mode 02, cuadro 00) leído en el escaneo. */
+    val freezeValues: List<FreezeValue> = emptyList(),
     val busy: Boolean = false,
     val statusLine: String = "Listo para buscar el adaptador.",
     val protocol: String = "0",
@@ -658,6 +663,9 @@ class LabController(private val app: Application) {
 
     fun exportBytes(uri: Uri, bytes: ByteArray, refusal: String?) = writeExport(uri, bytes, refusal)
 
+    /** JSON completo de la sesión (todos los comandos con bytes), compañero del informe de taller. */
+    fun sessionJson(): String = toJson(buildRecord())
+
     fun disconnect() {
         stopPoll()
         autodiagGate.set(false)
@@ -1098,6 +1106,16 @@ class LabController(private val app: Application) {
                     else -> emptyList()
                 },
             )
+            // Cuadro congelado: qué motor había cuando se guardó el código. Solo si hay código o cuadro.
+            val hasCodes = dtcs.any { it.codes.isNotEmpty() }
+            if (hasCodes && freeze.isEmpty()) freeze = listOf(decodeFreeze(current.exchange("020200", 8000)))
+            val freezeValues = if (hasCodes || freeze.any { it.dtc != null }) {
+                state.update { it.copy(statusLine = "Escaneo completo: cuadro congelado (Mode 02)…") }
+                FreezeFrame.plan(state.value.supported).mapNotNull { pid ->
+                    FreezeFrame.decode(pid, current.exchange(FreezeFrame.command(pid), 5000))
+                }
+            } else emptyList()
+            trace("FREEZE valores=${freezeValues.size}")
             // Las señales del escaneo también alimentan la matriz de capacidad y el monitor.
             val now = System.currentTimeMillis()
             val scanSamples = signals.groupBy { it.pid }.mapNotNull { (pid, list) ->
@@ -1110,6 +1128,8 @@ class LabController(private val app: Application) {
                 it.copy(
                     scanSignals = signals,
                     scanAtMs = now,
+                    freeze = freeze,
+                    freezeValues = freezeValues,
                     readiness = readiness,
                     readinessCycle = cycle,
                     mode06 = mode06,
@@ -1131,6 +1151,39 @@ class LabController(private val app: Application) {
         } finally {
             telemetry.resume()
         }
+    }
+
+    /** Todo lo leído, para el informe de taller (SPEC-033). */
+    fun workshopInput(): WorkshopInput {
+        val st = state.value
+        val scanRaw = st.scanAtMs?.let { at -> st.samples.filter { it.atEpochMs == at }.associate { it.pid to it.raw } }.orEmpty()
+        return WorkshopInput(
+            appVersion = st.appVersion,
+            sessionId = sessionId,
+            generatedAtMs = System.currentTimeMillis(),
+            declaredModel = st.declaredModel,
+            declaredYear = st.declaredYear,
+            vin = st.vin,
+            protocol = listOf(st.protocolNumber, st.protocolText).filter { it.isNotBlank() }.joinToString(" "),
+            adapterId = st.adapterId,
+            adapterVoltage = st.voltageText,
+            scanAtMs = st.scanAtMs,
+            dtcs = dtcs.ifEmpty { st.dtcs },
+            freezeNotes = st.freeze,
+            freezeValues = st.freezeValues,
+            signals = st.scanSignals,
+            rawByPid = scanRaw,
+            supportedPids = st.supported,
+            readiness = st.readiness,
+            readinessCycle = st.readinessCycle,
+            mode06 = st.mode06,
+            vehicleInfo = st.vehicleInfo,
+            ecuIdentification = st.ecuIdentification,
+            profile = st.profile,
+            health = st.health,
+            exchanges = st.exchanges,
+            errors = errors.toList(),
+        )
     }
 
     private fun recomputeHealth() {
@@ -1667,6 +1720,7 @@ class LabController(private val app: Application) {
                 dtcs = emptyList(),
                 samples = emptyList(),
                 freeze = emptyList(),
+                freezeValues = emptyList(),
                 adapterId = "",
                 ecuTalking = false,
                 error = null,
