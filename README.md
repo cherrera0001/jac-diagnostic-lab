@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.5.0.** APK: [release v1.5.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.5.0). Historial JSONL, LinkPhase, Capacidad, telemetría por PID. Auditoría latest: `jac-diagnostic-lab/docs/audits/latest-code-assessment.md`. Issue abierto: **SAFE-001**.
+**App actual: JAC Diagnostic Lab 1.8.0.** APK: [release v1.8.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0). Estado por sistema, escaneo de todos los PID declarados, Mode 06/09 y pruebas dinámicas. Issue abierto: **SAFE-001**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
@@ -32,43 +32,23 @@ La app solo envía una lista cerrada de consultas. No borra códigos, no reprogr
 
 ## Cómo se usa
 
-Condición: camioneta **estacionada**, freno de mano puesto, contacto en **ON**. No circular con la app conectada. El dueño empieza en **Hoy** (ocho pasos). El mecánico usa **Monitor** (medidores + antes/después) y **Taller** (ciclo de siete pasos).
+Condición: camioneta **estacionada**, freno de mano puesto, motor en marcha o contacto en **ON**. Cerrar otras apps de diagnóstico: el adaptador atiende a un solo cliente.
 
-```mermaid
-flowchart TD
-  A["1. Tú: camioneta quieta, contacto en ON"] --> B["2. Tú: enchufar el aparato bajo el volante"]
-  B --> C["3. Tú: cerrar otras apps de diagnóstico"]
-  C --> D["4. El teléfono: permitir Bluetooth"]
-  D --> E["5. La lectora: leer, sin cerrar la pantalla"]
-  E --> F["6. La lectora: leer el resultado en palabras"]
-  F --> G["7. El informe: guardar PDF y su huella"]
-  G --> H["8. El taller: sacar el aparato y llevar el PDF"]
-```
-
-1. Freno de mano puesto. Contacto en ON. No mover la camioneta y no pisar el acelerador para probar.
-2. El aparato va en el enchufe de diagnóstico, debajo del volante. El emparejamiento se hace en Ajustes de Android. Si el sistema pide PIN, se escribe ahí. Esta app no lo pide ni lo guarda.
-3. Cerrar OBD Auto Doctor u otra app de diagnóstico. El aparato atiende a un solo cliente.
-4. En **Hoy**, pulsar **4. Permitir Bluetooth**.
-5. Pulsar **5. Leer la camioneta**. Dejar el teléfono junto al aparato, con la pantalla abierta, cerca de un minuto.
-6. Leer solo lo que dice el paso 6. Traduce los números que conoce. No dice qué pieza cambiar.
-7. Ir a **Copia** y pulsar **PDF del informe**. El archivo se arma en ese momento, no durante la lectura. JSON y TXT son la copia cruda. CSV solo sale si hubo sensores. Si no hay contenido, el botón no escribe y, si Android ya creó el archivo, se borra. La huella SHA-256 del PDF queda en un archivo `.sha256` al lado cuando se guarda desde Hoy.
-8. Sacar el aparato. Llevar el PDF a un servicio de la marca y pedir que lean los mismos números sin borrarlos.
-
-Si el teléfono ya tiene una lectura guardada, **Hoy** abre en el paso 6 para armar el informe sin enchufar de nuevo.
-
-Son ocho trabajos, no ocho programas. El que revisa no es el que lee: tú detienes y enchufas; el teléfono mantiene la pantalla; el aparato solo pasa bytes; la computadora del motor es la única que contesta; la lectora traduce y no borra; el contraste separa lo medido, lo genérico y lo que el fabricante no publicó para esta unidad; el revisor no cierra una causa ni un ataque con esa sola lectura; el taller confirma con su escáner.
-
-### Qué significan las pantallas
+1. Enchufar el adaptador bajo el volante. El emparejamiento se hace en Ajustes de Android; la app no pide ni guarda el PIN.
+2. Abrir la app y pulsar **Conectar y diagnosticar**. Tarda cerca de un minuto.
+3. Leer **Estado**: el veredicto, los códigos y los mosaicos por sistema. Un toque en un mosaico muestra los números en que se basa.
+4. **En vivo** para ver los valores moverse; **Pruebas** para una prueba guiada.
+5. **Informe** → PDF. Llevarlo al servicio de la marca y pedir que lean los mismos números sin borrarlos.
 
 | Pestaña | Para qué sirve | Qué no hace |
 |---|---|---|
-| Hoy | Los ocho pasos de la lectura, el resultado en palabras y el PDF | No recomienda cambiar piezas |
-| Monitor | Medidores en orden (RPM, velocidad, refrigerante, carga, mariposa, MAP, APP, ATRV) y capturas antes/después | No inventa un PID de freno; ATRV no es la batería |
-| Taller | Ciclo del mecánico: leer sin borrar → medir → ajustar → comparar → decidir circulación | No borra DTC ni prueba el corte en marcha |
-| Avisos | Códigos, hipótesis y validaciones de seguridad | No da un porcentaje ni certifica la camioneta |
-| Copia | PDF / JSON / TXT / CSV (solo si hay contenido) | No crea un archivo vacío ni sube nada a internet |
+| Estado | Veredicto, códigos con título corto, salud por sistema | No da porcentaje ni certifica la camioneta |
+| En vivo | Medidores grandes con mini-gráfico | No inventa un PID de freno |
+| Pruebas | Ralentí, calentamiento, aceleración libre, carga eléctrica, ruta/banco | No mueve nada: solo registra |
+| Datos | Todas las señales, Mode 06, datos de la ECU | No muestra valores truncados como datos |
+| Informe | PDF / JSON / TXT / CSV y herramientas avanzadas | No sube nada a internet |
 
-**Copia** puede anonimizar el identificador del vehículo y la dirección Bluetooth. **Hoy** no escribe esos datos en el PDF. El informe de una unidad concreta sigue fuera de este repositorio.
+El informe de una unidad concreta queda fuera de este repositorio.
 
 ## Proceso de funcionamiento
 
@@ -101,7 +81,7 @@ flowchart TB
 
 Reglas del ciclo:
 
-1. Vehículo estacionado. Nada de pruebas en movimiento.
+1. Vehículo estacionado. Las pruebas en marcha solo en banco de rodillos o pista cerrada, con acompañante; nunca en la vía mientras SAFE-001 siga abierto.
 2. Lista cerrada de comandos. `ATZ` reinicia el intérprete del adaptador. El servicio `04`, que borra códigos, está bloqueado.
 3. `NO DATA` no significa “sin fallas”. Una conexión exitosa no autoriza a circular.
 4. Los síntomas EPC y de potencia van a la línea técnica. No se llaman ciberataque sin una evidencia distinta.
@@ -116,7 +96,7 @@ gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 Instalar la APK debug con el teléfono desbloqueado:
 
 ```text
-adb install -r dist\jac-diagnostic-lab-debug.apk
+adb install -r dist\jac-diagnostic-lab-1.8.0-debug.apk
 ```
 
 ## Cómo se construye
@@ -125,4 +105,8 @@ El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numer
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 0.6.0 (`versionCode` 5). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.8.0 (`versionCode` 21). Los resultados de una unidad concreta no forman parte de este archivo.
+
+## Licencia y uso
+
+El código es de acceso libre bajo [Apache-2.0](LICENSE): se puede usar, copiar, modificar y redistribuir, también con fines comerciales, conservando la licencia y el [NOTICE](NOTICE). Se entrega sin garantía. Las reglas para contribuir y los datos que nunca se suben están en [CONTRIBUTING.md](CONTRIBUTING.md).

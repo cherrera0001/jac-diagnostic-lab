@@ -4,7 +4,7 @@ Esta versión solo lee.
 
 ## Permitido
 
-Conectar Bluetooth, configurar el ELM327, consultar servicios OBD estandarizados de lectura, registrar sensores, guardar capturas antes/después, exportar PDF/JSON/CSV/TXT.
+Conectar Bluetooth, configurar el ELM327, consultar servicios OBD estandarizados de lectura (`01`, `02`, `03`, `06`, `07`, `09`, `0A`), registrar sensores, ejecutar pruebas guiadas que solo leen, guardar capturas antes/después, exportar PDF/JSON/CSV/TXT.
 
 ## Prohibido (bloqueado antes de escribir al socket)
 
@@ -13,7 +13,15 @@ Conectar Bluetooth, configurar el ELM327, consultar servicios OBD estandarizados
 - cabeceras CAN (`ATSH`), monitor de bus (`ATMA`) y controles del adaptador fuera de lista;
 - modo `08` y cualquier comando que no esté en la lista;
 - comandos compuestos con `;` o con más de una línea;
-- reprogramar, rutinas UDS, inmovilizador, actuadores, pruebas de conducción.
+- reprogramar, rutinas UDS, inmovilizador, actuadores;
+- controles de flujo ISO-TP distintos de los cuatro exactos de la lista.
+
+## Pruebas guiadas (1.8.0)
+
+Ninguna prueba envía un comando distinto de las lecturas permitidas. La app no acelera, no frena ni mueve nada: pide al operador una acción y registra.
+
+- **Estacionarias:** freno de mano, punto muerto, nadie delante del vehículo.
+- **Ruta / banco:** con SAFE-001 abierto, solo en banco de rodillos o pista cerrada, con acompañante que opera el teléfono. Nunca en la vía pública. El conductor no mira la pantalla.
 
 `ATZ` está permitido porque reinicia el intérprete del adaptador. **No** borra la memoria de averías de la ECU.
 

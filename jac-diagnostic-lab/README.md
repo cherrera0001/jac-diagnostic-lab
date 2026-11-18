@@ -1,91 +1,66 @@
 # JAC Diagnostic Lab
 
-Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
+Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.7.1** (`versionCode` 20) — 12-11-2026. Botón Limpiar todo / Reset siempre visible para desbloquear la UI.
-
-Auditoría Sprint 0: [docs/audits/current-codebase-assessment.md](docs/audits/current-codebase-assessment.md).
+**Versión actual: 1.8.0** (`versionCode` 21), 18-11-2026. Rediseño completo, escaneo de todos los PID que declara la ECU, salud por sistema y pruebas dinámicas.
 
 No borra códigos (no Mode 04), no reprograma la ECU y no ejecuta actuadores. Una conexión exitosa **no** autoriza a circular.
 
-## Descargar la APK (dueño o mecánico)
+Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se suben: [NOTICE](../NOTICE) y [CONTRIBUTING.md](../CONTRIBUTING.md).
 
-La APK instalable está en el **release de GitHub** del hito **v1.1.0** (los milestones de GitHub no alojan binarios; el archivo vive en Releases):
+## Descargar la APK
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.7.1 |
-| Archivo | `jac-diagnostic-lab-1.7.1-debug.apk` |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.7.1-debug.apk` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0 |
+| Archivo | `jac-diagnostic-lab-1.8.0-debug.apk` (con su `.sha256`) |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.8.0-debug.apk` |
+| Milestone | «v1.8.0 — Salud, escaneo completo y pruebas» |
 
-### Limitación real (léala antes de instalar)
+### Antes de instalar
 
-- Sin un **ELM327** (o compatible) en el puerto OBD-II **no hay lectura nueva**.
-- El cuello de botella habitual es el enlace **Bluetooth**: BLE GATT (código **133** si falla la radio) o RFCOMM clásico ocupado por otra app.
-- Cierre Torque, Car Scanner, OBD Auto Doctor, etc. antes de usar esta app.
-- Contacto en **ON**, camioneta **estacionada**. No pruebe el corte de potencia en la calle.
-- Esta build es **debug** firmada para laboratorio; no es una publicación Play Store.
+- Sin un **ELM327** (o compatible) en el puerto OBD-II no hay lectura.
+- Cierre Torque, Car Scanner, OBD Auto Doctor, etc. El adaptador atiende a un solo cliente.
+- Motor encendido o contacto en **ON**, camioneta **estacionada**.
+- Es una build **debug** firmada para laboratorio, no una publicación de Play Store.
 
-### Instalar en el teléfono
+### Instalar
 
-1. Descargue `jac-diagnostic-lab-1.1.0-debug.apk` desde el release.
-2. En Android permita instalar desde esa fuente (archivo / navegador).
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.8.0-debug.apk.sha256`.
+2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.1.0-debug.apk
+adb install -r jac-diagnostic-lab-1.8.0-debug.apk
 ```
 
-## Qué hay de nuevo en 1.1.0
+## Pantallas (1.8.0)
 
-| Pieza | Para qué |
+| Pestaña | Para qué sirve |
 | --- | --- |
-| Pestaña **Monitor** | Medidores vivos en orden fijo: RPM → velocidad → refrigerante → carga → mariposa `0x11` → MAP → APP `0x49/4A/4B` si el mapa las declara → ATRV (solo dongle). |
-| Capturas **ANTES / DESPUÉS** | Baseline y comparación con Δ para controlar un ajuste de taller. |
-| Pestaña **Taller** | Ciclo de 7 pasos: leer sin borrar → freeze → baseline → medir freno/APP → ajuste → monitor+PDF → decisión de circulación. |
-| PDF del informe | Incluye el ciclo de taller y el orden del monitor. |
-| Autodiag | Reinyecta `OBDBLE`/`OBDII` emparejados tras el escaneo (desde 1.0.1). |
+| **Estado** | Veredicto en una línea, códigos con título corto y mosaicos por sistema (Bien / Atención / Revisar). Un toque abre la evidencia. |
+| **En vivo** | Medidores grandes con mini-gráfico: RPM, velocidad, refrigerante, tensión, carga, pedal, turbo, riel, torque, aire. |
+| **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco. Resultado con puntos de color y CSV. |
+| **Datos** | Todas las señales leídas, agrupadas y con buscador. Mode 06, datos de la ECU, horas de motor, km desde el borrado. |
+| **Informe** | PDF / JSON / TXT / CSV. Las pantallas anteriores (Hoy, Monitor, Taller, Avisos) quedan en «Herramientas avanzadas». |
 
-## Pantallas
+## Qué lee
 
-| Pestaña | Para qué sirve | Qué no hace |
-| --- | --- | --- |
-| **Hoy** | Ocho pasos del dueño, lectura en palabras, PDF + huella | No recomienda piezas |
-| **Monitor** | «Qué ocurre» + medidores VIVO/STALE + capturas + enlace | No inventa PID de freno |
-| **Taller** | Guía del mecánico y ficha de falla | No borra DTC ni prueba el corte en marcha |
-| **Avisos** | Códigos, análisis y validaciones de seguridad | No da un % de “seguridad del vehículo” |
-| **Copia** | PDF / JSON / TXT / CSV (solo si hay contenido) | No sube nada a internet |
-
-## Flujo recomendado
-
-### Dueño
-
-1. Camioneta quieta, contacto ON, ELM enchufado, otras apps OBD cerradas.
-2. **Hoy** → permitir Bluetooth → **Leer la camioneta**.
-3. Leer el resultado. Guardar PDF (paso 7 o pestaña **Copia**).
-4. Si hay relato de **corte de potencia al frenar**: no circular; llevar el PDF al servicio JAC (**SAFE-001**).
-
-### Mecánico
-
-1. **Taller** paso a paso (o escáner JAC en paralelo).
-2. **Monitor** → **Captura ANTES** → PDF.
-3. Medir interruptor de freno y pistas APP con multímetro (no usar 750 mV de la N56).
-4. Tras el ajuste: misma postura → **Captura DESPUÉS** → comparar Δ y DTC → nuevo PDF.
-5. Si el síntoma de corte sigue: no entregar para circular.
-
-## Entorno comprobado (11-11-2026)
-
-| Pieza | Versión |
+| Servicio | Contenido |
 | --- | --- |
-| JDK | 21.0.13 |
-| Android SDK | `%LOCALAPPDATA%\Android\Sdk` |
-| compileSdk / targetSdk | 37 |
-| minSdk | 26 |
-| AGP | 9.5.1 |
-| Kotlin | 2.4.21 |
-| Gradle | 9.6.0 |
-| Compose BOM | 2026.09.00 |
-| Teléfono de trabajo | Xiaomi 2512BPNDAG, Android 17 |
+| `01` | Todos los PID que declaran los mapas `0100`–`0180` (68 en la unidad probada, 82–84 señales). Hasta 6 PID por petición en CAN. |
+| `0101` / `0141` | Monitores de emisiones, interpretados como diésel o gasolina según el bit de encendido por compresión. |
+| `03` / `07` / `0A` / `02` | Códigos guardados, pendientes, permanentes y freeze frame. |
+| `06` | Pruebas a bordo con valor, mínimo, máximo y aprobado/fallado. |
+| `09` | Calibración (CALID), CVN, nombre de la ECU y rendimiento en uso. VIN solo con autorización. |
+
+La salud se evalúa con rangos genéricos de taller para un diésel common-rail. **No son especificaciones JAC** y no hay porcentaje global.
+
+## Pruebas dinámicas
+
+- **Estacionarias** (ralentí, calentamiento, aceleración libre, carga eléctrica): freno de mano, punto muerto, sin nadie delante.
+- **Ruta / banco:** la app solo registra. Detecta corte de potencia con pedal pisado (SAFE-001), falta de turbo, caída de tensión, motor detenido y regeneración del DPF. El botón **MARCAR EVENTO** es para el acompañante.
+- Con SAFE-001 abierto, la prueba en marcha va **solo en banco de rodillos o pista cerrada, con acompañante**. Nunca en la vía.
 
 ## Compilar
 
@@ -93,59 +68,48 @@ adb install -r jac-diagnostic-lab-1.1.0-debug.apk
 gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 ```
 
-APK de salida (ruta de build local de esta máquina):
+APK de salida en esta máquina: `%LOCALAPPDATA%\jac-diagnostic-lab-build\app\outputs\apk\debug\app-debug.apk`. Al publicar se copia a `dist\jac-diagnostic-lab-<versión>-debug.apk` junto a su `.sha256`.
 
-```text
-%LOCALAPPDATA%\jac-diagnostic-lab-build\app\outputs\apk\debug\app-debug.apk
-```
-
-Copiar a `dist\jac-diagnostic-lab-1.1.0-debug.apk` al publicar.
-
-## Conectar OBDII / OBDBLE
-
-- Empareje desde Ajustes de Bluetooth. El PIN lo pide Android; esta app no lo guarda.
-- `OBDII`: RFCOMM SPP, reintento y canal 1 de respaldo.
-- `OBDBLE`: GATT; solo escribe tras elegir WRITE + NOTIFY y validar `ATI`.
-- Si el escaneo no nombra el dongle, el autodiag **reinyecta** los emparejados conocidos.
-- GATT **133** = fallo de radio/enlace, no de la UI. Reinsertar ELM, ON, cerrar otras apps, reintentar.
-
-Detalle: [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md).
+| Pieza | Versión |
+| --- | --- |
+| JDK | 21 |
+| compileSdk / targetSdk / minSdk | 37 / 37 / 26 |
+| AGP / Kotlin / Gradle | 9.5.1 / 2.4.21 / 9.6.0 |
+| Teléfono de trabajo | Xiaomi 2512BPNDAG, Android 17 |
 
 ## Sesión (solo lectura)
 
-Orden típico: `ATZ` → `ATE0` → `ATL0` → `ATS0` → `ATH1` → `ATI` → `ATSP0` → `ATDP`/`ATDPN` → `ATRV` → `0100` → DTC `03`/`07`/`0A` → freeze `02` → PID y monitor.
+Orden típico: `ATZ` → `ATE0` → `ATL0` → `ATS0` → `ATH1` → `ATI` → `ATSP0` → `0100` (hasta 3 intentos mientras la ECU despierta) → `ATDP`/`ATDPN` → `ATRV` → DTC → freeze → mapas `0100`–`0180` → escaneo → `0101`/`0141` → `06` → `09`.
 
 - `ATZ` reinicia el adaptador, **no** borra la ECU.
-- `ATI` imitable; no prueba originalidad.
-- `ATRV` ≠ batería (hace falta multímetro).
-- PID `0x11` = **mariposa absoluta**, no el pedal.
-- VIN solo con autorización explícita y soporte `0900`/`0902`.
+- `ATRV` es una estimación del adaptador. En la unidad probada marcó 2,3 V de más; la app usa el PID `0x42` de la ECU.
+- PID `0x11` es la mariposa absoluta, no el pedal. En diésel abierta en ralentí es normal (DIAG-002).
 
 ## Evidencia y privacidad
 
-- Sesiones en almacenamiento privado de la app.
-- Exportación JSON/CSV/TXT/PDF con opción de anonimizar.
+- Sesiones, telemetría y trazas CSV en almacenamiento privado de la app.
+- Exportación con opción de anonimizar VIN y dirección Bluetooth.
 - Sin permiso de internet; `allowBackup=false`.
-- Las lecturas reales (VIN, PDF de unidad) **no** se versionan en git.
+- Las lecturas reales de una unidad (VIN, PDF, sesiones) **no** se suben al repositorio. Ver [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ## Documentación
 
 | Documento | Contenido |
 | --- | --- |
-| [docs/architecture.md](docs/architecture.md) | Capas, transporte, monitor |
-| [docs/safety.md](docs/safety.md) | Gate de solo lectura, SAFE-001 |
-| [docs/elm327-protocol.md](docs/elm327-protocol.md) | AT/OBD permitidos |
+| [docs/architecture.md](docs/architecture.md) | Capas, transporte, escaneo, pruebas |
+| [docs/safety.md](docs/safety.md) | Gate de solo lectura, SAFE-001, pruebas en marcha |
+| [docs/elm327-protocol.md](docs/elm327-protocol.md) | AT/OBD permitidos, ISO-TP |
 | [docs/bluetooth-troubleshooting.md](docs/bluetooth-troubleshooting.md) | Fallos de enlace |
 | [docs/jac-t8-diagnostic-plan.md](docs/jac-t8-diagnostic-plan.md) | Plan de diagnóstico |
 | [docs/RELEASES.md](docs/RELEASES.md) | Historial de versiones y APK |
+| [../CHANGELOG.md](../CHANGELOG.md) | Cambios por versión |
 | [../README.md](../README.md) | Proceso de punta a punta |
-| [../c4a-automotive-security](../c4a-automotive-security) | TARA / hallazgos (no habla al camión) |
 
 ## Limitaciones
 
-- Sin catálogo J2012-DA completo: no se inventa texto de un DTC desconocido.
-- EPC ≠ MIL de `0101`.
+- El clon ELM327 v2.1 corta las respuestas ISO-TP tras 4 tramas consecutivas, incluso con control de flujo estándar. Algunas pruebas Mode 06 y contadores `090B` llegan incompletos y se marcan como tales. Un adaptador de mejor calidad (vLinker, OBDLink) lo resuelve.
+- En vivo, por BLE, se logran unas 2 actualizaciones por segundo de las señales rápidas.
+- Sin catálogo J2012-DA completo: los títulos de códigos son genéricos SAE, no textos JAC.
 - No hay PID genérico de interruptor de freno.
-- ABS/BCM/transmisión propietarios: fuera de alcance.
+- ABS, BCM y transmisión propietarios: fuera de alcance.
 - No recomienda cambiar piezas.
-- El lab adversarial (CAN virtual) **nunca** apunta al T8 real.

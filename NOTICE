@@ -1,0 +1,19 @@
+JAC Diagnostic Lab y evaluación de seguridad JAC T8
+Copyright 2026 Cristóbal Herrera
+
+Este producto se distribuye bajo la Apache License, Version 2.0 (ver LICENSE).
+
+AVISO DE SEGURIDAD
+Esta herramienta lee datos de diagnóstico OBD-II. No certifica que un vehículo
+sea apto para circular, no reemplaza al servicio técnico de la marca y se
+entrega "TAL CUAL", sin garantía de ningún tipo (sección 7 y 8 de la licencia).
+Úsela con el vehículo estacionado. Las pruebas en marcha solo en banco de
+rodillos o pista cerrada, con un acompañante que opere el teléfono.
+
+Quien redistribuya una versión modificada que envíe comandos distintos de la
+lista de solo lectura (por ejemplo servicio 04, UDS de escritura o actuadores)
+debe indicarlo de forma visible y asume la responsabilidad de ese cambio.
+
+JAC es una marca de su titular. Este proyecto no está afiliado ni respaldado
+por el fabricante. Los rangos de salud son genéricos de taller, no
+especificaciones del fabricante.

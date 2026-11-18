@@ -3,7 +3,8 @@
 La aplicación es un módulo Android. El protocolo OBD no importa clases de Android, así las pruebas JUnit corren en la JVM sin el teléfono.
 
 ```text
-Pantallas Compose (Hoy / Monitor / Taller / Avisos / Copia)
+AppShell Compose (Estado / En vivo / Pruebas / Datos / Informe)
+    └ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
     DiagnosticViewModel
         LabController          sesión, permisos, evidencia, snapshots
             BluetoothRepository
@@ -12,13 +13,28 @@ Pantallas Compose (Hoy / Monitor / Taller / Avisos / Copia)
             ElmSession
                 ReadOnlyGate / ObdCommandPolicy
                 ElmParser
-                DtcDecoder / PidDecoder
+                DtcDecoder / PidDecoder / PidCatalog (J1979 multi-señal)
+                ReadinessDecoder / Mode06Decoder / Mode09Decoder
+                HealthAssessment        reglas de salud por sistema
+                GuidedTests             pruebas guiadas, eventos en ruta, CSV
+                Present                 texto corto para la UI
                 JacAnalysis / FaultIdentification
                 WorkshopGuide + monitor ordenado
                 Export JSON CSV TXT PDF
 ```
 
-## Capas relevantes en 1.1.0
+## Capas nuevas en 1.8.0
+
+| Pieza | Rol |
+| --- | --- |
+| `PidCatalog` | Decodifica cada PID J1979 conocido en una o varias señales (`70.RA`, `7A.DP`, `8B.REGEN`…), respetando los bits de soporte y los centinelas sin dato. |
+| `ElmSession.readPidsRaw` | Agrupa hasta 6 PID por petición en CAN y vuelve a PID a PID si la ECU no lo acepta. |
+| `LabController.fullScanInternal` | Mapas → escaneo → monitores → Mode 06 (con control de flujo si hay truncado) → Mode 09 → salud. |
+| `HealthAssessment` | Reglas genéricas de taller. Devuelve `HealthItem` con estado, detalle y evidencia. |
+| `GuidedTests` | Catálogo de pruebas, muestreo, análisis y detección de eventos en ruta. En ruta las señales rápidas se leen cada ronda y las lentas 1 de cada 4. |
+| `AppShell` / `Present` | Interfaz nueva. `Present` no tiene lógica de diagnóstico, solo formato. |
+
+## Capas de 1.1.0
 
 | Pieza | Rol |
 | --- | --- |

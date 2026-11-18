@@ -2,6 +2,15 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.8.0 — Salud, escaneo completo y pruebas
+
+- **Tag:** `v1.8.0`
+- **versionCode:** 21
+- **Fecha:** 2026-11-18
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0 (`jac-diagnostic-lab-1.8.0-debug.apk` + `.sha256`)
+
+Rediseño en cinco pestañas (Estado, En vivo, Pruebas, Datos, Informe). Escaneo de todos los PID declarados con multi-PID, monitores diésel, Mode 06 y Mode 09, salud por sistema y pruebas guiadas con CSV. Validado con la T8 en marcha: 68 PID, 82 señales, 19 pruebas Mode 06. Límite conocido: el clon corta ISO-TP tras 4 tramas.
+
 ## v1.7.1 — Limpiar todo / Reset
 
 - **Tag:** `v1.7.1`
