@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -100,15 +101,18 @@ fun AppShell(
         containerColor = Bg,
         topBar = { ConnectionBar(state, actions) },
         bottomBar = {
-            NavigationBar(containerColor = Panel) {
-                tabs.forEachIndexed { i, label ->
-                    NavigationBarItem(
-                        selected = tab == i,
-                        onClick = { tab = i },
-                        icon = { Box(Modifier.size(6.dp).clip(CircleShape).background(if (tab == i) Accent else Color.Transparent)) },
-                        label = { Text(label, fontSize = 12.sp) },
-                    )
+            Column(Modifier.fillMaxWidth().background(Panel)) {
+                NavigationBar(containerColor = Panel, windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
+                    tabs.forEachIndexed { i, label ->
+                        NavigationBarItem(
+                            selected = tab == i,
+                            onClick = { tab = i },
+                            icon = { Box(Modifier.size(6.dp).clip(CircleShape).background(if (tab == i) Accent else Color.Transparent)) },
+                            label = { Text(label, fontSize = 12.sp) },
+                        )
+                    }
                 }
+                VersionFooter(state.appVersion)
             }
         },
     ) { padding ->
@@ -127,6 +131,18 @@ fun AppShell(
             Spacer(Modifier.height(12.dp))
         }
     }
+}
+
+/** Pie central con la versión instalada; siempre visible bajo las pestañas. */
+@Composable
+private fun VersionFooter(version: String) {
+    Text(
+        "JAC Diagnostic Lab ${version.ifBlank { "v?" }} · solo lectura",
+        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp, top = 2.dp),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        fontSize = 11.sp,
+        color = Color(0xFF9AA3AD),
+    )
 }
 
 /* ─────────────────────────── Barra de conexión ─────────────────────────── */

@@ -76,6 +76,13 @@ import app.jac.diagnosticlab.obd.Readiness
 import app.jac.diagnosticlab.obd.ReadinessDecoder
 import app.jac.diagnosticlab.obd.Signal
 import app.jac.diagnosticlab.obd.VehicleInfo
+import app.jac.diagnosticlab.profile.EcuIdentification
+import app.jac.diagnosticlab.profile.JacT8Catalog
+import app.jac.diagnosticlab.profile.Mode09Record
+import app.jac.diagnosticlab.profile.ProfileResolution
+import app.jac.diagnosticlab.profile.ProfileResolver
+import app.jac.diagnosticlab.profile.SignalCoverage
+import app.jac.diagnosticlab.profile.VehicleFingerprint
 import app.jac.diagnosticlab.obd.canFromProtocol
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
@@ -126,7 +133,8 @@ data class LabState(
     ),
     val analysis: AnalysisReport? = null,
     val vin: String? = null,
-    val authorizeVin: Boolean = false,
+    /** El vehículo es del usuario: el VIN se lee sin pedir permiso. Se conserva el campo por compatibilidad. */
+    val authorizeVin: Boolean = true,
     val error: String? = null,
     val recovery: String? = null,
     val sessionId: String = "",
@@ -152,6 +160,13 @@ data class LabState(
     val readinessCycle: Readiness? = null,
     val mode06: List<Mode06Result> = emptyList(),
     val vehicleInfo: VehicleInfo? = null,
+    // v1.9 — SPEC-031 huella y perfil
+    val ecuLabel: String = "",
+    /** Versión instalada, p. ej. «v1.9.0 (22)». Visible en el pie y en cada exportación. */
+    val appVersion: String = "",
+    val ecuIdentification: List<Mode09Record> = emptyList(),
+    val profile: ProfileResolution? = null,
+    val profileCoverage: List<SignalCoverage> = emptyList(),
     val health: List<HealthItem> = emptyList(),
     val multiPid: Boolean? = null,
     // v1.8 — pruebas guiadas / ruta
@@ -171,7 +186,7 @@ class LabController(private val app: Application) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val repo = BluetoothRepository(app)
     private val prefs = app.getSharedPreferences("jaclab", Context.MODE_PRIVATE)
-    val state = MutableStateFlow(LabState())
+    val state = MutableStateFlow(LabState(appVersion = AppVersion.of(app)))
     private var transport: ObdTransport? = null
     private var session: ElmSession? = null
     private var ble: BleInspector? = null
@@ -200,6 +215,87 @@ class LabController(private val app: Application) {
     fun declareVehicle(model: String, year: String) {
         prefs.edit().putString("declaredModel", model).putString("declaredYear", year).apply()
         state.update { it.copy(declaredModel = model, declaredYear = year) }
+        recomputeProfile()
+    }
+
+    private class Mode09Read(val supported: Set<Int>, val info: VehicleInfo, val records: List<Mode09Record>)
+
+    /**
+     * SPEC-031 R11: Mode 09 solo lectura. 0900 y luego 0902/0904/0906/090A si la ECU los declara.
+     * Guarda cada respuesta con raw, hora, latencia y valores por cabecera de ECU.
+     */
+    private suspend fun readMode09(current: ElmSession): Mode09Read {
+        val bitmapEx = current.exchange("0900", 6000)
+        val sup09 = Mode09Decoder.supported(bitmapEx).takeIf { bitmapEx.kind == ResponseKind.OBD_DATA }
+        val exchanges = listOf(bitmapEx) + EcuIdentification.plan(sup09).drop(1).map { cmd ->
+            current.exchange(cmd, if (cmd == "0902") 10000 else 8000)
+        }
+        exchanges.firstOrNull { it.command == "0902" }?.let { ex -> decodeVin(ex)?.let { vin -> state.update { it.copy(vin = vin) } } }
+        fun byCmd(c: String) = exchanges.firstOrNull { it.command == c }
+        val records = exchanges.map { EcuIdentification.record(it) }
+        val info = VehicleInfo(
+            calibrationIds = byCmd("0904")?.let { Mode09Decoder.calibrationIds(it) }.orEmpty(),
+            cvns = byCmd("0906")?.let { Mode09Decoder.cvns(it) }.orEmpty(),
+            ecuName = byCmd("090A")?.let { Mode09Decoder.ecuName(it) },
+            supported = sup09.orEmpty(),
+        )
+        state.update { it.copy(ecuIdentification = records, vehicleInfo = info, exchanges = current.exchanges.toList()) }
+        return Mode09Read(sup09.orEmpty(), info, records)
+    }
+
+    /** Botón «Identificar ECU (Mode 09)». */
+    fun identifyEcu() = scope.launch {
+        val current = session ?: return@launch
+        if (!autodiagGate.compareAndSet(false, true)) return@launch
+        telemetry.pause()
+        state.update { it.copy(busy = true, statusLine = "Identificando ECU (Mode 09)…") }
+        try {
+            val r = readMode09(current)
+            recomputeProfile()
+            val p = state.value.profile
+            state.update {
+                it.copy(
+                    statusLine = if (r.supported.isEmpty()) "La ECU no respondió a Mode 09 (0900)." else
+                        "Mode 09: ${r.records.size} respuestas. Perfil: ${p?.status ?: "—"}.",
+                )
+            }
+            persist()
+        } catch (e: Exception) {
+            explain(e.message ?: "Falló la identificación Mode 09.")
+        } finally {
+            telemetry.resume()
+            autodiagGate.set(false)
+            state.update { it.copy(busy = false) }
+        }
+    }
+
+    /** SPEC-031 R5/R6: texto de la etiqueta física de la ECU, escrito por el usuario. */
+    fun setEcuLabel(text: String) {
+        prefs.edit().putString("ecuLabel", text).apply()
+        state.update { it.copy(ecuLabel = text) }
+        recomputeProfile()
+    }
+
+    private fun recomputeProfile() {
+        val st = state.value
+        val headers = st.exchanges.flatMap { ex -> ex.frames.mapNotNull { it.header } }.toSet()
+        val fp = VehicleFingerprint.from(
+            declaredModel = st.declaredModel,
+            declaredYear = st.declaredYear,
+            vin = st.vin,
+            calibrationIds = EcuIdentification.calibrationIds(st.ecuIdentification).ifEmpty {
+                st.vehicleInfo?.calibrationIds.orEmpty().map { null to it }
+            },
+            ecuName = EcuIdentification.ecuNames(st.ecuIdentification).firstOrNull()?.second ?: st.vehicleInfo?.ecuName,
+            ecuLabel = st.ecuLabel,
+            protocolNumber = st.protocolNumber,
+            responseHeaders = headers,
+        )
+        val resolution = ProfileResolver.resolve(fp)
+        val validPids = st.samples.filter { it.valid && it.value != null }.map { it.pid }.toSet() +
+            st.scanSignals.filter { it.value != null }.map { it.pid }.toSet()
+        val coverage = ProfileResolver.coverage(st.bitmapRead, st.supported, validPids)
+        state.update { it.copy(profile = resolution, profileCoverage = coverage) }
     }
 
     fun refresh() {
@@ -211,6 +307,7 @@ class LabController(private val app: Application) {
                 selectedAddress = it.selectedAddress ?: prefs.getString("address", null),
                 declaredModel = if (prefs.contains("declaredModel")) prefs.getString("declaredModel", "").orEmpty() else it.declaredModel,
                 declaredYear = if (prefs.contains("declaredYear")) prefs.getString("declaredYear", "").orEmpty() else it.declaredYear,
+                ecuLabel = prefs.getString("ecuLabel", "").orEmpty(),
                 error = if (missing.isEmpty()) it.error else "Faltan permisos de Bluetooth: ${missing.joinToString()}.",
                 recovery = if (missing.isEmpty()) it.recovery else "Conceda los permisos de dispositivos cercanos y vuelva a buscar.",
             )
@@ -520,10 +617,6 @@ class LabController(private val app: Application) {
 
     fun readVin() = scope.launch {
         val current = session ?: return@launch
-        if (!state.value.authorizeVin) {
-            explain("El VIN no se consulta sin autorización.")
-            return@launch
-        }
         state.update { it.copy(busy = true, statusLine = "Consultando soporte del VIN.") }
         val support = current.exchange("0900", 8000)
         val bitmap = support.frames.firstOrNull { it.payload.size >= 6 && it.payload[0] == 0x49 && it.payload[1] == 0x00 }?.payload?.drop(2)
@@ -535,6 +628,7 @@ class LabController(private val app: Application) {
         }
         val vin = decodeVin(current.exchange("0902", 10000))
         state.update { it.copy(vin = vin, busy = false, exchanges = current.exchanges.toList(), statusLine = if (vin == null) "VIN incompleto. No se completaron caracteres." else "VIN leído.") }
+        recomputeProfile()
         persist()
     }
 
@@ -994,22 +1088,16 @@ class LabController(private val app: Application) {
             }
 
             state.update { it.copy(statusLine = "Escaneo completo: identificación (Mode 09)…") }
-            val sup09 = Mode09Decoder.supported(current.exchange("0900", 6000))
+            val ident = readMode09(current)
+            val sup09 = ident.supported
             val diesel = readiness?.compressionIgnition == true
-            val info = VehicleInfo(
-                calibrationIds = if (0x04 in sup09) Mode09Decoder.calibrationIds(current.exchange("0904", 8000)) else emptyList(),
-                cvns = if (0x06 in sup09) Mode09Decoder.cvns(current.exchange("0906", 8000)) else emptyList(),
-                ecuName = if (0x0A in sup09) Mode09Decoder.ecuName(current.exchange("090A", 8000)) else null,
+            val info = ident.info.copy(
                 inUsePerformance = when {
                     diesel && 0x0B in sup09 -> Mode09Decoder.inUsePerformance(current.exchange("090B", 8000), true)
                     !diesel && 0x08 in sup09 -> Mode09Decoder.inUsePerformance(current.exchange("0908", 8000), false)
                     else -> emptyList()
                 },
-                supported = sup09,
             )
-            if (state.value.authorizeVin && 0x02 in sup09) {
-                decodeVin(current.exchange("0902", 10000))?.let { vin -> state.update { it.copy(vin = vin) } }
-            }
             // Las señales del escaneo también alimentan la matriz de capacidad y el monitor.
             val now = System.currentTimeMillis()
             val scanSamples = signals.groupBy { it.pid }.mapNotNull { (pid, list) ->
@@ -1212,6 +1300,23 @@ class LabController(private val app: Application) {
         }
     }
 
+    /** SPEC-031: el perfil y su procedencia viajan en el JSON. El VIN no: solo el resultado del chequeo de año. */
+    private fun profileMap(p: ProfileResolution, coverage: List<SignalCoverage>): Map<String, Any?> = linkedMapOf(
+        "catalog" to p.catalogVersion,
+        "status" to p.status.name,
+        "yearCheck" to p.yearCheck.name,
+        "summary" to p.summary,
+        "matches" to p.matches.map { m ->
+            linkedMapOf(
+                "candidate" to m.candidate.id, "supplier" to m.candidate.supplier, "family" to m.candidate.family,
+                "identifier" to m.identifier, "origin" to m.origin.name, "sources" to m.candidate.sourceIds,
+            )
+        },
+        "activeSignals" to ProfileResolver.activeSignals(p).map { it.key },
+        "coverage" to coverage.map { c -> linkedMapOf("key" to c.signal.key, "status" to c.status.name, "reason" to c.reason) },
+        "sources" to JacT8Catalog.v1.sources.map { s -> linkedMapOf("id" to s.id, "url" to s.url, "level" to s.level.name, "sha256" to s.sha256) },
+    )
+
     private fun extendedMap(): Map<String, Any?> {
         val st = state.value
         if (st.scanSignals.isEmpty() && st.testResults.isEmpty()) return emptyMap()
@@ -1224,6 +1329,8 @@ class LabController(private val app: Application) {
             "signals" to st.scanSignals.map { linkedMapOf("key" to it.key, "pid" to "%02X".format(it.pid), "name" to it.name, "value" to it.value, "unit" to it.unit, "text" to it.text) },
             "mode06" to st.mode06.map { linkedMapOf("mid" to "%02X".format(it.mid), "tid" to "%02X".format(it.tid), "uasid" to "%02X".format(it.uasid), "monitor" to it.monitorName, "value" to it.value, "min" to it.min, "max" to it.max, "unit" to it.unit, "passed" to it.passed) },
             "vehicleInfo" to st.vehicleInfo?.let { v -> linkedMapOf("calid" to v.calibrationIds, "cvn" to v.cvns, "ecuName" to v.ecuName, "ipt" to v.inUsePerformance.map { mapOf("name" to it.first, "count" to it.second) }) },
+            "profile" to st.profile?.let { p -> profileMap(p, st.profileCoverage) },
+            "ecuIdentification" to st.ecuIdentification.map { EcuIdentification.toMap(it) },
             "health" to st.health.map { linkedMapOf("system" to it.system, "status" to it.status.name, "title" to it.title, "detail" to it.detail, "evidence" to it.evidence) },
             "tests" to st.testResults.map { t ->
                 linkedMapOf(
@@ -1252,6 +1359,13 @@ class LabController(private val app: Application) {
             if (st.mode06.isNotEmpty()) {
                 add("-- Mode 06 --")
                 st.mode06.forEach { m -> add("  %s TID %02X: %.3f %s [%.3f…%.3f] %s".format(m.monitorName, m.tid, m.value, m.unit, m.min, m.max, if (m.passed) "OK" else "FUERA")) }
+            }
+            st.profile?.let { p ->
+                add("-- Perfil (${p.catalogVersion}) --")
+                add("  Estado: ${p.status} · Año: ${p.yearCheck}")
+                add("  ${p.summary}")
+                p.matches.forEach { m -> add("  ${m.candidate.supplier} ${m.candidate.family}: «${m.identifier}» en ${ProfileResolver.originText(m.origin)} [${m.candidate.sourceIds.joinToString()}]") }
+                st.profileCoverage.groupBy { it.status }.forEach { (status, list) -> add("  $status: ${list.joinToString { it.signal.key }}") }
             }
             st.vehicleInfo?.let { v ->
                 add("-- Mode 09 --")
@@ -1328,18 +1442,11 @@ class LabController(private val app: Application) {
         val current = session ?: return
         telemetry.pause()
         try {
-            var supported = emptySet<Int>()
-            var bitmapRead = false
-            for (page in ObdCapabilityDiscoveryEngine.supportPages) {
-                if (page != 0x00 && page !in supported) break
-                val reading = current.readPid(page)
-                if (!reading.valid) {
-                    if (page == 0x00) break
-                    continue
-                }
-                bitmapRead = true
-                supported = supported + PidDecoder.supported(page, reading.raw)
+            val walk = ObdCapabilityDiscoveryEngine.walkSupportPages { page ->
+                current.readPid(page).takeIf { it.valid }?.raw
             }
+            val supported = walk.supported
+            val bitmapRead = walk.bitmapRead
             state.update {
                 it.copy(
                     supported = supported,
@@ -1381,6 +1488,7 @@ class LabController(private val app: Application) {
             readings = readings,
         )
         state.update { it.copy(capabilities = snap) }
+        recomputeProfile()
     }
 
     private fun openSession(kind: String) {
@@ -1475,6 +1583,7 @@ class LabController(private val app: Application) {
     private fun buildRecord(): SessionRecord {
         val current = state.value
         return SessionRecord(
+            appVersion = current.appVersion,
             id = sessionId,
             startedAtEpochMs = startedAt,
             androidDevice = "${Build.MANUFACTURER} ${Build.MODEL}",

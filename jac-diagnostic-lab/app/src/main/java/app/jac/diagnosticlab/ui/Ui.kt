@@ -133,6 +133,8 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() = lab.disconnect()
     fun startAutodiag() = lab.startAutodiag()
     fun declareVehicle(model: String, year: String) = lab.declareVehicle(model, year)
+    fun setEcuLabel(text: String) = lab.setEcuLabel(text)
+    fun identifyEcu() = lab.identifyEcu()
     fun fullScan() = lab.fullScan()
     fun startGuidedTest(id: String) = lab.startGuidedTest(id)
     fun stopGuidedTest() = lab.stopGuidedTest()
@@ -294,7 +296,7 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             } else runCatching {
                 val facts = factsFromState(state, codes, adapterId, ecuTalking, saved)
                 val document = readingReport(facts)
-                val pdf = renderReadingPdf(document.title, document.lines)
+                val pdf = renderReadingPdf(document.title, document.lines, state.appVersion)
                 val stamp = facts.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
                 val pdfName = "JAC-lectura-$stamp.pdf"
                 val hash = sha256Hex(pdf)
@@ -462,11 +464,7 @@ private fun CodeScreen(state: LabState, model: DiagnosticViewModel) {
     ).forEach { Text(it) }
     Button(onClick = { model.readDtcs() }, enabled = !state.busy) { Text("Leer almacenados, pendientes y permanentes") }
     Button(onClick = { model.readFreeze() }, enabled = !state.busy) { Text("Leer freeze frame") }
-    Row {
-        Checkbox(checked = state.authorizeVin, onCheckedChange = model::authorizeVin)
-        Text("Autorizo consultar el VIN. Puede anonimizarse al exportar.", Modifier.padding(top = 12.dp))
-    }
-    Button(onClick = { model.readVin() }, enabled = state.authorizeVin && !state.busy) { Text("Consultar VIN") }
+    Button(onClick = { model.readVin() }, enabled = !state.busy) { Text("Consultar VIN") }
     Text("VIN: ${state.vin ?: "no consultado"}")
     if (state.dtcs.isEmpty()) Text("Todavía no hay una lectura de códigos en esta sesión.")
     state.dtcs.forEach { read ->
@@ -760,6 +758,7 @@ private fun CapabilityScreen(state: LabState, model: DiagnosticViewModel) {
         Button(onClick = { model.readSupported() }, enabled = !state.busy) { Text("Leer mapa PID") }
         OutlinedButton(onClick = { model.refreshCapabilities() }) { Text("Actualizar matriz") }
     }
+    VehicleProfileCard(state, model)
     if (snap == null) {
         Text("Aún no hay matriz. Conecte, lea el mapa, o pulse Actualizar para ver motivos de ausencia.")
         return
@@ -811,6 +810,74 @@ private fun CapabilityScreen(state: LabState, model: DiagnosticViewModel) {
         },
     )
     Text("Avisos DTC y seguridad siguen en Copia / autodiag. Mode 04 bloqueado.", fontSize = 12.sp, color = Color(0xFF9AA3AD))
+}
+
+/** SPEC-031: huella, perfil de ECU con procedencia y cobertura del catálogo. */
+@Composable
+private fun VehicleProfileCard(state: LabState, model: DiagnosticViewModel) {
+    var label by rememberSaveable(state.ecuLabel) { mutableStateOf(state.ecuLabel) }
+    val p = state.profile
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("PERFIL DEL VEHÍCULO", color = Color(0xFFF5C16C), style = MaterialTheme.typography.titleMedium)
+            Text(
+                "La misma «T8 2.0 CTI» existe con ECU Bosch EDC17C81 o Delphi DCM6.2/6.2AP según fuentes públicas. " +
+                    "El perfil se elige por lo que dice la ECU o su etiqueta, no por el nombre del modelo.",
+                fontSize = 12.sp,
+                color = Color(0xFFB0B8C0),
+            )
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text("Texto de la etiqueta de la ECU (opcional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { model.identifyEcu() }, enabled = !state.busy) { Text("Identificar ECU (Mode 09)") }
+                OutlinedButton(onClick = { model.setEcuLabel(label) }) { Text("Guardar etiqueta") }
+            }
+            state.ecuIdentification.forEach { r ->
+                val values = r.perEcu.joinToString(" · ") { e -> "${e.ecu ?: "?"}: ${e.values.joinToString().ifBlank { "—" }}" }
+                Text("${r.command} (${r.elapsedMs} ms, ${r.kind}) $values", fontSize = 11.sp)
+                if (r.note.isNotBlank()) Text(r.note, fontSize = 11.sp, color = Color(0xFF9AA3AD))
+            }
+            if (p == null) {
+                Text("Sin resolver todavía. Lea el mapa o haga el escaneo completo (Mode 09).", fontSize = 12.sp)
+                return@Column
+            }
+            val color = when (p.status) {
+                app.jac.diagnosticlab.profile.ResolutionStatus.IDENTIFIED -> Color(0xFF7FD18B)
+                app.jac.diagnosticlab.profile.ResolutionStatus.SUPPLIER_ONLY -> Color(0xFFF5C16C)
+                app.jac.diagnosticlab.profile.ResolutionStatus.AMBIGUOUS -> Color(0xFFF5C16C)
+                app.jac.diagnosticlab.profile.ResolutionStatus.PARTIAL -> Color(0xFF9AA3AD)
+            }
+            Text("${p.status} · ${p.catalogVersion}", color = color, fontSize = 13.sp)
+            Text(p.summary, fontSize = 12.sp)
+            val year = when (p.yearCheck) {
+                app.jac.diagnosticlab.profile.YearCheck.MATCH -> "Año del VIN coincide con el declarado."
+                app.jac.diagnosticlab.profile.YearCheck.MISMATCH -> "El año del VIN NO coincide con el declarado. Revise antes de elegir documentación."
+                app.jac.diagnosticlab.profile.YearCheck.DECLARED_ONLY -> "Año solo declarado (sin VIN leído)."
+                app.jac.diagnosticlab.profile.YearCheck.UNKNOWN -> "Año sin dato."
+            }
+            Text(year, fontSize = 12.sp, color = Color(0xFFB0B8C0))
+            p.matches.forEach { m ->
+                val levels = m.candidate.sourceIds.mapNotNull { id -> app.jac.diagnosticlab.profile.JacT8Catalog.v1.source(id)?.let { "${it.id} ${it.level}" } }
+                Text("• ${m.candidate.supplier} ${m.candidate.family} — «${m.identifier}» (${levels.joinToString()})", fontSize = 12.sp)
+            }
+            val counts = state.profileCoverage.groupingBy { it.status }.eachCount()
+            Text(
+                "Cobertura: " + app.jac.diagnosticlab.profile.CoverageStatus.values().joinToString(" · ") { "${it.name.lowercase()} ${counts[it] ?: 0}" },
+                fontSize = 11.sp,
+                color = Color(0xFF9AA3AD),
+            )
+            Text(
+                "Señales OEM listadas por terceros: se muestran como UNKNOWN y no se consultan (sin request ni fórmula publicadas).",
+                fontSize = 11.sp,
+                color = Color(0xFF9AA3AD),
+            )
+        }
+    }
 }
 
 @Composable
@@ -914,7 +981,7 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel, compact:
             0,
             facts.adapterId,
         )
-        val bytes = if (refusal == null) renderReadingPdf(readingReport(facts).title, readingReport(facts).lines) else ByteArray(0)
+        val bytes = if (refusal == null) renderReadingPdf(readingReport(facts).title, readingReport(facts).lines, state.appVersion) else ByteArray(0)
         model.exportBytes(uri, bytes, refusal)
     }
     val json = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -1205,7 +1272,7 @@ private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime:
     return dir.absolutePath + "/" + name
 }
 
-private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
+private fun renderReadingPdf(title: String, lines: List<String>, appVersion: String): ByteArray {
     val document = PdfDocument()
     val heading = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = 16f
@@ -1245,7 +1312,7 @@ private fun renderReadingPdf(title: String, lines: List<String>): ByteArray {
     var canvas = page.canvas
     var y = margin
     fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab 1.0.0  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
+        canvas.drawText("JAC Diagnostic Lab $appVersion  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
         canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
         document.finishPage(page)
     }

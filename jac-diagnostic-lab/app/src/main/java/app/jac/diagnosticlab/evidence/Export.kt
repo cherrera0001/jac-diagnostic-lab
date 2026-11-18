@@ -43,6 +43,8 @@ data class SessionRecord(
     val vin: String?,
     val simulated: Boolean,
     val vehicleNote: String,
+    /** Versión de la app que generó el archivo, p. ej. «v1.9.0 (22)». */
+    val appVersion: String = "",
     val analysis: AnalysisReport?,
     /** v1.8: escaneo completo, monitores, Mode 06/09, salud y pruebas guiadas (JSON). */
     val extended: Map<String, Any?> = emptyMap(),
@@ -89,7 +91,7 @@ fun toCsv(record: SessionRecord): String {
 fun toTxt(record: SessionRecord): String {
     val sb = StringBuilder()
     if (record.simulated) sb.append("SIMULADO — NO SON LECTURAS DEL VEHÍCULO\n")
-    sb.append("JAC Diagnostic Lab\n")
+    sb.append("JAC Diagnostic Lab ${record.appVersion}".trimEnd() + "\n")
     sb.append("Sesión ${record.id}\n")
     sb.append("Inicio ${record.startedAtEpochMs}\n")
     sb.append("Teléfono ${record.androidDevice} / ${record.androidRelease}\n")
@@ -145,6 +147,7 @@ fun toTxt(record: SessionRecord): String {
 
 private fun sessionMap(record: SessionRecord): Map<String, Any?> = linkedMapOf(
     "schema" to 1,
+    "appVersion" to record.appVersion,
     "simulated" to record.simulated,
     "id" to record.id,
     "startedAtEpochMs" to record.startedAtEpochMs,
