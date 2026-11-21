@@ -23,11 +23,11 @@ jobs:
           distribution: temurin
           java-version: "21"
       - name: Unit tests
-        run: ./gradlew :app:testDebugUnitTest --no-daemon
+        run: bash ./gradlew :app:testDebugUnitTest --no-daemon
       - name: Lint
-        run: ./gradlew :app:lintDebug --no-daemon
+        run: bash ./gradlew :app:lintDebug --no-daemon
       - name: Assemble debug
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: bash ./gradlew :app:assembleDebug --no-daemon
       - name: SHA-256 del APK
         run: |
           APK=$(realpath "$(find . -path '*outputs/apk/debug/*.apk' | head -n1)")
