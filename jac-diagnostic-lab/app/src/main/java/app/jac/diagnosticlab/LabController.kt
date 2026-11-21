@@ -50,6 +50,10 @@ import app.jac.diagnosticlab.evidence.toTxt
 import app.jac.diagnosticlab.obd.CapabilitySnapshot
 import app.jac.diagnosticlab.obd.DtcCategory
 import app.jac.diagnosticlab.security.ClearDtcDecoder
+import app.jac.diagnosticlab.report.WorkshopReport
+import app.jac.diagnosticlab.report.WorkshopPdf
+import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.evidence.ReportVault
 import app.jac.diagnosticlab.security.ClearDtcGate
 import app.jac.diagnosticlab.obd.DtcReadState
 import app.jac.diagnosticlab.obd.DtcReadResult
@@ -429,10 +433,10 @@ class LabController(private val app: Application) {
             state.update { it.copy(busy = true, statusLine = "Guardando copia y limpiando…") }
             val oldId = sessionId
             val notes = mutableListOf<String>()
-            val vault = app.jac.diagnosticlab.evidence.ReportVault(java.io.File(app.filesDir, "vault"))
+            val vault = ReportVault(java.io.File(app.filesDir, "vault"))
             withContext(Dispatchers.IO) {
                 runCatching {
-                    val pdf = app.jac.diagnosticlab.report.WorkshopPdf.render(app.jac.diagnosticlab.report.WorkshopReport.buildDoc(workshopInput()))
+                    val pdf = WorkshopPdf.render(WorkshopReport.buildDoc(workshopInput()))
                     val name = "JAC-ANTES-DE-LIMPIAR-$oldId"
                     vault.save("$oldId-antes-de-limpiar", mapOf(
                         "$name.pdf" to pdf,
