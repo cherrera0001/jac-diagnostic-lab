@@ -160,6 +160,12 @@ class ElmSession(
         return DtcDecoder.decode(category, result, canFromProtocol(protocol))
     }
 
+    /** Mode 04. Solo con precondiciones verificadas por ClearDtcGate; la autorización se retira siempre. */
+    suspend fun clearDtcs(): Exchange {
+        app.jac.diagnosticlab.security.ClearDtcGate.arm()
+        return try { exchange("04", 8000) } finally { app.jac.diagnosticlab.security.ClearDtcGate.disarm() }
+    }
+
     suspend fun readPid(pid: Int): PidReading {
         val command = "01%02X".format(pid)
         return PidDecoder.decode(pid, exchange(command, 4000))

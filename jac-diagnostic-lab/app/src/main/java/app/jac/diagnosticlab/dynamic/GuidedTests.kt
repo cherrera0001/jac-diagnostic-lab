@@ -133,7 +133,7 @@ object GuidedTests {
     }
     private fun worst(ms: List<TestMetric>, ev: List<TraceEvent> = emptyList()): HealthStatus {
         val m = ms.filter { it.status != HealthStatus.NO_DATA }.maxByOrNull { it.status.rank }?.status ?: HealthStatus.NO_DATA
-        val e = if (ev.any { !it.manual && it.kind.startsWith("CORTE") }) HealthStatus.CHECK else HealthStatus.OK
+        val e = if (ev.any { !it.manual && (it.kind.startsWith("CORTE") || it.kind == "MOTOR DETENIDO" || it.kind.startsWith("CAÍDA BRUSCA")) }) HealthStatus.CHECK else HealthStatus.OK
         return if (e.rank > m.rank) e else m
     }
     private fun st(bad: Boolean, warn: Boolean) = when { bad -> HealthStatus.CHECK; warn -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
@@ -335,10 +335,6 @@ object GuidedTests {
                     events += TraceEvent(f.atMs, "CORTE DE POTENCIA", "Torque %.0f→%.0f %% con pedal %.0f %% a %.0f km/h (posible SAFE-001)".format(maxTq, tq, pedal, spd))
                 }
             }
-            val rpm = f.values[RPM]
-            if (rpm != null && rpm < 300 && spd != null && spd > 10) {
-                if (events.none { it.kind == "MOTOR DETENIDO" && f.atMs - it.atMs < 10_000 }) events += TraceEvent(f.atMs, "MOTOR DETENIDO", "RPM %.0f con %.0f km/h".format(rpm, spd))
-            }
             val v = f.values[VOLT]
             if (v != null && v < 11.8 && (lowVoltAt == null || f.atMs - lowVoltAt!! > 10_000)) { lowVoltAt = f.atMs; events += TraceEvent(f.atMs, "CAÍDA DE TENSIÓN", "%.2f V".format(v)) }
             val r = f.values[REGEN]?.let { it >= 1 }
@@ -354,6 +350,17 @@ object GuidedTests {
             val ect = f.values[ECT]
             if (ect != null && ect > 108 && events.none { it.kind == "SOBRETEMPERATURA" && f.atMs - it.atMs < 60_000 }) events += TraceEvent(f.atMs, "SOBRETEMPERATURA", "Refrigerante %.0f °C".format(ect))
         }
+        val forensic = EventForensics.assess(fr)
+        forensic.events.forEach { e ->
+            events += TraceEvent(
+                e.atMs, e.kind.label,
+                "RPM %.0f→%.0f, vel %s km/h, pedal D %s %%, tensión mín %s V%s".format(
+                    Locale.ROOT, e.rpmBefore, e.rpmAfter, e.speedAt?.let { "%.0f".format(Locale.ROOT, it) } ?: "—",
+                    e.pedalD?.let { "%.0f".format(Locale.ROOT, it) } ?: "—", e.voltMin?.let { "%.1f".format(Locale.ROOT, it) } ?: "—",
+                    if (e.decelerating || e.stopped) " (frenando/detenido, inferido)" else ""),
+            )
+        }
+        events.sortBy { it.atMs }
         val spd = vals(fr, SPEED)
         val cuts = events.count { it.kind == "CORTE DE POTENCIA" }
         val metrics = listOf(
@@ -368,7 +375,12 @@ object GuidedTests {
             TestMetric("ΔP DPF máxima", vals(fr, DPF_DP).maxOrNull(), "kPa", HealthStatus.INFO, "Bajo carga sube; comparar entre recorridos."),
             TestMetric("Consumo medio", mean(vals(fr, FUEL)), "L/h", HealthStatus.INFO),
         )
-        return Triple(metrics, events, "%.1f km, %d evento(s) automáticos.".format(distanceKm, events.size))
+        val hyp = forensic.hypotheses.joinToString(" ") { "[${it.support.label}] ${it.name}: ${it.evidence} Medir: ${it.nextMeasurement}" }
+        return Triple(
+            metrics + TestMetric("Paros / caídas de RPM", forensic.events.size.toDouble(), "", if (forensic.events.isEmpty()) HealthStatus.OK else HealthStatus.CHECK, forensic.summary),
+            events,
+            "%.1f km, %d evento(s) automáticos. %s %s".format(Locale.ROOT, distanceKm, events.size, forensic.summary, hyp),
+        )
     }
 
     /** CSV ancho: una fila por ronda, una columna por señal. Para Excel / MATLAB / el taller. */

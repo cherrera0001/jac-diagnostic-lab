@@ -38,6 +38,10 @@ object ObdCommandPolicy {
         if (c in flowControlExact) {
             return Verdict(Decision.ALLOW, "Control de flujo ISO-TP estándar del adaptador.", "at_flow_control")
         }
+        // Única excepción de escritura: Mode 04 EXACTO, con autorización vigente de ClearDtcGate (precondiciones ya verificadas).
+        if (c == "04" && ClearDtcGate.isArmed()) {
+            return Verdict(Decision.ALLOW, "Borrado de DTC autorizado por ClearDtcGate (un solo comando, vigencia corta).", "clear_dtc_authorized")
+        }
         for (prefix in blockedPrefixes) {
             if (c == prefix || c.startsWith(prefix)) {
                 return Verdict(
