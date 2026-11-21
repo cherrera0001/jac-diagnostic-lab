@@ -430,7 +430,7 @@ class LabController(private val app: Application) {
             val speed = current.readPid(0x0D).takeIf { it.valid }?.value
             val rpm = current.readPid(0x0C).takeIf { it.valid }?.value
             val verdict = ClearDtcGate.evaluate(
-                ClearDtcGate.Preconditions(current.ecuTalking, speed, rpm, state.value.evidenceSavedAtMs, System.currentTimeMillis(), phrase),
+                ClearDtcGate.Preconditions(state.value.ecuTalking, speed, rpm, state.value.evidenceSavedAtMs, System.currentTimeMillis(), phrase),
             )
             trace("BORRADO verificación: permitido=${verdict.allowed} velocidad=$speed rpm=$rpm bloqueos=${verdict.blockers.size}")
             if (!verdict.allowed) {
