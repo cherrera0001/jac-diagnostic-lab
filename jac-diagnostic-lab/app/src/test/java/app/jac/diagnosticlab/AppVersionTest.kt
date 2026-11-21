@@ -33,6 +33,10 @@ class AppVersionTest {
         // El pie del PDF ya no lleva una versión escrita a mano (antes decía 1.0.0 en todas las versiones).
         val ui = File("src/main/java/app/jac/diagnosticlab/ui/Ui.kt").readText()
         assertFalse(ui.contains("JAC Diagnostic Lab 1.0.0"))
-        assertTrue(ui.contains("JAC Diagnostic Lab \$appVersion"))
+        val pdf = File("src/main/java/app/jac/diagnosticlab/report/WorkshopPdf.kt").readText()
+        val rep = File("src/main/java/app/jac/diagnosticlab/report/WorkshopReport.kt").readText()
+        assertTrue(pdf.contains("JAC Diagnostic Lab \$appVersion"))
+        assertTrue(rep.contains("JAC Diagnostic Lab \${i.appVersion}"))
+        assertTrue(pdf.contains("c4a.cl"))
     }
 }
