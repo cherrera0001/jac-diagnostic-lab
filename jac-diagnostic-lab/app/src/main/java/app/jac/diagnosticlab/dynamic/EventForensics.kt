@@ -45,10 +45,10 @@ object EventForensics {
     fun detect(frames: List<TraceFrame>): List<ForensicEvent> {
         val fr = frames.sortedBy { it.atMs }
         val out = mutableListOf<ForensicEvent>()
-        var last = Long.MIN_VALUE
+        var last: Long? = null
         for (f in fr) {
             val rpm = f.values[GuidedTests.RPM] ?: continue
-            if (f.atMs - last < DEDUP_MS) continue
+            if (last != null && f.atMs - last < DEDUP_MS) continue
             val prior = window(fr, f.atMs - LOOKBACK_MS, f.atMs - 1).vals(GuidedTests.RPM)
             val prevMax = prior.maxOrNull() ?: continue
             val pedalNow = window(fr, f.atMs - 1_000, f.atMs).vals(GuidedTests.PEDAL).lastOrNull()
