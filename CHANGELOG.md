@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.11.2 — 2026-11-21 (JAC Diagnostic Lab) — informe profesional con sello C4A y almacenamiento seguro
+
+- **Causa raíz del formato perdido:** solo la tarjeta «Informe para el taller» usaba el generador profesional (`WorkshopPdf`). El botón «Guardar informe PDF» del asistente y «PDF del informe» de Exportar usaban un volcado de texto plano. Ahora las tres rutas usan `WorkshopPdf`; una sesión guardada sin lectura en vivo se dibuja dentro del mismo marco (`renderPlain`).
+- **Sello C4A · c4a.cl** (vectorial, sin imágenes): en cada cabecera, en la portada, en el pie y en una caja final «Sello de integridad» con la huella SHA-256 del contenido. Es una huella de integridad, no una firma digital ni una certificación.
+- **Guardado seguro:** cada informe se copia además a un almacén privado de la app (`filesDir/vault/<sesión>/`, con `allowBackup=false`) con `MANIFEST.sha256.txt` verificable y escritura atómica.
+- **Exportación segura:** «Exportar cifrado (.jacenc)»: ZIP + manifiesto, AES-256-GCM, clave PBKDF2-HMAC-SHA256 (210 000 iteraciones), encabezado autenticado. Contraseña mínima de 8 caracteres.
+- Pruebas: `SecureArchiveTest` (8: ida y vuelta, contraseña errónea, alteración de cabecera/cuerpo, vault y path traversal). El render visual del PDF no es comprobable en JVM: **PENDING_VALIDATION en dispositivo**.
+
 ## v1.11.1 — 2026-11-21 (JAC Diagnostic Lab) — Iteración A (P0)
 
 Corrige semántica de medición. Verificado por CI (tests, lint, APK); **no validado aún en vehículo**.
