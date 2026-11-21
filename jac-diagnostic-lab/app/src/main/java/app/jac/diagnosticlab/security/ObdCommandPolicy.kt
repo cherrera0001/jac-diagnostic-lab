@@ -51,9 +51,9 @@ object ObdCommandPolicy {
                 )
             }
         }
-        // UDS / servicios de escritura típicos fuera de J1979 de solo lectura
-        if (c.matches(Regex("^(2E|2F|31|27|3E|34|35|36|37).*"))) {
-            return Verdict(Decision.DENY, "Servicio UDS/escritura bloqueado: $c", "uds_write")
+        // UDS / servicios de escritura, borrado, reset o control de actuadores fuera de J1979 de solo lectura (SPEC-034 R5)
+        if (c.matches(Regex("^(08|10|11|14|27|28|2E|2F|31|34|35|36|37|3D|3E|85).*"))) {
+            return Verdict(Decision.DENY, "Servicio de escritura, control o reprogramación bloqueado: $c", "uds_write")
         }
         if (atLocal.matches(c)) {
             return Verdict(Decision.ALLOW, "AT local de configuración del adaptador.", "at_local")

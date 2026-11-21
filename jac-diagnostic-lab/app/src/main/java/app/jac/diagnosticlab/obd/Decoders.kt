@@ -25,7 +25,21 @@ data class DtcReadResult(
     val confirmedEmpty: Boolean,
     val raw: String,
     val note: String,
-)
+    /** Respuesta negativa 7F (servicio rechazado) en lugar de datos. */
+    val negative: Boolean = false,
+) {
+    /** Estado semántico: ausencia de lectura ≠ cero códigos. */
+    val state: DtcReadState
+        get() = when {
+            negative -> DtcReadState.UNSUPPORTED
+            codes.isNotEmpty() -> DtcReadState.VALID_WITH_CODES
+            confirmedEmpty -> DtcReadState.VALID_EMPTY
+            else -> DtcReadState.READ_ERROR
+        }
+}
+
+/** Estado de una lectura de DTC (Mode 03/07/0A). */
+enum class DtcReadState { NOT_READ, READ_ERROR, UNSUPPORTED, VALID_EMPTY, VALID_WITH_CODES }
 
 object DtcDecoder {
     fun decode(category: DtcCategory, exchange: Exchange, forceCan: Boolean?): DtcReadResult {
@@ -83,7 +97,7 @@ object DtcDecoder {
             hits.isEmpty() -> "No quedaron códigos después de descartar relleno 0000."
             else -> "Códigos decodificados de los bytes originales. Esta versión no incluye el texto del SAE J2012-DA."
         }
-        return DtcReadResult(category, exchange.kind, hits, confirmed && hits.isEmpty() && !malformed, exchange.raw, note)
+        return DtcReadResult(category, exchange.kind, hits, confirmed && hits.isEmpty() && !malformed, exchange.raw, note, negative = negative && hits.isEmpty() && !confirmed)
     }
 
     fun decodePair(hi: Int, lo: Int, ecu: String?, category: DtcCategory): DtcHit {

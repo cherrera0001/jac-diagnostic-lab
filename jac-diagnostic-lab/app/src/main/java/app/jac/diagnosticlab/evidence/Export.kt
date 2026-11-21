@@ -50,6 +50,8 @@ data class SessionRecord(
     val extended: Map<String, Any?> = emptyMap(),
     /** v1.8: mismo contenido en texto legible para el TXT. */
     val extendedText: List<String> = emptyList(),
+    /** SPEC-034 R3: versión del catálogo de perfiles usada en la sesión. */
+    val catalogVersion: String = app.jac.diagnosticlab.profile.JacT8Catalog.v1.version,
 )
 
 fun anonymize(record: SessionRecord): SessionRecord {
@@ -148,6 +150,7 @@ fun toTxt(record: SessionRecord): String {
 private fun sessionMap(record: SessionRecord): Map<String, Any?> = linkedMapOf(
     "schema" to 1,
     "appVersion" to record.appVersion,
+    "catalogVersion" to record.catalogVersion,
     "simulated" to record.simulated,
     "id" to record.id,
     "startedAtEpochMs" to record.startedAtEpochMs,

@@ -1,5 +1,6 @@
 package app.jac.diagnosticlab.analysis
 
+import app.jac.diagnosticlab.obd.DtcReadState
 import app.jac.diagnosticlab.obd.Mode06Result
 import app.jac.diagnosticlab.obd.MonitorState
 import app.jac.diagnosticlab.obd.Readiness
@@ -7,7 +8,7 @@ import app.jac.diagnosticlab.obd.VehicleInfo
 import kotlin.math.abs
 
 enum class HealthStatus(val label: String, val rank: Int) {
-    OK("OK", 0), INFO("INFO", 1), ATTENTION("ATENCIÓN", 2), CHECK("REVISAR", 3), NO_DATA("SIN DATO", -1)
+    OK("OK", 0), INFO("INFO", 1), ATTENTION("ATENCIÓN", 2), CHECK("REVISAR", 3), NO_DATA("SIN DATO", -1), UNVERIFIED("NO VERIFICABLE", -1)
 }
 
 data class HealthItem(
@@ -26,25 +27,45 @@ data class HealthInput(
     val readinessThisCycle: Readiness? = null,
     val storedDtcs: List<String> = emptyList(),
     val pendingDtcs: List<String> = emptyList(),
+    /** Estado de la lectura Mode 03. null = no informado (se deduce: con códigos ⇒ VALID_WITH_CODES, si no NOT_READ). */
+    val storedState: DtcReadState? = null,
+    val pendingState: DtcReadState? = null,
     val mode06: List<Mode06Result> = emptyList(),
     val vehicleInfo: VehicleInfo? = null,
     val adapterVoltage: Double? = null,
+    /**
+     * Edad (ms) de cada señal respecto al momento de evaluar. Vacío = instantánea de un solo escaneo
+     * (todas simultáneas). Con datos, una señal más vieja que [MAX_SKEW_MS] no cuenta para clasificar la condición operativa.
+     */
+    val signalAgesMs: Map<String, Long> = emptyMap(),
 )
 
 /**
  * Evaluación de salud con reglas genéricas (J1979 + práctica de taller diésel common-rail).
  * No son tolerancias del fabricante. Cada ítem cita el dato que lo motivó.
  */
+/** Comprobaciones de plausibilidad física: un valor imposible no es «OK». */
+object Plausibility {
+    fun finite(x: Double?) = x != null && !x.isNaN() && !x.isInfinite()
+    /** Presión diferencial de DPF: físicamente 0…~100 kPa (la lectura negativa es offset/fórmula/sensor, no restricción). */
+    fun dpfDifferentialOk(kpa: Double) = finite(kpa) && kpa >= 0.0 && kpa <= 100.0
+}
+
 object HealthAssessment {
+    /** Ventana máxima entre muestras combinadas para clasificar «motor en marcha / ralentí». */
+    const val MAX_SKEW_MS = 5_000L
     const val BASIS = "Rangos genéricos de referencia, no especificación JAC. Confirmar con escáner de marca."
 
     fun evaluate(input: HealthInput): List<HealthItem> {
-        val v = input.values
+        val badKeys = input.values.filter { (_, x) -> x != null && !Plausibility.finite(x) }.keys
+        val v = input.values.filterValues { Plausibility.finite(it) }
         fun g(k: String) = v[k]
-        val rpm = g("0C")
-        val speed = g("0D")
+        fun fresh(k: String) = input.signalAgesMs.isEmpty() || (input.signalAgesMs[k]?.let { it <= MAX_SKEW_MS } ?: false)
+        val rpm = g("0C")?.takeIf { fresh("0C") }
+        val speed = g("0D")?.takeIf { fresh("0D") }
         val running = rpm != null && rpm > 400
-        val idling = running && (speed == null || speed < 1) && rpm!! < 1100
+        // Sin velocidad vigente no se presume vehículo detenido; sin motor confirmado no se presume ralentí.
+        val idling = running && speed != null && speed < 1 && rpm!! < 1100
         val diesel = input.readiness?.compressionIgnition == true || input.texts["51"]?.contains("Diésel") == true
         val items = mutableListOf<HealthItem>()
         fun add(system: String, status: HealthStatus, title: String, detail: String, evidence: String) {
@@ -52,13 +73,22 @@ object HealthAssessment {
         }
         fun f(x: Double?, d: Int = 1) = x?.let { "%.${d}f".format(it) } ?: "—"
 
+        if (badKeys.isNotEmpty()) add("Sensores", HealthStatus.UNVERIFIED, "Valores no numéricos: ${badKeys.joinToString()}", "NaN/infinito: lectura inválida, excluida.", "decodificador")
         // ── Códigos y MIL
         val r = input.readiness
+        val storedState = input.storedState ?: if (input.storedDtcs.isNotEmpty()) DtcReadState.VALID_WITH_CODES else DtcReadState.NOT_READ
         when {
             input.storedDtcs.isNotEmpty() -> add("Códigos", HealthStatus.CHECK, "Códigos almacenados: ${input.storedDtcs.joinToString()}",
                 "La ECU guardó fallas confirmadas. Leer sin borrar con escáner de marca.", "Mode 03")
             r?.dtcCount != null && r.dtcCount > 0 -> add("Códigos", HealthStatus.CHECK, "La ECU informa ${r.dtcCount} código(s)", "Mode 03 no los entregó; repetir lectura.", "0101 A=${r.dtcCount}")
-            else -> add("Códigos", HealthStatus.OK, "Sin códigos almacenados", "Mode 03 respondió sin códigos.", "Mode 03")
+            storedState == DtcReadState.VALID_EMPTY -> add("Códigos", HealthStatus.OK, "Sin códigos almacenados", "Mode 03 respondió válido y sin códigos.", "Mode 03")
+            storedState == DtcReadState.UNSUPPORTED -> add("Códigos", HealthStatus.NO_DATA, "Mode 03 rechazado por la ECU", "Respuesta negativa 7F: no equivale a cero códigos.", "Mode 03")
+            storedState == DtcReadState.READ_ERROR -> add("Códigos", HealthStatus.NO_DATA, "No se pudo leer Mode 03", "Sin respuesta válida o incompleta: no equivale a cero códigos. Repetir lectura.", "Mode 03")
+            else -> add("Códigos", HealthStatus.NO_DATA, "Códigos almacenados no leídos", "Mode 03 aún no se ha ejecutado: no equivale a cero códigos.", "—")
+        }
+        if (input.pendingDtcs.isEmpty() && input.pendingState != null && input.pendingState != DtcReadState.VALID_EMPTY) {
+            add("Códigos", HealthStatus.NO_DATA, if (input.pendingState == DtcReadState.UNSUPPORTED) "Mode 07 rechazado (7F)" else "Pendientes no leídos",
+                "Sin lectura válida de Mode 07: no equivale a cero pendientes.", "Mode 07")
         }
         if (input.pendingDtcs.isNotEmpty()) {
             add("Códigos", HealthStatus.ATTENTION, "Pendientes: ${input.pendingDtcs.joinToString()}",
@@ -174,7 +204,10 @@ object HealthAssessment {
 
         // ── DPF / postratamiento
         val dp = g("7A.DP")
-        if (dp != null && idling) {
+        if (dp != null && !Plausibility.dpfDifferentialOk(dp)) {
+            add("DPF", HealthStatus.UNVERIFIED, "Presión diferencial DPF no verificable: ${f(dp, 2)} kPa",
+                "Valor fuera de rango físico (negativo o absurdo). Antes de atribuir avería mecánica revisar bytes crudos del PID 7A, la fórmula (s16×0,01) y el sensor. Se excluye de la evaluación.", "PID 7A")
+        } else if (dp != null && idling) {
             val st = when { dp > 5 -> HealthStatus.CHECK; dp > 2.5 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
             add("DPF", st, "Presión diferencial DPF en ralentí ${f(dp, 2)} kPa",
                 if (st == HealthStatus.OK) "Filtro sin restricción notable en ralentí." else "Filtro cargado o sensor/mangueras. Ver carga hacia regeneración.", "PID 7A")

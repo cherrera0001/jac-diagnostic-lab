@@ -36,6 +36,8 @@ import app.jac.diagnosticlab.telemetry.ChannelStats
 import app.jac.diagnosticlab.telemetry.SessionSummary
 import app.jac.diagnosticlab.telemetry.TelemetryStore
 import app.jac.diagnosticlab.telemetry.VehicleTelemetryEngine
+import app.jac.diagnosticlab.evidence.EvidenceBundle
+import app.jac.diagnosticlab.evidence.EvidenceEngine
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
 import app.jac.diagnosticlab.evidence.SnapshotReading
@@ -47,6 +49,7 @@ import app.jac.diagnosticlab.evidence.toJson
 import app.jac.diagnosticlab.evidence.toTxt
 import app.jac.diagnosticlab.obd.CapabilitySnapshot
 import app.jac.diagnosticlab.obd.DtcCategory
+import app.jac.diagnosticlab.obd.DtcReadState
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.obd.FreezeNote
 import app.jac.diagnosticlab.obd.ObdCapabilityDiscoveryEngine
@@ -63,9 +66,13 @@ import app.jac.diagnosticlab.obd.OperationalState
 import app.jac.diagnosticlab.obd.VoltageAssessment
 import app.jac.diagnosticlab.obd.assessAdapterVoltage
 import app.jac.diagnosticlab.obd.SessionTimeMetrics
+import app.jac.diagnosticlab.analysis.DashboardLinkStatus
+import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
+import app.jac.diagnosticlab.analysis.DrivingGuidanceSnapshot
 import app.jac.diagnosticlab.analysis.HealthAssessment
 import app.jac.diagnosticlab.analysis.HealthInput
 import app.jac.diagnosticlab.analysis.HealthItem
+import app.jac.diagnosticlab.analysis.TripGuidanceSummary
 import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.dynamic.TestResult
 import app.jac.diagnosticlab.dynamic.TraceEvent
@@ -185,6 +192,10 @@ data class LabState(
     val testResults: List<TestResult> = emptyList(),
     /** Últimas rondas para mini-gráficos (En vivo / prueba en curso). */
     val testHistory: List<TraceFrame> = emptyList(),
+    // SPEC-034 R6 — Modo Tablero / Tablet Hands-Free y asistencia de conducción segura
+    val liveLinkStatus: DashboardLinkStatus = DashboardLinkStatus.PAUSED,
+    val drivingGuidance: DrivingGuidanceSnapshot? = null,
+    val lastTripSummary: TripGuidanceSummary? = null,
 )
 
 class LabController(private val app: Application) {
@@ -1219,8 +1230,12 @@ class LabController(private val app: Application) {
             exchanges = st.exchanges,
             errors = errors.toList(),
             tests = st.testResults,
+            catalogVersion = JacT8Catalog.v1.version,
         )
     }
+
+    /** SPEC-034: paquete canónico de evidencia offline (JSON + PDF + SHA-256 + catálogo). */
+    fun evidenceBundle(): EvidenceBundle = EvidenceEngine.exportBundle(workshopInput(), JacT8Catalog.v1)
 
     private fun recomputeHealth() {
         val st = state.value
@@ -1235,6 +1250,8 @@ class LabController(private val app: Application) {
                 readinessThisCycle = st.readinessCycle,
                 storedDtcs = reads.filter { it.category == DtcCategory.STORED }.flatMap { r -> r.codes.map { it.code } },
                 pendingDtcs = reads.filter { it.category == DtcCategory.PENDING }.flatMap { r -> r.codes.map { it.code } },
+                storedState = reads.firstOrNull { it.category == DtcCategory.STORED }?.state ?: DtcReadState.NOT_READ,
+                pendingState = reads.firstOrNull { it.category == DtcCategory.PENDING }?.state,
                 mode06 = st.mode06,
                 vehicleInfo = st.vehicleInfo,
                 adapterVoltage = parseAdapterVoltage(st.voltageText),
@@ -1292,8 +1309,22 @@ class LabController(private val app: Application) {
                 }
                 started = true
                 testFrames += first
+                val firstGuidance = DrivingGuidanceEngine.evaluateFrame(first.values)
                 trace("PRUEBA ${test.id} inicio pids=${pids.joinToString { "%02X".format(it) }}")
-                state.update { it.copy(activeTest = test.id, testEvents = emptyList(), testFrameCount = 1, testLive = first, testHistory = listOf(first), error = null, busy = false, statusLine = "Prueba en curso: ${test.title}") }
+                state.update {
+                    it.copy(
+                        activeTest = test.id,
+                        testEvents = emptyList(),
+                        testFrameCount = 1,
+                        testLive = first,
+                        testHistory = listOf(first),
+                        liveLinkStatus = DashboardLinkStatus.CONNECTED,
+                        drivingGuidance = firstGuidance,
+                        error = null,
+                        busy = false,
+                        statusLine = "Prueba en curso: ${test.title}",
+                    )
+                }
                 val t0 = first.atMs
                 var misses = 0
                 // Ruta / en vivo: señales rápidas (1 trama) cada ronda; las de varias tramas, 1 de cada 4.
@@ -1310,6 +1341,8 @@ class LabController(private val app: Application) {
                     val frame = sampleRound(current, roundPids)
                     if (frame == null) {
                         misses++
+                        // SPEC-034 R6: ante microcortes BT no se borra la sesión; se marca RECONECTANDO.
+                        state.update { it.copy(liveLinkStatus = DashboardLinkStatus.RECONNECTING) }
                         if (misses >= 5) {
                             explain("Enlace perdido durante la prueba (5 rondas sin respuesta). Se guarda lo capturado.")
                             break
@@ -1324,14 +1357,17 @@ class LabController(private val app: Application) {
                     val window = testFrames.takeLast(20)
                     val hz = if (window.size > 1) (window.size - 1) * 1000.0 / (window.last().atMs - window.first().atMs).coerceAtLeast(1) else 0.0
                     state.update {
+                        val merged = it.testLive?.values.orEmpty() + frame.values
                         it.copy(
                             // Pantalla: último valor conocido de cada señal. El CSV guarda solo lo leído en la ronda.
-                            testLive = TraceFrame(frame.atMs, it.testLive?.values.orEmpty() + frame.values),
+                            testLive = TraceFrame(frame.atMs, merged),
                             testHistory = (it.testHistory + frame).takeLast(90),
                             testFrameCount = testFrames.size,
                             testElapsedMs = frame.atMs - t0,
                             testHz = hz,
                             testCue = cueFor(test.id, frame.atMs - t0),
+                            liveLinkStatus = DashboardLinkStatus.CONNECTED,
+                            drivingGuidance = DrivingGuidanceEngine.evaluateFrame(merged),
                             testEvents = (events.filter { e -> it.testEvents.none { o -> o.atMs == e.atMs && o.kind == e.kind } } + it.testEvents)
                                 .distinctBy { e -> e.atMs to e.kind }.sortedBy { e -> e.atMs },
                         )
@@ -1342,7 +1378,7 @@ class LabController(private val app: Application) {
                 withContext(NonCancellable) {
                     if (started) finishTest(test.id)
                     autodiagGate.set(false)
-                    state.update { it.copy(activeTest = null, testCue = null, busy = false) }
+                    state.update { it.copy(activeTest = null, testCue = null, busy = false, liveLinkStatus = DashboardLinkStatus.PAUSED) }
                 }
             }
         }
@@ -1363,17 +1399,31 @@ class LabController(private val app: Application) {
 
     private suspend fun finishTest(id: String) {
         if (id == "LIVE") {
+            val tripSummary = DrivingGuidanceEngine.summarizeTrip(testFrames.toList())
             withContext(Dispatchers.IO) { saveTrace(id, null) }
-            state.update { it.copy(statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.") }
+            state.update {
+                it.copy(
+                    lastTripSummary = tripSummary,
+                    liveLinkStatus = DashboardLinkStatus.PAUSED,
+                    statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.",
+                )
+            }
             return
         }
         val test = GuidedTests.byId(id)
         val result = GuidedTests.analyze(test, testFrames.toList(), testManual.toList())
+        val tripSummary = if (id == "ROAD") DrivingGuidanceEngine.summarizeTrip(testFrames.toList()) else state.value.lastTripSummary
         trace("PRUEBA $id fin frames=${result.frames} hz=%.2f veredicto=${result.verdict} ${result.summary}".format(result.effectiveHz))
         result.metrics.forEach { m -> trace("  ${m.name}: ${m.value?.let { "%.3f".format(it) } ?: "—"} ${m.unit} [${m.status.label}]") }
         result.events.forEach { e -> trace("  EVENTO ${e.kind}: ${e.detail}") }
         withContext(Dispatchers.IO) { saveTrace(id, result) }
-        state.update { it.copy(testResults = (it.testResults + result).takeLast(20), statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}") }
+        state.update {
+            it.copy(
+                testResults = (it.testResults + result).takeLast(20),
+                lastTripSummary = tripSummary,
+                statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}",
+            )
+        }
         persist()
     }
 

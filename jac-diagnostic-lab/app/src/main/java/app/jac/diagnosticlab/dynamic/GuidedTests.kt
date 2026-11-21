@@ -192,7 +192,7 @@ object GuidedTests {
         val metrics = listOf(
             TestMetric("Aceleraciones mantenidas", held.toDouble(), "", if (held == 0) HealthStatus.NO_DATA else HealthStatus.INFO, "Se esperaban 3."),
             TestMetric("Cortes de par al frenar", cuts.toDouble(), "", when { held == 0 -> HealthStatus.NO_DATA; cuts == 0 -> HealthStatus.ATTENTION; else -> HealthStatus.OK },
-                "Corte = la ECU recibió la señal de freno."),
+                "Observable: RPM cae bajo acelerador mantenido. Es una inferencia, no mide el interruptor de freno."),
             TestMetric("Pedal pista D en reposo", rest, "%", if (rest == null) HealthStatus.NO_DATA else HealthStatus.INFO),
             TestMetric("Relación pistas D/E", rm, "", if (rm == null) HealthStatus.NO_DATA else st(ratioBad, false),
                 if (rs != null && rm != null) "Variación %.0f %%. Las dos pistas deben moverse en proporción fija.".format(Locale.ROOT, rs / rm * 100) else ""),
@@ -200,8 +200,8 @@ object GuidedTests {
         )
         val summary = when {
             held == 0 -> "No se detectó acelerador mantenido. Repetir siguiendo los pasos."
-            cuts > 0 -> "La ECU cortó el par $cuts vez/veces al pisar el freno: recibe la señal principal del freno. Con P0579/P2299 revisar el SEGUNDO contacto del interruptor (plausibilidad) y su ajuste contra el pedal."
-            else -> "La ECU no cortó el par al frenar en $held intento(s). O no recibe la señal de freno, o esta calibración no corta en neutro. Medir el interruptor de freno (ambos contactos) y comprobar que encienden las luces de freno."
+            cuts > 0 -> "Observable: la RPM cayó $cuts vez/veces al frenar con el acelerador pisado. Inferencia (no confirmada): la ECU pudo reaccionar a una señal de freno; también explican la caída el corte por plausibilidad APP, el soltar el pedal o una estrategia de la calibración. Falta medir: estado eléctrico de AMBOS contactos del interruptor de freno (equipo externo) y leer DTC/freeze frame. Con P0579/P2299 priorizar el protocolo estacionario."
+            else -> "Observable: no hubo caída de RPM al frenar en $held intento(s). No demuestra que la ECU no reciba el freno: la calibración puede no cortar en esta condición. Falta medir: ambos contactos del interruptor de freno con multímetro/osciloscopio y que enciendan las luces de freno."
         }
         return Triple(metrics, events, summary + if (ratioBad) " Las pistas del pedal no se mueven en proporción: revisar el pedal." else "")
     }
