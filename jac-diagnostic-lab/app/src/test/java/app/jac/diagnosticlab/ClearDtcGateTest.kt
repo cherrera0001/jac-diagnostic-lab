@@ -19,16 +19,14 @@ class ClearDtcGateTest {
         val p = ElmParser.parse("04", raw, promptSeen = true, timedOut = false, disconnected = false)
         return Exchange(1L, "04", raw, p.kind, p.detail, true, 30L, p.frames)
     }
-    private fun pre(speed: Double? = 0.0, rpm: Double? = 0.0, ev: Long? = 9_000L, phrase: String = "BORRAR", ecu: Boolean = true) =
-        ClearDtcGate.Preconditions(ecu, speed, rpm, ev, 10_000L, phrase)
+    private fun pre(speed: Double? = 0.0, rpm: Double? = 0.0, ecu: Boolean = true) = ClearDtcGate.Preconditions(ecu, speed, rpm)
 
-    @Test fun allowedWhenStoppedWithEvidenceAndPhrase() = assertTrue(ClearDtcGate.evaluate(pre()).allowed)
+    @Test fun allowedWhenStopped() = assertTrue(ClearDtcGate.evaluate(pre()).allowed)
     @Test fun movingBlocked() = assertFalse(ClearDtcGate.evaluate(pre(speed = 12.0)).allowed)
-    @Test fun unknownSpeedBlocked() = assertFalse(ClearDtcGate.evaluate(pre(speed = null)).allowed)
-    @Test fun noEvidenceBlocked() = assertFalse(ClearDtcGate.evaluate(pre(ev = null)).allowed)
-    @Test fun staleEvidenceBlocked() = assertFalse(ClearDtcGate.evaluate(pre(ev = 10_000L - ClearDtcGate.EVIDENCE_MAX_AGE_MS - 1)).allowed)
-    @Test fun wrongPhraseBlocked() = assertFalse(ClearDtcGate.evaluate(pre(phrase = "borrar ya")).allowed)
-    @Test fun lowercasePhraseAccepted() = assertTrue(ClearDtcGate.evaluate(pre(phrase = " borrar ")).allowed)
+    @Test fun unknownSpeedIsWarningNotBlocker() {
+        val v = ClearDtcGate.evaluate(pre(speed = null))
+        assertTrue(v.allowed); assertTrue(v.warnings.isNotEmpty())
+    }
     @Test fun noEcuBlocked() = assertFalse(ClearDtcGate.evaluate(pre(ecu = false)).allowed)
     @Test fun runningEngineWarnsButDoesNotBlock() {
         val v = ClearDtcGate.evaluate(pre(rpm = 800.0))

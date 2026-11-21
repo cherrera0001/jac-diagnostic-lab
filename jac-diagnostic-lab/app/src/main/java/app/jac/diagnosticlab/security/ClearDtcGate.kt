@@ -8,39 +8,21 @@ import app.jac.diagnosticlab.elm.ResponseKind
  *
  * Qué hace Mode 04: borra DTC almacenados y pendientes, el cuadro congelado, y reinicia los monitores
  * de preparación. NO borra permanentes (Mode 0A) ni arregla la causa: si la falla persiste, vuelve.
- * Por eso exige: evidencia guardada antes, vehículo detenido, frase de confirmación escrita.
+ * Solo se exige lo que J1979 exige: ECU respondiendo y vehículo detenido.
  */
 object ClearDtcGate {
-    const val CONFIRM_PHRASE = "BORRAR"
-    /** Vigencia de la evidencia «antes de borrar». */
-    const val EVIDENCE_MAX_AGE_MS = 10 * 60_000L
-
-    data class Preconditions(
-        val ecuTalking: Boolean,
-        val speedKmh: Double?,
-        val rpm: Double?,
-        val evidenceSavedAtMs: Long?,
-        val nowMs: Long,
-        val phrase: String,
-    )
+    /** Condiciones técnicas de J1979 Mode 04. Nada más bloquea el borrado. */
+    data class Preconditions(val ecuTalking: Boolean, val speedKmh: Double?, val rpm: Double?)
 
     data class Verdict(val allowed: Boolean, val blockers: List<String>, val warnings: List<String>)
 
     fun evaluate(p: Preconditions): Verdict {
         val blockers = mutableListOf<String>()
         val warnings = mutableListOf<String>()
-        if (!p.ecuTalking) blockers += "La ECU no está respondiendo: no se puede confirmar el borrado."
-        when {
-            p.speedKmh == null -> blockers += "No hay velocidad vigente: no se asume que el vehículo esté detenido."
-            p.speedKmh > 0.5 -> blockers += "El vehículo se mueve (${p.speedKmh.toInt()} km/h). Nunca se borra en movimiento."
-        }
-        val ev = p.evidenceSavedAtMs
-        if (ev == null || p.nowMs - ev > EVIDENCE_MAX_AGE_MS || p.nowMs < ev) {
-            blockers += "Primero guarde la evidencia «antes de borrar» (PDF + JSON): el borrado destruye el cuadro congelado."
-        }
-        if (p.phrase.trim().uppercase() != CONFIRM_PHRASE) blockers += "Escriba $CONFIRM_PHRASE para confirmar."
-        if (p.rpm != null && p.rpm > 400) warnings += "Motor en marcha: J1979 pide contacto ON con motor apagado. La ECU puede rechazar (7F 04 22)."
-        warnings += "No borra códigos permanentes (Mode 0A) ni repara la causa. Reinicia monitores: quedarán «incompletos» hasta completar ciclos de manejo."
+        if (!p.ecuTalking) blockers += "La ECU no está respondiendo."
+        if (p.speedKmh != null && p.speedKmh > 0.5) blockers += "El vehículo se mueve (${p.speedKmh.toInt()} km/h): la ECU no acepta el borrado en movimiento."
+        if (p.speedKmh == null) warnings += "Sin velocidad vigente: se envía igual y la ECU decide."
+        if (p.rpm != null && p.rpm > 400) warnings += "Motor en marcha: J1979 pide contacto ON con motor apagado; la ECU puede rechazar (7F 04 22)."
         return Verdict(blockers.isEmpty(), blockers, warnings)
     }
 

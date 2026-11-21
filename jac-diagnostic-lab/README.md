@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.12.0** (`versionCode` 28), 21-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática. APK: [release v1.12.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.0).
+**Versión actual: 1.12.1** (`versionCode` 29), 21-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática. APK: [release v1.12.1](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.1).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -10,7 +10,7 @@ Versión 1.9.0 (`versionCode` 22): Identificación de ECU por Mode 09 (raw por E
 
 Versión anterior publicada: 1.8.0 (`versionCode` 21). Rediseño completo, escaneo de todos los PID que declara la ECU, salud por sistema y pruebas dinámicas.
 
-Solo borra códigos (Mode 04) por una compuerta: evidencia guardada antes, vehículo detenido, confirmación escrita y relectura. No reprograma la ECU y no ejecuta actuadores. Una conexión exitosa **no** autoriza a circular.
+Solo escribe en la ECU con «Borrar y limpiar» (Mode 04, vehículo detenido, relectura) y parte de cero. No reprograma la ECU y no ejecuta actuadores. Una conexión exitosa **no** autoriza a circular.
 
 Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se suben: [NOTICE](../NOTICE) y [CONTRIBUTING.md](../CONTRIBUTING.md).
 
@@ -18,9 +18,9 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.0 |
-| Archivo | `jac-diagnostic-lab-1.12.0-debug.apk` (con su `.sha256`) |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.12.0-debug.apk` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.1 |
+| Archivo | `jac-diagnostic-lab-1.12.1-debug.apk` (con su `.sha256`) |
+| Copia en el repo | `dist/jac-diagnostic-lab-1.12.1-debug.apk` |
 | Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
@@ -32,12 +32,12 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.12.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.12.1-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.12.0-debug.apk
+adb install -r jac-diagnostic-lab-1.12.1-debug.apk
 ```
 
 ## Pantallas (1.8.0, ampliadas en 1.9.0)

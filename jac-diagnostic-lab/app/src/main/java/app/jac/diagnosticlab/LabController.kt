@@ -155,8 +155,7 @@ data class LabState(
     val freezeValues: List<FreezeValue> = emptyList(),
     val busy: Boolean = false,
     val statusLine: String = "Listo para buscar el adaptador.",
-    /** Marca de la última evidencia «antes de borrar» guardada y resultado del último borrado. */
-    val evidenceSavedAtMs: Long? = null,
+    /** Resultado del último «Borrar y limpiar». */
     val lastClear: String? = null,
     val protocol: String = "0",
     val simulated: Boolean = false,
@@ -414,52 +413,90 @@ class LabController(private val app: Application) {
         persist()
     }
 
-    /** La UI llama esto SOLO después de guardar PDF + JSON; ClearDtcGate lo exige reciente. */
-    fun markEvidenceSaved() { state.update { it.copy(evidenceSavedAtMs = System.currentTimeMillis()) } }
-
     /**
-     * Mode 04 con compuerta: lee velocidad y RPM frescas, verifica precondiciones, envía UN comando 04,
-     * y vuelve a leer 03/07/0A. Informa lo que la ECU realmente dijo; nunca asume que se borró.
+     * «Borrar y limpiar» — parte desde cero:
+     *  1) copia privada automática de lo que hay (PDF + JSON) en la bóveda de la app;
+     *  2) limpia datos de la sesión (muestras, pruebas, salud, capturas) y abre una sesión nueva;
+     *  3) Mode 04 en la ECU (si hay enlace) y relectura 03/07/0A: el estado mostrado es el real de la ECU;
+     *  4) opcionalmente archiva y vacía el historial de telemetría del teléfono.
      */
-    fun clearCodes(phrase: String) = scope.launch {
-        val current = session ?: return@launch explain("No hay sesión con la ECU.")
+    fun cleanAndClear(deleteHistory: Boolean) = scope.launch {
         if (!autodiagGate.compareAndSet(false, true)) return@launch state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
         try {
+            testJob?.cancel(); testJob = null
+            pollJob?.cancel(); pollJob = null
             telemetry.pause()
-            state.update { it.copy(busy = true, statusLine = "Verificando que sea seguro borrar…") }
-            val speed = current.readPid(0x0D).takeIf { it.valid }?.value
-            val rpm = current.readPid(0x0C).takeIf { it.valid }?.value
-            val verdict = ClearDtcGate.evaluate(
-                ClearDtcGate.Preconditions(state.value.ecuTalking, speed, rpm, state.value.evidenceSavedAtMs, System.currentTimeMillis(), phrase),
-            )
-            trace("BORRADO verificación: permitido=${verdict.allowed} velocidad=$speed rpm=$rpm bloqueos=${verdict.blockers.size}")
-            if (!verdict.allowed) {
-                state.update { it.copy(busy = false, lastClear = "NO se borró nada. " + verdict.blockers.joinToString(" "), statusLine = "Borrado bloqueado.") }
-                return@launch
+            state.update { it.copy(busy = true, statusLine = "Guardando copia y limpiando…") }
+            val oldId = sessionId
+            val notes = mutableListOf<String>()
+            val vault = app.jac.diagnosticlab.evidence.ReportVault(java.io.File(app.filesDir, "vault"))
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val pdf = app.jac.diagnosticlab.report.WorkshopPdf.render(app.jac.diagnosticlab.report.WorkshopReport.buildDoc(workshopInput()))
+                    val name = "JAC-ANTES-DE-LIMPIAR-$oldId"
+                    vault.save("$oldId-antes-de-limpiar", mapOf(
+                        "$name.pdf" to pdf,
+                        "$name.json" to sessionJson().toByteArray(Charsets.UTF_8),
+                        "$name.pdf.sha256" to "${sha256Hex(pdf)}  $name.pdf\n".toByteArray(Charsets.UTF_8),
+                    ))
+                    notes += "Copia previa en la bóveda privada de la app."
+                }.onFailure { notes += "No se pudo crear la copia previa (${it.message.orEmpty()}); se limpió igual." }
+                if (deleteHistory) runCatching {
+                    val dir = java.io.File(app.filesDir, "telemetry")
+                    val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
+                    if (files.isNotEmpty()) {
+                        vault.save("$oldId-historial", files.associate { it.name to it.readBytes() })
+                        files.forEach { it.delete() }
+                        notes += "Historial (${files.size} archivo(s)) archivado en la bóveda y vaciado."
+                    }
+                }.onFailure { notes += "No se pudo vaciar el historial: ${it.message.orEmpty()}." }
             }
-            val before = dtcs.flatMap { r -> r.codes.map { it.code } }.distinct()
-            state.update { it.copy(statusLine = "Enviando borrado (Mode 04)…") }
-            val response = ClearDtcDecoder.decode(current.clearDtcs())
-            trace("BORRADO respuesta: $response")
-            var reread = false
-            var after = 0
-            if (response == ClearDtcDecoder.Response.Accepted) {
-                dtcs = listOf(
-                    current.readDtc(DtcCategory.STORED),
-                    current.readDtc(DtcCategory.PENDING),
-                    current.readDtc(DtcCategory.PERMANENT),
+            // Datos de la sesión → cero.
+            telemetry.reset()
+            dtcs = emptyList(); freeze = emptyList(); samples = emptyList(); errors.clear()
+            testFrames = mutableListOf(); testManual = mutableListOf()
+            sessionId = newId(); startedAt = System.currentTimeMillis()
+            session?.exchanges?.clear()
+            state.update {
+                it.copy(
+                    sessionId = sessionId, dtcs = emptyList(), samples = emptyList(), analysis = null, freeze = emptyList(),
+                    freezeValues = emptyList(), scanSignals = emptyList(), scanAtMs = null, readiness = null, readinessCycle = null,
+                    mode06 = emptyList(), health = emptyList(), testEvents = emptyList(), testResults = emptyList(),
+                    testHistory = emptyList(), testLive = null, testFrameCount = 0, beforeSnapshot = null, afterSnapshot = null,
+                    lastTripSummary = null, drivingGuidance = null, error = null, recovery = null, channelStats = emptyMap(),
+                    exchanges = emptyList(), polling = false, sessionHistory = telemetryStore.listSessions(),
                 )
-                val stored = dtcs.first { it.category == DtcCategory.STORED }
-                reread = stored.state == DtcReadState.VALID_EMPTY || stored.state == DtcReadState.VALID_WITH_CODES
-                after = stored.codes.size
             }
-            val outcome = ClearDtcDecoder.outcome(response, reread, after)
-            val detail = (response as? ClearDtcDecoder.Response.Rejected)?.let { " (${ClearDtcDecoder.nrcText(it.nrc)})" }.orEmpty()
-            val permanent = dtcs.firstOrNull { it.category == DtcCategory.PERMANENT }?.codes?.size ?: 0
-            val msg = "${outcome.label}$detail Antes: ${before.joinToString().ifBlank { "—" }}." +
-                (if (permanent > 0) " Quedan $permanent permanente(s) (Mode 0A): solo se borran al corregirse la causa." else "") +
-                " Los monitores quedan incompletos hasta completar ciclos de manejo."
-            state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList(), busy = false, lastClear = msg, statusLine = outcome.label) }
+            val current = session
+            var ecuMsg = "Sin enlace con la ECU: solo se limpió la app."
+            if (current != null && state.value.ecuTalking) {
+                val speed = current.readPid(0x0D).takeIf { it.valid }?.value
+                val rpm = current.readPid(0x0C).takeIf { it.valid }?.value
+                val verdict = ClearDtcGate.evaluate(ClearDtcGate.Preconditions(true, speed, rpm))
+                trace("BORRADO y LIMPIEZA: velocidad=$speed rpm=$rpm permitido=${verdict.allowed}")
+                if (!verdict.allowed) {
+                    ecuMsg = "No se envió el borrado a la ECU. " + verdict.blockers.joinToString(" ")
+                } else {
+                    val response = ClearDtcDecoder.decode(current.clearDtcs())
+                    trace("BORRADO respuesta: $response")
+                    dtcs = listOf(
+                        current.readDtc(DtcCategory.STORED),
+                        current.readDtc(DtcCategory.PENDING),
+                        current.readDtc(DtcCategory.PERMANENT),
+                    )
+                    val stored = dtcs.first { it.category == DtcCategory.STORED }
+                    val reread = stored.state == DtcReadState.VALID_EMPTY || stored.state == DtcReadState.VALID_WITH_CODES
+                    val outcome = ClearDtcDecoder.outcome(response, reread, stored.codes.size)
+                    val detail = (response as? ClearDtcDecoder.Response.Rejected)?.let { " (${ClearDtcDecoder.nrcText(it.nrc)})" }.orEmpty()
+                    val perm = dtcs.firstOrNull { it.category == DtcCategory.PERMANENT }?.codes?.size ?: 0
+                    ecuMsg = outcome.label + detail +
+                        (if (perm > 0) " Quedan $perm permanente(s) (Mode 0A): se borran solos al corregirse la causa." else "") +
+                        " Los monitores quedan incompletos hasta completar ciclos de manejo."
+                }
+                state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList()) }
+            }
+            val msg = (listOf(ecuMsg) + notes).joinToString(" ")
+            state.update { it.copy(busy = false, lastClear = msg, statusLine = "Listo: sesión nueva desde cero.") }
             recompute(); recomputeHealth(); persist()
         } finally {
             ClearDtcGate.disarm()

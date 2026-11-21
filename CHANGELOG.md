@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.12.1 — 2026-11-21 (JAC Diagnostic Lab) — «Borrar y limpiar»: partir desde cero
+
+- **Un solo botón «Borrar y limpiar»** (reemplaza el flujo de tres pasos y la frase escrita): copia privada automática (PDF + JSON) → vacía los datos de la sesión (muestras, pruebas, salud, capturas, registro) y abre una sesión nueva → Mode 04 → relee 03/07/0A para mostrar el estado real de la ECU. Un diálogo de confirmación. Casilla para vaciar también el historial de telemetría (se archiva antes en la bóveda privada).
+- La compuerta exige solo lo técnico de J1979: ECU respondiendo y velocidad 0. Sin velocidad vigente ya no bloquea (la ECU decide). El resultado informa lo que la ECU dijo (aceptó / rechazó `7F 04 xx` / sin respuesta / códigos que reaparecen); los permanentes (0A) se indican.
+- **Issue SAFE-001 corregido:** el alcance ahora incluye borrar y limpiar; criterios actualizados; sigue abierto hasta identificar y corregir la causa.
+- Pruebas actualizadas (`ClearDtcGateTest`). **PENDING_VALIDATION en vehículo:** aceptación de Mode 04 por la ECU DCM6.2.
+
 ## v1.12.0 — 2026-11-21 (JAC Diagnostic Lab) — borrado seguro de códigos y forense de paros al frenar
 
 Motivo: el síntoma sigue activo (≈10 paros en 30 min de conducción). Se necesita partir de cero y capturar el evento, no solo leer códigos.
