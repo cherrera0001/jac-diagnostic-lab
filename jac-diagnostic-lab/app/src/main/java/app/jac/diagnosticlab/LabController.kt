@@ -49,6 +49,8 @@ import app.jac.diagnosticlab.evidence.toJson
 import app.jac.diagnosticlab.evidence.toTxt
 import app.jac.diagnosticlab.obd.CapabilitySnapshot
 import app.jac.diagnosticlab.obd.DtcCategory
+import app.jac.diagnosticlab.security.ClearDtcDecoder
+import app.jac.diagnosticlab.security.ClearDtcGate
 import app.jac.diagnosticlab.obd.DtcReadState
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.obd.FreezeNote
@@ -153,6 +155,9 @@ data class LabState(
     val freezeValues: List<FreezeValue> = emptyList(),
     val busy: Boolean = false,
     val statusLine: String = "Listo para buscar el adaptador.",
+    /** Marca de la última evidencia «antes de borrar» guardada y resultado del último borrado. */
+    val evidenceSavedAtMs: Long? = null,
+    val lastClear: String? = null,
     val protocol: String = "0",
     val simulated: Boolean = false,
     val security: SecurityDashboard? = null,
@@ -407,6 +412,60 @@ class LabController(private val app: Application) {
         applyInit(report)
         state.update { it.copy(busy = false) }
         persist()
+    }
+
+    /** La UI llama esto SOLO después de guardar PDF + JSON; ClearDtcGate lo exige reciente. */
+    fun markEvidenceSaved() { state.update { it.copy(evidenceSavedAtMs = System.currentTimeMillis()) } }
+
+    /**
+     * Mode 04 con compuerta: lee velocidad y RPM frescas, verifica precondiciones, envía UN comando 04,
+     * y vuelve a leer 03/07/0A. Informa lo que la ECU realmente dijo; nunca asume que se borró.
+     */
+    fun clearCodes(phrase: String) = scope.launch {
+        val current = session ?: return@launch explain("No hay sesión con la ECU.")
+        if (!autodiagGate.compareAndSet(false, true)) return@launch state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
+        try {
+            telemetry.pause()
+            state.update { it.copy(busy = true, statusLine = "Verificando que sea seguro borrar…") }
+            val speed = current.readPid(0x0D).takeIf { it.valid }?.value
+            val rpm = current.readPid(0x0C).takeIf { it.valid }?.value
+            val verdict = ClearDtcGate.evaluate(
+                ClearDtcGate.Preconditions(current.ecuTalking, speed, rpm, state.value.evidenceSavedAtMs, System.currentTimeMillis(), phrase),
+            )
+            trace("BORRADO verificación: permitido=${verdict.allowed} velocidad=$speed rpm=$rpm bloqueos=${verdict.blockers.size}")
+            if (!verdict.allowed) {
+                state.update { it.copy(busy = false, lastClear = "NO se borró nada. " + verdict.blockers.joinToString(" "), statusLine = "Borrado bloqueado.") }
+                return@launch
+            }
+            val before = dtcs.flatMap { r -> r.codes.map { it.code } }.distinct()
+            state.update { it.copy(statusLine = "Enviando borrado (Mode 04)…") }
+            val response = ClearDtcDecoder.decode(current.clearDtcs())
+            trace("BORRADO respuesta: $response")
+            var reread = false
+            var after = 0
+            if (response == ClearDtcDecoder.Response.Accepted) {
+                dtcs = listOf(
+                    current.readDtc(DtcCategory.STORED),
+                    current.readDtc(DtcCategory.PENDING),
+                    current.readDtc(DtcCategory.PERMANENT),
+                )
+                val stored = dtcs.first { it.category == DtcCategory.STORED }
+                reread = stored.state == DtcReadState.VALID_EMPTY || stored.state == DtcReadState.VALID_WITH_CODES
+                after = stored.codes.size
+            }
+            val outcome = ClearDtcDecoder.outcome(response, reread, after)
+            val detail = (response as? ClearDtcDecoder.Response.Rejected)?.let { " (${ClearDtcDecoder.nrcText(it.nrc)})" }.orEmpty()
+            val permanent = dtcs.firstOrNull { it.category == DtcCategory.PERMANENT }?.codes?.size ?: 0
+            val msg = "${outcome.label}$detail Antes: ${before.joinToString().ifBlank { "—" }}." +
+                (if (permanent > 0) " Quedan $permanent permanente(s) (Mode 0A): solo se borran al corregirse la causa." else "") +
+                " Los monitores quedan incompletos hasta completar ciclos de manejo."
+            state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList(), busy = false, lastClear = msg, statusLine = outcome.label) }
+            recompute(); recomputeHealth(); persist()
+        } finally {
+            ClearDtcGate.disarm()
+            autodiagGate.set(false)
+            state.update { it.copy(busy = false) }
+        }
     }
 
     fun readAllDtcs() = scope.launch {

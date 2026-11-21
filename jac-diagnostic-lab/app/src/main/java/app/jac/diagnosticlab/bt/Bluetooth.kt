@@ -520,7 +520,7 @@ class DiagnosticConnectionService : Service() {
             val notification = NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
                 .setContentTitle("JAC Diagnostic Lab")
-                .setContentText("Sesión de solo lectura. No borra códigos ni modifica la ECU.")
+                .setContentText("Sesión de lectura. El borrado de códigos exige confirmación y no modifica la ECU.")
                 .setOngoing(true)
                 .build()
             if (Build.VERSION.SDK_INT >= 29) {

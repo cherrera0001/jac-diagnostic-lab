@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.12.0 — 2026-11-21 (JAC Diagnostic Lab) — borrado seguro de códigos y forense de paros al frenar
+
+Motivo: el síntoma sigue activo (≈10 paros en 30 min de conducción). Se necesita partir de cero y capturar el evento, no solo leer códigos.
+
+- **Borrar códigos (Mode 04) por compuerta (`security/ClearDtcGate.kt`):** exige ECU respondiendo, velocidad vigente = 0 (sin velocidad no se asume detenido), evidencia «antes de borrar» (PDF + JSON, ≤ 10 min) y escribir BORRAR. La autorización del comando `04` es de un solo uso y dura 20 s; cualquier otra forma (`0400`, `04;03`, UDS `14`, etc.) sigue bloqueada. Tras el borrado relee 03/07/0A y solo declara «confirmado» si la relectura es válida y vacía; informa rechazo `7F 04 xx`, sin respuesta, o códigos que reaparecen. No borra permanentes (0A) y lo dice.
+- **Forense de paros (`dynamic/EventForensics.kt`), dentro de «Registro en ruta»:** detecta MOTOR DETENIDO (RPM < 300 viniendo de ≥ 600) y CAÍDA BRUSCA DE RPM con el pedal aún pisado; levantar el pie o el embrague no cuenta. Por evento guarda velocidad, pedal D/E, tensión, riel y turbo, y marca si fue frenando/detenido (inferido de la velocidad). Pondera 5 hipótesis rivales (freno, alimentación eléctrica, pedal, combustible, turbo) como «compatible / no respaldada / sin datos». Ordena qué medir; **no identifica la pieza** y declara que falta el estado eléctrico del interruptor de freno.
+- Corregido: `README` ya no afirma que la app nunca borra códigos.
+- Pruebas: `ClearDtcGateTest` (precondiciones, autorización, decodificación 44 / 7F 04 22 / NO DATA, resultado sin falso «confirmado») y `EventForensicsTest` (paro frenando, pie fuera no es evento, 10 eventos, caída de tensión, sin datos ≠ descartado). **PENDING_VALIDATION en vehículo:** si la ECU DCM6.2 acepta Mode 04 y el comportamiento real de la detección con el ELM327.
+- SAFE-001 sigue abierto: el borrado no es una solución.
+
 ## v1.11.2 — 2026-11-21 (JAC Diagnostic Lab) — informe profesional con sello C4A y almacenamiento seguro
 
 - **Causa raíz del formato perdido:** solo la tarjeta «Informe para el taller» usaba el generador profesional (`WorkshopPdf`). El botón «Guardar informe PDF» del asistente y «PDF del informe» de Exportar usaban un volcado de texto plano. Ahora las tres rutas usan `WorkshopPdf`; una sesión guardada sin lectura en vivo se dibuja dentro del mismo marco (`renderPlain`).

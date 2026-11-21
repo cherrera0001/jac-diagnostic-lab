@@ -113,6 +113,8 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun validateBle(write: String, notify: String) = lab.validateBle(write, notify)
     fun initialize() = lab.initialize()
     fun readDtcs() = lab.readAllDtcs()
+    fun markEvidenceSaved() = lab.markEvidenceSaved()
+    fun clearCodes(phrase: String) = lab.clearCodes(phrase)
     fun readSupported() = lab.readSupported()
     fun startPoll(pids: Set<Int>) = lab.startPoll(pids)
     fun stopPoll() = lab.stopPoll()
@@ -200,6 +202,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         ),
         exportSection = {
             WorkshopReportCard(state, model)
+            ClearCodesCard(state, model)
             EvidenceScreen(state, model, compact = true)
         },
         advancedSection = {
@@ -1339,6 +1342,55 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
             }
             if (pending && state.busy) Text(state.statusLine, fontSize = 12.sp)
             if (result.isNotBlank()) Text(result, fontSize = 12.sp)
+        }
+    }
+}
+
+/**
+ * Borrado de códigos para «partir de cero». Orden obligatorio: evidencia → confirmación → borrado → relectura.
+ * El borrado destruye el cuadro congelado y reinicia monitores; no repara la causa.
+ */
+@Composable
+private fun ClearCodesCard(state: LabState, model: DiagnosticViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var phrase by remember { mutableStateOf("") }
+    var msg by remember { mutableStateOf("") }
+    val saved = state.evidenceSavedAtMs != null && System.currentTimeMillis() - state.evidenceSavedAtMs < app.jac.diagnosticlab.security.ClearDtcGate.EVIDENCE_MAX_AGE_MS
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Borrar códigos (partir de cero)", style = MaterialTheme.typography.titleMedium)
+            Text("Con la camioneta DETENIDA y contacto ON. Borra códigos almacenados y pendientes, el cuadro congelado y reinicia los monitores. No repara la causa: si la falla sigue, el código vuelve y eso ya es información. Los permanentes (Mode 0A) no se borran.", fontSize = 13.sp)
+            Text("Mientras el corte al frenar siga ocurriendo, no circule (SAFE-001): puede quedarse sin potencia en el tráfico.", fontSize = 13.sp, color = Color(0xFFEF5350))
+            Button(
+                onClick = {
+                    runCatching {
+                        val stamp = state.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
+                        val pdf = app.jac.diagnosticlab.report.WorkshopPdf.render(app.jac.diagnosticlab.report.WorkshopReport.buildDoc(model.workshopInput()))
+                        val json = model.sessionJson().toByteArray(Charsets.UTF_8)
+                        val name = "JAC-ANTES-DE-BORRAR-$stamp"
+                        val files = mapOf("$name.pdf" to pdf, "$name.json" to json, "$name.pdf.sha256" to "${sha256Hex(pdf)}  $name.pdf\n".toByteArray(Charsets.UTF_8))
+                        files.forEach { (n, b) -> saveDownload(context, n, b, if (n.endsWith(".pdf")) "application/pdf" else if (n.endsWith(".json")) "application/json" else "text/plain") }
+                        vaultSave(context, "$stamp-antes-de-borrar", files)
+                        model.markEvidenceSaved()
+                        msg = "Evidencia guardada (Descargas/JAC-lectura y copia privada). Ya puede borrar."
+                    }.onFailure { msg = "No se pudo guardar la evidencia: ${it.message.orEmpty()}. No se habilita el borrado." }
+                },
+                enabled = state.ecuTalking && !state.busy,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (saved) "1. Evidencia guardada ✓ (volver a guardar)" else "1. Guardar evidencia antes de borrar") }
+            androidx.compose.material3.OutlinedTextField(
+                value = phrase, onValueChange = { phrase = it }, singleLine = true,
+                label = { Text("2. Escriba ${app.jac.diagnosticlab.security.ClearDtcGate.CONFIRM_PHRASE} para confirmar") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = { model.clearCodes(phrase) },
+                enabled = state.ecuTalking && !state.busy && saved && phrase.trim().uppercase() == app.jac.diagnosticlab.security.ClearDtcGate.CONFIRM_PHRASE,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("3. Borrar códigos") }
+            if (msg.isNotBlank()) Text(msg, fontSize = 12.sp)
+            state.lastClear?.let { Text(it, fontSize = 13.sp, color = Color(0xFFF5C16C)) }
         }
     }
 }
