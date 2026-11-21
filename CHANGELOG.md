@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.11.1 — 2026-11-21 (JAC Diagnostic Lab) — Iteración A (P0)
+
+Corrige semántica de medición. Verificado por CI (tests, lint, APK); **no validado aún en vehículo**.
+
+- **CI:** `gradlew` estaba en Git sin bit ejecutable (modo 100644) y el runner fallaba con exit 126; ahora 100755 y el workflow invoca `bash ./gradlew`.
+- **DTC (P0.2):** nuevo `DtcReadState` (NOT_READ, READ_ERROR, UNSUPPORTED, VALID_EMPTY, VALID_WITH_CODES). «Sin códigos» solo si Mode 03 respondió válido y vacío; no leído, error o `7F` (p. ej. Mode 0A `7F 0A 13`) se muestra como SIN DATO, nunca OK.
+- **Plausibilidad (P0.3):** nuevo estado `UNVERIFIED`. Presión diferencial DPF negativa o fuera de rango, NaN e infinitos ya no reciben OK; se indica revisar bytes crudos y fórmula antes de atribuir avería.
+- **Contexto temporal (P0.4):** sin velocidad vigente no se presume vehículo detenido ni ralentí; `signalAgesMs` permite descartar señales de otro instante (ventana 5 s).
+- **Prueba de freno (P0.5):** el texto separa observable, inferencia y medida faltante (interruptor de freno, ambos contactos); ya no afirma que la ECU recibió el freno. SAFE-001 sigue abierto.
+- Incluye SPEC-034 (EvidenceEngine) que estaba sin confirmar en el árbol.
+- Pendiente: P0.6 remediación (ver informe), P1–P5.
+
 ## v1.11.0 — 2026-11-18 (JAC Diagnostic Lab) — validada en la unidad real
 
 Primera lectura completa de la unidad con la app nueva: [research/validation/2026-11-18-unidad-real.md](research/validation/2026-11-18-unidad-real.md).
