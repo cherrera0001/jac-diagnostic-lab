@@ -5,6 +5,7 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import app.jac.diagnosticlab.evidence.sha256Hex
 import java.io.ByteArrayOutputStream
 
 /**
@@ -34,7 +35,26 @@ object WorkshopPdf {
         Tone.INFO -> 0xFFE3F0FB.toInt(); Tone.MUTED -> 0xFFF1F3F5.toInt(); null -> 0
     }
 
-    private class Pen(val doc: WorkshopDoc, val pdf: PdfDocument?, val totalPages: Int) {
+    const val BRAND_NAME = "C4A Automotive Security"
+    const val BRAND_SITE = "c4a.cl"
+
+    /** Sello vectorial C4A (sin archivos de imagen): anillo doble, «C4A» y el sitio. [r] = radio. */
+    internal fun drawSeal(c: Canvas, cx: Float, cy: Float, r: Float, onDark: Boolean) {
+        val fg = if (onDark) 0xFFFFFFFF.toInt() else BRAND
+        val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = ACCENT; strokeWidth = r * 0.09f }
+        c.drawCircle(cx, cy, r, ring)
+        ring.color = fg; ring.strokeWidth = r * 0.04f
+        c.drawCircle(cx, cy, r * 0.86f, ring)
+        val t = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = fg; typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD); textSize = r * 0.62f }
+        c.drawText("C4A", cx - t.measureText("C4A") / 2, cy + r * 0.12f, t)
+        t.textSize = r * 0.26f; t.color = ACCENT
+        c.drawText(BRAND_SITE, cx - t.measureText(BRAND_SITE) / 2, cy + r * 0.50f, t)
+        t.textSize = r * 0.17f; t.color = fg; t.typeface = Typeface.SANS_SERIF
+        val top = "SEGURIDAD AUTOMOTRIZ"
+        c.drawText(top, cx - t.measureText(top) / 2, cy - r * 0.40f, t)
+    }
+
+    private class Pen(val doc: WorkshopDoc, val pdf: PdfDocument?, val totalPages: Int, val contentHash: String = "") {
         var page: PdfDocument.Page? = null
         var canvas: Canvas? = null
         var number = 0
@@ -73,7 +93,8 @@ object WorkshopPdf {
             // Cabecera de página.
             canvas?.let { c ->
                 c.drawRect(0f, 0f, W, 6f, font(1f, c = BRAND).also { it.style = Paint.Style.FILL })
-                c.drawText(doc.title.uppercase(), M, 30f, font(8f, true, BRAND))
+                drawSeal(c, M + 9f, 22f, 9f, onDark = false)
+                c.drawText("$BRAND_SITE · ${doc.title.uppercase()}", M + 24f, 26f, font(8f, true, BRAND))
                 val right = doc.meta.firstOrNull { it.first == "VIN" }?.let { "VIN ${it.second}" } ?: ""
                 c.drawText(right, W - M - font(8f).measureText(right), 30f, font(8f, c = MUTED))
                 c.drawLine(M, 40f, W - M, 40f, font(1f, c = LINE).also { it.strokeWidth = 0.6f })
@@ -86,6 +107,7 @@ object WorkshopPdf {
             canvas?.let { c ->
                 c.drawLine(M, H - 34f, W - M, H - 34f, font(1f, c = LINE).also { it.strokeWidth = 0.6f })
                 c.drawText(doc.footer, M, H - 20f, font(7.5f, c = MUTED))
+                c.drawText("$BRAND_NAME · $BRAND_SITE", M, H - 10f, font(6.8f, true, BRAND))
                 val pn = "Página $number de $totalPages"
                 c.drawText(pn, W - M - font(7.5f).measureText(pn), H - 20f, font(7.5f, c = MUTED))
             }
@@ -104,6 +126,25 @@ object WorkshopPdf {
             }
         }
 
+        fun integrityBlock() {
+            val h = 92f
+            ensure(h + 12f)
+            y += 12f
+            val top = y
+            canvas?.let { c ->
+                c.drawRoundRect(RectF(M, top, W - M, top + h), 6f, 6f, font(1f, c = ZEBRA))
+                c.drawRect(M, top, M + 5f, top + h, font(1f, c = ACCENT))
+                drawSeal(c, M + 52f, top + h / 2, 32f, onDark = false)
+                c.drawText("SELLO DE INTEGRIDAD · $BRAND_SITE", M + 100f, top + 20f, font(9.5f, true, BRAND))
+                c.drawText("Emitido con $BRAND_NAME. Huella SHA-256 del contenido del informe:", M + 100f, top + 36f, font(8f, c = INK))
+                val hash = if (contentHash.isBlank()) "—" else contentHash
+                c.drawText(hash.take(32), M + 100f, top + 50f, font(8.2f, true, INK).also { it.typeface = Typeface.MONOSPACE })
+                c.drawText(hash.drop(32), M + 100f, top + 62f, font(8.2f, true, INK).also { it.typeface = Typeface.MONOSPACE })
+                c.drawText("La huella del archivo PDF va en el .sha256 contiguo. Es una huella de integridad, no una firma digital ni una certificación.", M + 100f, top + 78f, font(6.6f, c = MUTED))
+            }
+            y = top + h + 6f
+        }
+
         fun cover() {
             newPage()
             val c = canvas
@@ -111,6 +152,7 @@ object WorkshopPdf {
             c?.drawRect(M, y, M + 5f, y + 74f, font(1f, c = ACCENT))
             c?.drawText(doc.title, M + 18f, y + 30f, font(19f, true, 0xFFFFFFFF.toInt()))
             c?.drawText(doc.subtitle, M + 18f, y + 52f, font(10f, c = 0xFFC9D6E2.toInt()))
+            c?.let { drawSeal(it, W - M - 40f, y + 37f, 31f, onDark = true) }
             y += 86f
             // Ficha en dos columnas.
             val colW = (W - 2 * M) / 2
@@ -285,14 +327,28 @@ object WorkshopPdf {
         fun run() {
             cover()
             doc.sections.forEach { section(it) }
+            integrityBlock()
             finishPage()
         }
     }
 
+    /** Texto de una sesión guardada (sin lectura en vivo) dentro del mismo marco profesional con sello. */
+    fun renderPlain(title: String, lines: List<String>, appVersion: String, generatedAt: String): ByteArray = render(
+        WorkshopDoc(
+            title = "Informe de lectura OBD-II",
+            subtitle = title,
+            meta = listOf("Fecha" to generatedAt, "App" to "JAC Diagnostic Lab $appVersion"),
+            summary = SummaryBox("Sesión guardada: resumen en texto", Tone.INFO, emptyList(), emptyList(), listOf("Generado desde el registro guardado; no hay lectura en vivo.")),
+            sections = listOf(Section(1, "Contenido de la lectura", lines.map { Para(it) })),
+            footer = "JAC Diagnostic Lab $appVersion · solo lectura · no autoriza a circular",
+        ),
+    )
+
     fun render(doc: WorkshopDoc): ByteArray {
-        val measure = Pen(doc, null, 0).also { it.run() }
+        val contentHash = sha256Hex(doc.toLines().joinToString("\n").toByteArray(Charsets.UTF_8))
+        val measure = Pen(doc, null, 0, contentHash).also { it.run() }
         val pdf = PdfDocument()
-        Pen(doc, pdf, measure.number).run()
+        Pen(doc, pdf, measure.number, contentHash).run()
         val out = ByteArrayOutputStream()
         pdf.writeTo(out)
         pdf.close()
