@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.17.0 — 2026-11-22 (JAC Diagnostic Lab) — Pestaña «Señales»: espectro RF nativo (Wi-Fi, 4G/5G, GNSS, FFT magnético) y Escudo defensivo del vehículo
+
+- **Hub «Señales» (`ui/SignalsTab.kt`, reemplaza la etiqueta «Tags» con 3 sub-vistas limpias):**
+  - **BLE / Tags:** conserva intacto todo el módulo de rastreadores, categorías, GATT/DULT, apodos y flecha direccional compartiendo el escáner entre sub-vistas.
+  - **Redes y RF (`signals/RadioScanner.kt`, `signals/RadioMath.kt`):**
+    - **Wi-Fi (2,4 / 5 / 6 GHz):** gráfico de ocupación por canal (2,4 GHz), frecuencia exacta en MHz, ancho de canal (20/40/80/160 MHz), estándar Wi-Fi 4/5/6/7, RSSI, nivel de cifrado (`Abierta`, `WEP`, `WPA2`, `WPA3`) y detección de posibles **Evil Twin** (mismo SSID con seguridad contradictoria).
+    - **Celular (5G NR / 4G LTE / 3G / 2G):** conversión de `EARFCN` y `NR-ARFCN` (3GPP TS 38.104) a frecuencia real en MHz, banda (incluidas bandas de Chile B2/B4/B7/B28/n78), `RSRP`, `RSRQ`, `SINR`, `PCI` y capacidad teórica de Shannon–Hartley.
+    - **Satélites GNSS:** conteo de satélites visibles/usados por constelación (GPS, Galileo, GLONASS, BeiDou), `C/N0` promedio y frecuencias portadoras reales (L1/L5).
+    - **FFT magnético en vivo:** magnitud en µT (normal terrestre 25–65 µT; picos > 120 µT útiles para barrer chasis buscando cajas GPS imantadas) + espectro de oscilación calculado por FFT radix-2 con ventana de Hann.
+  - **Seguridad (`signals/SignalsCore.kt`):** auditoría defensiva automática en vivo (dongle OBD Bluetooth expuesto, rastreador en alerta `0x41`, downgrade celular a 2G GSM, Wi-Fi Evil Twin / abiertas, degradación GNSS y anomalía magnética), exportación JSON a Descargas + bóveda privada, y guía defensiva de puertas de entrada fuera del teléfono (llaves 315/433 MHz, Keyless 125 kHz, portones y SDR recomendado).
+- **Manifiesto:** agrega `ACCESS_WIFI_STATE` y `CHANGE_WIFI_STATE` (permisos normales, sin nuevos diálogos ni permiso de internet).
+- **Pruebas:** `SignalsTest` (6 casos: canales Wi-Fi, EARFCN/NR-ARFCN a MHz, Shannon–Hartley, FFT seno 10 Hz, Evil Twin y auditoría de 5 vectores simultáneos + JSON). **PENDING_VALIDATION en dispositivo físico.**
+
 ## v1.16.0 — 2026-11-22 (JAC Diagnostic Lab) — Tags: diferenciación por categoría BLE e identificación activa GATT/DULT
 
 - **Categorización real de dispositivos BLE cercanos (`tracker/TrackerCore.kt`, `tracker/BleAdParser.kt`, `tracker/DeviceNaming.kt`):**

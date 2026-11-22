@@ -122,7 +122,7 @@ fun AppShell(
         )
         return
     }
-    val tabs = listOf("Estado", "En vivo", "Pruebas", "Datos", "Tags", "Informe")
+    val tabs = listOf("Estado", "En vivo", "Pruebas", "Datos", "Señales", "Informe")
     Scaffold(
         containerColor = Bg,
         topBar = { ConnectionBar(state, actions) },
@@ -152,7 +152,7 @@ fun AppShell(
                 1 -> LiveTab(state, actions) { handsFreeBoard = true }
                 2 -> TestsTab(state, actions)
                 3 -> DataTab(state)
-                4 -> TrackerTab()
+                4 -> SignalsHubTab()
                 else -> ReportTab(exportSection, advancedSection, actions)
             }
             Spacer(Modifier.height(12.dp))
