@@ -14,6 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -39,6 +41,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,8 +63,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import app.jac.diagnosticlab.saveDownload
+import app.jac.diagnosticlab.tracker.BleAdParser
+import app.jac.diagnosticlab.tracker.DeviceCategory
 import app.jac.diagnosticlab.tracker.DeviceNaming
 import app.jac.diagnosticlab.tracker.DirectionEstimator
+import app.jac.diagnosticlab.tracker.GattInspector
 import app.jac.diagnosticlab.tracker.Geo
 import app.jac.diagnosticlab.tracker.HeadingSensor
 import app.jac.diagnosticlab.tracker.PositionEstimate
@@ -73,7 +79,9 @@ import app.jac.diagnosticlab.tracker.TrackerScanner
 import app.jac.diagnosticlab.vaultSave
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.Locale
 import kotlin.math.atan2
 import kotlin.math.roundToInt
 
@@ -89,6 +97,9 @@ private val Warn = Color(0xFFEF5350)
 private enum class DeviceFilter(val label: String) {
     ALL("Todos"),
     TRACKERS("Rastreadores"),
+    AUDIO("Audio"),
+    WEARABLE("Relojes"),
+    PHONE_PC("Teléf./PC"),
     NAMED("Con nombre"),
 }
 
@@ -97,6 +108,18 @@ private fun bandColor(b: ProximityBand) = when (b) {
     ProximityBand.CLOSE -> Color(0xFFFFCA3A)
     ProximityBand.MEDIUM -> Color(0xFFFF8C5A)
     ProximityBand.FAR -> Color(0xFF647282)
+}
+
+private fun categoryColor(c: DeviceCategory) = when (c) {
+    DeviceCategory.TRACKER -> Color(0xFFFFCA3A)
+    DeviceCategory.AUDIO -> Color(0xFF64B5F6)
+    DeviceCategory.WEARABLE -> Color(0xFF4DB6AC)
+    DeviceCategory.PHONE_PC -> Color(0xFF90A4AE)
+    DeviceCategory.TV_HOME -> Color(0xFFBA68C8)
+    DeviceCategory.PERIPHERAL -> Color(0xFF81C784)
+    DeviceCategory.VEHICLE -> Color(0xFFFF8A65)
+    DeviceCategory.BEACON -> Color(0xFFFFD54F)
+    DeviceCategory.OTHER -> Color(0xFF647282)
 }
 
 private fun trackerPermissions(): List<String> = buildList {
@@ -116,7 +139,7 @@ private fun loadNicknames(prefs: android.content.SharedPreferences): Map<String,
         if (k.startsWith("nick_") && v is String && v.isNotBlank()) k.removePrefix("nick_") to v.trim() else null
     }.toMap()
 
-/** Pestaña «Tags»: escáner BLE con nombres reales, calibración espacial silenciosa y vista Buscar minimalista. */
+/** Pestaña «Tags»: escáner BLE con diferenciación por categoría, inspección GATT/DULT bajo demanda y vista Buscar minimalista. */
 @Composable
 internal fun TrackerTab() {
     val context = LocalContext.current
@@ -168,16 +191,22 @@ internal fun TrackerTab() {
         return
     }
 
-    val trackersCount = list.count { it.classification.kind != TrackerKind.UNKNOWN }
-    val namedCount = list.count { !it.advert.name.isNullOrBlank() || !nicknames[it.address].isNullOrBlank() }
+    val trackersCount = list.count { it.classification.category == DeviceCategory.TRACKER || it.classification.kind != TrackerKind.UNKNOWN }
+    val namedCount = list.count {
+        !it.advert.name.isNullOrBlank() || it.gattInfo?.hasIdentity() == true || !nicknames[it.address].isNullOrBlank()
+    }
     val shown = list.filter { s ->
         when (filter) {
             DeviceFilter.ALL -> true
-            DeviceFilter.TRACKERS -> s.classification.kind != TrackerKind.UNKNOWN
-            DeviceFilter.NAMED -> !s.advert.name.isNullOrBlank() || !nicknames[s.address].isNullOrBlank()
+            DeviceFilter.TRACKERS -> s.classification.category == DeviceCategory.TRACKER || s.classification.kind != TrackerKind.UNKNOWN
+            DeviceFilter.AUDIO -> s.classification.category == DeviceCategory.AUDIO
+            DeviceFilter.WEARABLE -> s.classification.category == DeviceCategory.WEARABLE
+            DeviceFilter.PHONE_PC -> s.classification.category == DeviceCategory.PHONE_PC
+            DeviceFilter.NAMED -> !s.advert.name.isNullOrBlank() || s.gattInfo?.hasIdentity() == true || !nicknames[s.address].isNullOrBlank()
         }
     }.sortedWith(
-        compareBy<Sighting> { it.classification.kind == TrackerKind.UNKNOWN }
+        compareBy<Sighting> { it.classification.category != DeviceCategory.TRACKER }
+            .thenBy { it.classification.kind == TrackerKind.UNKNOWN }
             .thenBy { it.advert.name.isNullOrBlank() && nicknames[it.address].isNullOrBlank() }
             .thenByDescending { it.smoothedRssi },
     )
@@ -188,8 +217,8 @@ internal fun TrackerTab() {
             Text(
                 when {
                     list.isEmpty() && running -> "Buscando dispositivos BLE cercanos…"
-                    list.isEmpty() -> "Escaneo pasivo BLE con nombres reales y guía de dirección."
-                    else -> "${list.size} detectados · $trackersCount rastreadores · $namedCount con nombre"
+                    list.isEmpty() -> "Escaneo pasivo BLE por tipo de dispositivo, identificación GATT/DULT y guía direccional."
+                    else -> "${list.size} detectados · $trackersCount rastreadores/Xiaomi · $namedCount identificados"
                 },
                 fontSize = 12.sp,
                 color = Quiet,
@@ -203,7 +232,10 @@ internal fun TrackerTab() {
                 TextButton(onClick = { scanner.clear(); msg = "" }) { Text("Limpiar") }
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             DeviceFilter.entries.forEach { f ->
                 val active = filter == f
                 Box(
@@ -263,7 +295,7 @@ internal fun TrackerTab() {
             }
         }
         Text(
-            "Los tags de Apple Find My y Google Find Hub (incluido Xiaomi Tag) no anuncian su marca ni su nombre por privacidad. La ubicación en la nube solo la ve su dueño.",
+            "Nota: el nombre personalizado de un tag («Llaves», «Mochila») pertenece solo a la app Google Find Hub o Apple Find My y nunca se transmite por Bluetooth. Toque un dispositivo y use «Identificar» (GATT/DULT) o asígnele un apodo local.",
             fontSize = 11.sp,
             color = Quiet,
         )
@@ -271,9 +303,23 @@ internal fun TrackerTab() {
 }
 
 @Composable
+private fun CategoryBadge(category: DeviceCategory) {
+    val accent = categoryColor(category)
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(accent.copy(alpha = 0.14f))
+            .border(1.dp, accent.copy(alpha = 0.40f), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    ) {
+        Text(category.label, fontSize = 10.sp, color = accent, fontWeight = FontWeight.Medium, maxLines = 1)
+    }
+}
+
+@Composable
 private fun DeviceRow(s: Sighting, nick: String?, nowMs: Long, onClick: () -> Unit) {
     val b = ProximityBand.of(s.smoothedRssi)
-    val d = DeviceNaming.display(s.advert, s.classification)
+    val d = DeviceNaming.display(s.advert, s.classification, s.gattInfo)
     val stale = nowMs - s.lastSeenMs > 12_000L
     val dotColor = if (stale) Quiet.copy(alpha = 0.45f) else bandColor(b)
     val trendGlyph = when {
@@ -291,15 +337,19 @@ private fun DeviceRow(s: Sighting, nick: String?, nowMs: Long, onClick: () -> Un
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
-        Column(Modifier.padding(start = 12.dp, end = 8.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                nick?.takeIf { it.isNotBlank() } ?: d.title,
-                fontSize = 15.sp,
-                color = if (stale) Quiet else Ink,
-                fontWeight = if (!nick.isNullOrBlank() || d.named) FontWeight.SemiBold else FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Column(Modifier.padding(start = 12.dp, end = 8.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    nick?.takeIf { it.isNotBlank() } ?: d.title,
+                    fontSize = 15.sp,
+                    color = if (stale) Quiet else Ink,
+                    fontWeight = if (!nick.isNullOrBlank() || d.named) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                CategoryBadge(s.classification.category)
+            }
             val secondary = buildList {
                 if (!nick.isNullOrBlank()) add(d.title)
                 if (d.subtitle.isNotBlank()) add(d.subtitle)
@@ -341,6 +391,7 @@ private fun FindView(
 ) {
     BackHandler { onBack() }
 
+    val scope = rememberCoroutineScope()
     val estimator = remember(s.address) { DirectionEstimator() }
     val pos = remember(s.address) { scanner.positionEstimator(s.address) }
     val heading by compass.heading.collectAsState()
@@ -349,6 +400,8 @@ private fun FindView(
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var posEst by remember(s.address) { mutableStateOf<PositionEstimate?>(null) }
     var showNickDialog by remember { mutableStateOf(false) }
+    var showRawDialog by remember { mutableStateOf(false) }
+    var probing by remember(s.address) { mutableStateOf(false) }
 
     LaunchedEffect(s.address) {
         var lastVersion = -1L
@@ -407,7 +460,7 @@ private fun FindView(
         0f
     }
 
-    val d = DeviceNaming.display(s.advert, s.classification)
+    val d = DeviceNaming.display(s.advert, s.classification, s.gattInfo)
     val title = nickname.ifBlank { d.title }
     val distText = if (byPosition && distM != null) {
         val rounded = if (distM >= 20.0) (distM / 5.0).roundToInt() * 5 else distM.roundToInt()
@@ -441,6 +494,51 @@ private fun FindView(
         )
     }
 
+    if (showRawDialog) {
+        val mfrLines = s.advert.manufacturer.entries.sortedBy { it.key }.joinToString("\n") { (id, bytes) ->
+            val comp = DeviceNaming.companyName(id) ?: "Desconocido"
+            String.format(Locale.US, "0x%04X (%s): %s", id, comp, BleAdParser.hexPrefix(bytes))
+        }.ifBlank { "Ninguno" }
+        val svcLines = (s.advert.serviceUuids + s.advert.serviceData.keys).distinct().sorted().joinToString("\n") { u ->
+            val data = s.advert.serviceData[u]
+            val lbl = DeviceNaming.serviceName(u)?.let { " ($it)" }.orEmpty()
+            if (data != null) "$u$lbl: ${BleAdParser.hexPrefix(data)}" else "$u$lbl"
+        }.ifBlank { "Ninguno" }
+        val appText = s.advert.appearance?.let { code ->
+            String.format(Locale.US, "0x%04X (%s)", code, BleAdParser.appearanceLabel(code) ?: "otro")
+        } ?: "No anunciado"
+        val gattLines = s.gattInfo?.let { g ->
+            buildList {
+                g.deviceName?.let { add("Nombre GATT: $it") }
+                g.manufacturer?.let { add("Fabricante: $it") }
+                g.model?.let { add("Modelo: $it") }
+                g.dultCategory?.let { add("Categoría DULT: $it") }
+                g.firmware?.let { add("Firmware: $it") }
+                g.batteryPercent?.let { add("Batería: $it%") }
+                if (g.statusNote.isNotBlank()) add("Estado: ${g.statusNote}")
+            }.joinToString("\n")
+        } ?: "No consultado todavía (pulse «Identificar»)."
+
+        AlertDialog(
+            onDismissRequest = { showRawDialog = false },
+            title = { Text("Datos BLE · …${s.address.takeLast(5)}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Categoría: ${s.classification.category.label}", fontSize = 12.sp, color = Ink)
+                    Text("Base: ${s.classification.basis}", fontSize = 12.sp, color = Quiet)
+                    Text("Nombre BLE: ${s.advert.name ?: "ninguno"}", fontSize = 12.sp, color = Ink)
+                    Text("Apariencia GAP: $appText", fontSize = 12.sp, color = Quiet)
+                    Text("Fabricante:\n$mfrLines", fontSize = 11.sp, color = Quiet)
+                    Text("Servicios:\n$svcLines", fontSize = 11.sp, color = Quiet)
+                    Text("GATT / DULT:\n$gattLines", fontSize = 11.sp, color = Ink)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showRawDialog = false }) { Text("Cerrar") }
+            },
+        )
+    }
+
     Column(
         Modifier.fillMaxWidth().padding(top = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -448,17 +546,13 @@ private fun FindView(
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("‹ Volver") }
-            Text(
-                "…${s.address.takeLast(5)}",
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                fontSize = 12.sp,
-                color = Quiet,
-            )
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { showRawDialog = true }) { Text("Datos BLE") }
             TextButton(onClick = { showNickDialog = true }) { Text("Apodo") }
         }
 
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            CategoryBadge(s.classification.category)
             Text(title, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Ink, textAlign = TextAlign.Center)
             val sub = buildList {
                 if (nickname.isNotBlank()) add(d.title)
@@ -467,6 +561,16 @@ private fun FindView(
             if (sub.isNotBlank()) {
                 Text(sub, fontSize = 12.sp, color = Quiet, textAlign = TextAlign.Center)
             }
+        }
+
+        s.gattInfo?.statusNote?.takeIf { it.isNotBlank() }?.let { note ->
+            Text(
+                note,
+                fontSize = 11.sp,
+                color = if (s.gattInfo.hasIdentity()) Color(0xFF56CC6D) else Quiet,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 8.dp),
+            )
         }
 
         if (!running) {
@@ -506,12 +610,10 @@ private fun FindView(
             val c = Offset(size.width / 2f, size.height / 2f)
             val r = size.minDimension / 2f - 10f
 
-            // Anillos concéntricos minimalistas
             drawCircle(RingSubtle, r * 0.42f, c, style = Stroke(1.5f))
             drawCircle(RingSubtle, r * 0.72f, c, style = Stroke(1.5f))
             drawCircle(Ring, r, c, style = Stroke(2.5f))
 
-            // Marca sutil del norte cuando la brújula está activa
             if (heading != null) {
                 rotate(compassAngle, c) {
                     drawCircle(Quiet.copy(alpha = 0.55f), 3.5f, Offset(c.x, c.y - r))
@@ -619,13 +721,26 @@ private fun FindView(
             else -> ""
         }
         Text(
-            "${s.smoothedRssi.roundToInt()} dBm · ${pos.count} pts$gpsAcc$extra",
+            "${s.smoothedRssi.roundToInt()} dBm · ${pos.count} pts$gpsAcc$extra · …${s.address.takeLast(5)}",
             fontSize = 11.sp,
             color = Quiet,
             textAlign = TextAlign.Center,
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedButton(
+                enabled = !probing,
+                onClick = {
+                    probing = true
+                    scope.launch {
+                        val info = GattInspector.inspect(context.applicationContext, s.address)
+                        scanner.attachGatt(s.address, info)
+                        probing = false
+                    }
+                },
+            ) {
+                Text(if (probing) "Consultando…" else "Identificar")
+            }
             OutlinedButton(onClick = { estimator.reset(); scanner.resetPosition(s.address); posEst = null }) {
                 Text("Reiniciar")
             }
@@ -640,13 +755,13 @@ private fun FindView(
                         }
                     },
                 ) {
-                    Text(if (pe?.usable == true) "Abrir ubicación" else "Último punto")
+                    Text(if (pe?.usable == true) "Mapa" else "Punto")
                 }
             }
         }
 
         Text(
-            "Orientativo: el cuerpo, las paredes y el GPS en interiores alteran la señal. Si el cálculo es ambiguo (p. ej. en línea recta) no se muestra flecha.",
+            "Orientativo: el cuerpo, las paredes y el GPS en interiores alteran la señal. «Identificar» consulta nombre/modelo vía GATT e IETF DULT cuando el dispositivo lo permite.",
             fontSize = 11.sp,
             color = Quiet,
             textAlign = TextAlign.Center,

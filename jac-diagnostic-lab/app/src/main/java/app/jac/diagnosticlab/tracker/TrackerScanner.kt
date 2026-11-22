@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Escáner BLE pasivo (no se conecta a nada) que sella cada avistamiento con la última posición del teléfono
- * y alimenta en segundo plano el estimador espacial de cada dispositivo detectado.
+ * Escáner BLE pasivo (no se conecta a nada por sí solo) que sella cada avistamiento con la última posición
+ * del teléfono, extrae metadatos GAP/BluetoothClass y alimenta en segundo plano el estimador espacial.
  */
 class TrackerScanner(private val context: Context) {
     private val book = SightingBook()
@@ -48,7 +48,19 @@ class TrackerScanner(private val context: Context) {
             null
         }
         val sysName = runCatching { r.device.name }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
-        return Advert(man, uuids, sd, recName ?: aliasName ?: sysName)
+        val appearance = BleAdParser.parseAppearance(rec?.bytes)
+        val btClass = runCatching { r.device.bluetoothClass }.getOrNull()
+        val tx = rec?.txPowerLevel?.takeIf { it != Int.MIN_VALUE && it in -127..127 }
+        return Advert(
+            manufacturer = man,
+            serviceUuids = uuids,
+            serviceData = sd,
+            name = recName ?: aliasName ?: sysName,
+            appearance = appearance,
+            majorDeviceClass = btClass?.majorDeviceClass,
+            deviceClass = btClass?.deviceClass,
+            txPower = tx,
+        )
     }
 
     @SuppressLint("MissingPermission")
@@ -119,6 +131,11 @@ class TrackerScanner(private val context: Context) {
         runCatching { locListener?.let { context.getSystemService(LocationManager::class.java)?.removeUpdates(it) } }
         locListener = null
         running.value = false
+        _list.value = book.all()
+    }
+
+    fun attachGatt(address: String, info: GattInfo) {
+        book.attachGatt(address, info)
         _list.value = book.all()
     }
 

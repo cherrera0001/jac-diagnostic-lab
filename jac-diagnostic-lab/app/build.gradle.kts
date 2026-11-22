@@ -12,8 +12,8 @@ android {
         applicationId = "app.jac.diagnosticlab"
         minSdk = 26
         targetSdk = 37
-        versionCode = 32
-        versionName = "1.15.0"
+        versionCode = 33
+        versionName = "1.16.0"
     }
 
     buildTypes {
