@@ -2,11 +2,21 @@ package app.jac.diagnosticlab
 
 import app.jac.diagnosticlab.analysis.DashboardLinkStatus
 import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
+import app.jac.diagnosticlab.analysis.FuelEstimate
+import app.jac.diagnosticlab.analysis.FuelEstimateSource
+import app.jac.diagnosticlab.analysis.FuelEstimator
+import app.jac.diagnosticlab.analysis.FuelProfile
+import app.jac.diagnosticlab.analysis.FullTankAnchor
 import app.jac.diagnosticlab.analysis.GearInference
 import app.jac.diagnosticlab.analysis.HealthItem
 import app.jac.diagnosticlab.analysis.HealthStatus
 import app.jac.diagnosticlab.analysis.ShiftCue
 import app.jac.diagnosticlab.analysis.TripZone
+import app.jac.diagnosticlab.bt.BackgroundCaptureNotification
+import app.jac.diagnosticlab.bt.CaptureNotificationSpec
+import app.jac.diagnosticlab.bt.LinkPhase
+import app.jac.diagnosticlab.car.CarDashboardModel
+import app.jac.diagnosticlab.car.CarTone
 import app.jac.diagnosticlab.dynamic.TraceFrame
 import app.jac.diagnosticlab.elm.ElmParser
 import app.jac.diagnosticlab.elm.ElmSession
@@ -470,5 +480,185 @@ class EvidenceEngineTest {
 
         // 7. Estados explícitos de enlace resiliente para el Modo Tablero.
         assertEquals(listOf("CONECTADO", "RECONECTANDO", "PAUSADO"), DashboardLinkStatus.entries.map { it.label })
+    }
+
+    @Test
+    fun r23_fuelEstimationUsesPid2FOrFallsBackToFuelRateOrMafAndAlwaysLabelsAsInference() {
+        // 1. Fuente primaria: PID 0x2F (Fuel Tank Level Input = 65%) sobre estanque nominal de 76 L -> ~49.4 L.
+        val from2f = FuelEstimator.estimate(
+            supportedPids = setOf(0x0C, 0x0D, 0x2F, 0x5E, 0x10),
+            pid2fLevelPercent = 65.0,
+            tankCapacityLiters = 76.0,
+        )
+        assertEquals(FuelEstimateSource.PID_2F_TANK_LEVEL, from2f.source)
+        assertEquals(49.4, from2f.estimatedRemainingLiters!!, 0.05)
+        assertEquals(65.0, from2f.estimatedLevelPercent!!, 0.01)
+        assertTrue(from2f.isInference)
+        assertFalse(from2f.isDirectMeasurement)
+        assertEquals(FuelEstimate.LABEL_ESTIMATION_INFERENCE, from2f.classificationLabel)
+        assertTrue(from2f.summaryText().contains("ESTIMACIÓN/INFERENCIA"))
+        val inf2f = from2f.toDiagnosticInference()
+        assertFalse(inf2f.isConfirmedRootCause)
+        assertTrue(inf2f.supportingFactIds.contains("PID:2F"))
+
+        // 2. Respaldo 1: ECU no soporta PID 0x2F -> integrar PID 0x5E (6.0 L/h durante 30 min = 3.0 L consumidos) desde «Estanque lleno».
+        val anchor = FullTankAnchor(atEpochMs = 1_000L, tankCapacityLiters = 76.0)
+        val rateFrames = listOf(
+            TraceFrame(atMs = 1_000L, values = mapOf("5E" to 6.0)),
+            TraceFrame(atMs = 901_000L, values = mapOf("5E" to 6.0)),
+            TraceFrame(atMs = 1_801_000L, values = mapOf("5E" to 6.0)),
+        )
+        val from5e = FuelEstimator.estimate(
+            supportedPids = setOf(0x0C, 0x0D, 0x5E, 0x10), // sin 0x2F
+            frames = rateFrames,
+            fullTankAnchor = anchor,
+            fuelProfile = FuelProfile.DIESEL,
+        )
+        assertEquals(FuelEstimateSource.PID_5E_FUEL_RATE_INTEGRATION, from5e.source)
+        assertEquals(3.0, from5e.estimatedConsumedLiters!!, 0.01)
+        assertEquals(73.0, from5e.estimatedRemainingLiters!!, 0.01)
+        assertTrue(from5e.isInference)
+        assertFalse(from5e.isDirectMeasurement)
+        assertEquals("ESTIMACIÓN/INFERENCIA", from5e.classificationLabel)
+        assertTrue(from5e.toDiagnosticInference().supportingFactIds.containsAll(listOf("PID:5E", "MANUAL:FULL_TANK")))
+
+        // 3. Respaldo 2: ECU sin 0x2F ni 0x5E -> integrar PID 0x10 (MAF 25 g/s durante 1 h en diésel) desde «Estanque lleno».
+        val mafFrames = listOf(
+            TraceFrame(atMs = 1_000L, values = mapOf("10" to 25.0)),
+            TraceFrame(atMs = 1_801_000L, values = mapOf("10" to 25.0)),
+            TraceFrame(atMs = 3_601_000L, values = mapOf("10" to 25.0)),
+        )
+        val expectedMafRateLph = (25.0 / FuelProfile.DIESEL.effectiveAfr) * 3600.0 / FuelProfile.DIESEL.densityGramsPerLiter
+        val fromMaf = FuelEstimator.estimate(
+            supportedPids = setOf(0x0C, 0x0D, 0x10), // solo MAF
+            frames = mafFrames,
+            fullTankAnchor = anchor,
+            fuelProfile = FuelProfile.DIESEL,
+        )
+        assertEquals(FuelEstimateSource.PID_10_MAF_INTEGRATION, fromMaf.source)
+        assertEquals(expectedMafRateLph, fromMaf.estimatedConsumedLiters!!, 0.02)
+        assertEquals(76.0 - expectedMafRateLph, fromMaf.estimatedRemainingLiters!!, 0.02)
+        assertTrue(fromMaf.isInference)
+        assertFalse(fromMaf.isDirectMeasurement)
+        assertEquals("ESTIMACIÓN/INFERENCIA", fromMaf.classificationLabel)
+        assertTrue(fromMaf.toDiagnosticInference().supportingFactIds.containsAll(listOf("PID:10", "MANUAL:FULL_TANK")))
+
+        // 4. Sin PID 0x2F y sin evento manual «Estanque lleno»: no inventa litros.
+        val unavailable = FuelEstimator.estimate(
+            supportedPids = setOf(0x0C, 0x5E, 0x10),
+            frames = rateFrames,
+            fullTankAnchor = null,
+        )
+        assertEquals(FuelEstimateSource.UNAVAILABLE, unavailable.source)
+        assertNull(unavailable.estimatedRemainingLiters)
+        assertTrue(unavailable.isInference)
+        assertFalse(unavailable.isDirectMeasurement)
+
+        // 5. Invariante estricto R7: prohibido etiquetar el resultado como medición directa o no-inferencia.
+        assertThrows(IllegalArgumentException::class.java) {
+            FuelEstimate(
+                source = FuelEstimateSource.PID_2F_TANK_LEVEL,
+                tankCapacityLiters = 76.0,
+                estimatedRemainingLiters = 50.0,
+                estimatedLevelPercent = 65.8,
+                estimatedConsumedLiters = 26.0,
+                instantaneousRateLph = null,
+                fullTankAnchor = null,
+                isInference = false,
+                isDirectMeasurement = true,
+                note = "Medición directa inválida",
+            )
+        }
+    }
+
+    @Test
+    fun r24_foregroundServiceContractSupportsBackgroundObdCaptureAndNotification() {
+        val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
+        assertTrue("Debe declarar permiso FOREGROUND_SERVICE", manifest.contains("android.permission.FOREGROUND_SERVICE"))
+        assertTrue(
+            "Debe declarar permiso FOREGROUND_SERVICE_CONNECTED_DEVICE",
+            manifest.contains("android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"),
+        )
+        assertTrue("Debe declarar DiagnosticConnectionService", manifest.contains(".bt.DiagnosticConnectionService"))
+        assertTrue(
+            "Debe declarar foregroundServiceType connectedDevice",
+            manifest.contains("android:foregroundServiceType=\"connectedDevice\""),
+        )
+
+        val liveSpec = BackgroundCaptureNotification.build(
+            linkPhase = LinkPhase.DIAGNOSTIC_READY,
+            activeTest = "LIVE",
+            polling = false,
+            sampleCount = 42,
+            liveStatus = DashboardLinkStatus.CONNECTED,
+            fuelHint = "Comb. est. ~52.0 L (inf.)",
+        )
+        assertTrue(liveSpec.ongoing)
+        assertTrue(liveSpec.title.contains("2º plano", ignoreCase = true))
+        assertTrue(liveSpec.text.contains("42 rondas"))
+        assertTrue(liveSpec.text.contains("52.0 L"))
+
+        val reconnectingSpec = BackgroundCaptureNotification.build(
+            linkPhase = LinkPhase.ECU_RESPONDING,
+            activeTest = "ROAD",
+            polling = false,
+            sampleCount = 120,
+            liveStatus = DashboardLinkStatus.RECONNECTING,
+        )
+        assertTrue(reconnectingSpec.ongoing)
+        assertTrue(reconnectingSpec.title.contains("Reconectando", ignoreCase = true))
+        assertTrue(reconnectingSpec.text.contains("conservadas", ignoreCase = true))
+
+        assertThrows(IllegalArgumentException::class.java) {
+            CaptureNotificationSpec(title = "Test", text = "No persistente", ongoing = false)
+        }
+    }
+
+    @Test
+    fun r25_androidAutoCarAppServiceAndManifestDeclareGlanceableReadOnlyDashboard() {
+        val gradle = java.io.File("build.gradle.kts").readText()
+        assertTrue("Debe incluir androidx.car.app:app", gradle.contains("androidx.car.app:app:"))
+
+        val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
+        assertTrue(manifest.contains("com.google.android.gms.car.application"))
+        assertTrue(manifest.contains("@xml/automotive_app_desc"))
+        assertTrue(manifest.contains("androidx.car.app.minCarAppApiLevel"))
+        assertTrue(manifest.contains(".car.JacCarAppService"))
+        assertTrue(manifest.contains("androidx.car.app.CarAppService"))
+        assertTrue(manifest.contains("androidx.car.app.category.IOT"))
+
+        val carDesc = java.io.File("src/main/res/xml/automotive_app_desc.xml").readText()
+        assertTrue(carDesc.contains("<automotiveApp>"))
+        assertTrue(carDesc.contains("name=\"template\""))
+
+        // Verificar que la pantalla Android Auto expone estado de enlace, DTCs activos, lecturas clave y combustible R7 en solo lectura.
+        val dtcHit = DtcHit("P0579", 0x05, 0x79, DtcScope.GENERIC, "SAE", "7E8", DtcCategory.STORED)
+        val fuelEst = FuelEstimator.estimate(
+            supportedPids = setOf(0x0C, 0x0D, 0x2F),
+            pid2fLevelPercent = 50.0,
+            tankCapacityLiters = 76.0,
+        )
+        val snap = CarDashboardModel.from(
+            LabState(
+                ecuTalking = true,
+                linkPhase = LinkPhase.DIAGNOSTIC_READY,
+                activeTest = "LIVE",
+                testLive = TraceFrame(1_000L, mapOf("0C" to 1950.0, "0D" to 64.0, "05" to 88.0, "42" to 14.2, "2F" to 50.0)),
+                dtcs = listOf(DtcReadResult(DtcCategory.STORED, ResponseKind.OBD_DATA, listOf(dtcHit), false, "43 05 79", "")),
+                fuelEstimate = fuelEst,
+            ),
+        )
+        assertTrue(snap.connected)
+        assertTrue(snap.headerTitle.contains("En vivo"))
+        assertEquals(6, snap.tiles.size)
+        assertEquals("1", snap.tiles[5].valueText)
+        assertEquals(CarTone.ALERT, snap.tiles[5].tone)
+        assertTrue(snap.statusRows.any { it.title.contains("P0579") })
+        assertTrue(
+            "Android Auto debe etiquetar el combustible como ESTIMACIÓN/INFERENCIA",
+            snap.detailRows.any { it.line2?.contains("38.0 L") == true && it.line2?.contains("ESTIMACIÓN/INFERENCIA") == true },
+        )
+        val carServiceSrc = java.io.File("src/main/java/app/jac/diagnosticlab/car/JacCarAppService.kt").readText()
+        assertFalse("CarAppService no debe exponer borrado de DTC", carServiceSrc.contains("cleanAndClear"))
     }
 }

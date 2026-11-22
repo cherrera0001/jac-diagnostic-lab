@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.18.0** (`versionCode` 35), validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.18.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0). Incluye diagnóstico OBD completo, **soporte nativo de Android Auto** (tablero horizontal 3×2 pausado para la pantalla de la JAC T8, compatible en paralelo con Spotify y Waze/Maps), guía de cambios calibrada 6M diésel (`2ª → 3ª` / `4ª → 3ª`), informe PDF con sello C4A y bóveda privada, forense de paros en ruta, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Señales** (BLE/Tags + espectro RF nativo + Escudo defensivo). Issue abierto: **SAFE-001**.
+**App actual: JAC Diagnostic Lab 1.19.0** (`versionCode` 36), compilada, probada (`:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`) e instalada en Xiaomi `2512BPNDAG` el 2026-11-22 (base validada en la unidad el 2026-11-18: [resultados](research/validation/2026-11-18-unidad-real.md), ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.19.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0) (`jac-diagnostic-lab/dist/jac-diagnostic-lab-1.19.0-debug.apk`). Incluye SPEC-034 R7–R11: **estimación de combustible sin mirar el tablero** (`PID 0x2F` o integración `0x5E`/MAF `0x10` desde «Estanque lleno», siempre etiquetada `ESTIMACIÓN/INFERENCIA`), **captura continua en segundo plano** (`ForegroundService` con notificación persistente viva con pantalla apagada o usando otra app), **soporte nativo de Android Auto** (tablero horizontal 3×2 en solo lectura compatible con Spotify y Waze/Maps), **Perfil de Captura Rápida de Falla** (Set Crítico de 8 PIDs: `0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`), **Diagnóstico Diferencial** en informe PDF (hechos observables vs. hipótesis: corte de torque *brake override* frente a apagado total por riel `0x23` o tensión `0x42`, con recomendación automática del Set Crítico), guía de cambios 6M diésel, bóveda privada + `.jacenc`, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Señales**. Issue abierto: **#1 (`SAFE-001`)**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
@@ -43,12 +43,12 @@ Condición: camioneta **estacionada**, freno de mano puesto, motor en marcha o c
 | Pestaña / Modo | Para qué sirve (qué hace cada función) | Qué no hace |
 |---|---|---|
 | **Estado** | Veredicto en una línea, códigos DTC (guardados/pendientes) tocables con detalle técnico y mosaicos de salud por sistema (motor, combustible, turbo, DPF, batería) | No da porcentaje global ni certifica aptitud para circular |
-| **En vivo** | Medidores grandes en tiempo real (RPM, velocidad, refrigerante real, tensión ECU, carga, pedal, turbo, riel, par) + **Modo Tablero manos libres** con guía de cambio calibrada 6M diésel (`SUBIR A 3ª`, `BAJAR A 4ª`) y filtro de embrague | No inventa PIDs de freno ni mide sensores internos de la caja (marcha es inferencia RPM/velocidad) |
-| **Android Auto** | Tablero horizontal 3×2 pausado (refresco 1,2 s) directo en la pantalla OEM de la JAC T8: Motor/Cambio, Refrigerante real, Batería ECU, Turbo/Riel, DPF/Regeneración («No apagar») y Estado/DTC, más vistas de detalle y «Marcar evento». Convive sin cortes con Spotify y Waze/Maps (categoría `IOT`, sin foco de audio) | No modifica el firmware Linux de la radio ni borra códigos desde la pantalla del auto |
-| **Pruebas** | Pruebas guiadas estacionarias (ralentí, calentamiento, aceleración libre, carga eléctrica) y registro en ruta/banco con **forense de paros (`EventForensics`)** y CSV | No mueve actuadores ni acelera/frena el vehículo |
+| **En vivo** | Medidores grandes en tiempo real, **Captura rápida de falla (Set Crítico de 8 PIDs: `0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`)**, **estimación de combustible (`ESTIMACIÓN/INFERENCIA` R7)** con botón «Estanque lleno», **captura continua en segundo plano** (`ForegroundService` R8) y **Modo Tablero manos libres** con guía de cambio 6M diésel | No inventa PIDs de freno, no presenta litros estimados como medición directa ni mide sensores internos de la caja |
+| **Android Auto** | Tablero horizontal 3×2 pausado (refresco 1,2 s, solo lectura) directo en la pantalla OEM de la JAC T8: Motor/Cambio, Refrigerante real, Batería ECU, Turbo/Riel, DPF/Regeneración («No apagar») y Estado/DTC, más vistas de detalle (incl. combustible estimado R7) y «Marcar evento». Convive sin cortes con Spotify y Waze/Maps (categoría `IOT`, sin foco de audio) | No modifica el firmware Linux de la radio ni borra códigos desde la pantalla del auto |
+| **Pruebas** | Pruebas guiadas estacionarias (ralentí, calentamiento, aceleración libre, carga eléctrica, freno vs acelerador), **Captura rápida de falla (8 PIDs)** y registro en ruta/banco con **forense de paros (`EventForensics`)** y CSV | No mueve actuadores ni acelera/frena el vehículo |
 | **Datos** | Catálogo completo de señales leídas con buscador, Mode 06 (autopruebas ECU), Mode 09 (CALID, CVN, VIN), horas de motor y km desde borrado | No muestra ceros o tramas truncadas como datos válidos |
 | **Señales** | Hub de 3 sub-vistas: **BLE / Tags** (categorías reales, identificación activa opcional GATT/IETF DULT, apodos, flecha orientativa por calibración espacial silenciosa o giro con brújula y exportación GeoJSON/GPX), **Redes y RF** (canales Wi-Fi 2,4/5/6 GHz y Evil Twin, celdas 4G/5G con MHz reales y SINR, satélites GNSS, FFT magnético en vivo) y **Seguridad** (Escudo defensivo automático + reporte JSON) | No sintoniza 315/433 MHz sin RTL-SDR ni accede a cuentas nube de Apple/Google |
-| **Informe** | Genera PDF profesional con sello vectorial `C4A · c4a.cl` y huella SHA-256, JSON/TXT/CSV, copia en bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`) y «Borrar y limpiar» (Mode `04` detrás de `ClearDtcGate`) | No sube ningún dato a internet (`allowBackup=false`) |
+| **Informe** | Genera PDF profesional con sello vectorial `C4A · c4a.cl`, **Diagnóstico Diferencial** (Hechos observables vs. Hipótesis: corte de torque *brake override* frente a apagado total por riel `0x23`/tensión `0x42`) y recomendación automática del Set Crítico de 8 PIDs, huella SHA-256, JSON/TXT/CSV, copia en bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`) y «Borrar y limpiar» (Mode `04` detrás de `ClearDtcGate`) | No sube ningún dato a internet (`allowBackup=false`) |
 
 El informe de una unidad concreta queda fuera de este repositorio.
 
@@ -98,16 +98,16 @@ gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 Instalar la APK debug con el teléfono desbloqueado:
 
 ```text
-adb install -r dist\jac-diagnostic-lab-1.18.0-debug.apk
+adb install -r dist\jac-diagnostic-lab-1.19.0-debug.apk
 ```
 
 ## Cómo se construye
 
-El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numerado, decisión en `adr/`, prueba que nombra el requisito, y después el código. La exportación está en [specs/001-exportacion/spec.md](specs/001-exportacion/spec.md) y [ADR-001](adr/ADR-001-el-archivo-se-arma-al-pulsar.md).
+El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numerado, decisión en `adr/`, prueba que nombra el requisito, y después el código. La exportación está en [specs/001-exportacion/spec.md](specs/001-exportacion/spec.md) y [ADR-001](adr/ADR-001-el-archivo-se-arma-al-pulsar.md). El motor de evidencia y las capacidades recientes (`R1`–`R11`) viven en [specs/034-evidence-engine-mvp/spec.md](specs/034-evidence-engine-mvp/spec.md).
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.18.0 (`versionCode` 35). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.19.0 (`versionCode` 36). Los resultados de una unidad concreta no forman parte de este archivo.
 
 ## Licencia y uso
 

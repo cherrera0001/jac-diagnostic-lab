@@ -96,6 +96,7 @@ class ShellActions(
     val startTest: (String) -> Unit,
     val stopTest: () -> Unit,
     val mark: () -> Unit,
+    val markFullTank: () -> Unit = {},
 )
 
 @Composable
@@ -421,9 +422,10 @@ private val liveGauges = listOf(
     GaugeSpec(listOf("05"), "Refrigerante", "°C"),
     GaugeSpec(listOf("42"), "Tensión", "V"),
     GaugeSpec(listOf("04"), "Carga", "%"),
-    GaugeSpec(listOf("49"), "Pedal", "%"),
+    GaugeSpec(listOf("49"), "Pedal D", "%"),
+    GaugeSpec(listOf("4A"), "Pedal E", "%"),
     GaugeSpec(listOf("70.RA", "0B"), "Turbo / admisión", "kPa"),
-    GaugeSpec(listOf("6D.RA", "59"), "Riel", "kPa"),
+    GaugeSpec(listOf("23", "6D.RA", "59"), "Riel", "kPa"),
     GaugeSpec(listOf("62"), "Torque", "%"),
     GaugeSpec(listOf("10"), "Aire (MAF)", "g/s"),
     GaugeSpec(listOf("7A.DP"), "DPF presión", "kPa"),
@@ -434,14 +436,23 @@ private val liveGauges = listOf(
 
 @Composable
 private fun LiveTab(state: LabState, actions: ShellActions, openBoard: () -> Unit) {
-    val liveOn = state.activeTest == "LIVE"
+    val liveOn = state.activeTest == "LIVE" || state.activeTest == GuidedTests.FAST_FAULT_ID
+    val fastFaultOn = state.activeTest == GuidedTests.FAST_FAULT_ID
     val other = state.activeTest != null && !liveOn
     if (!liveOn) {
-        Hero("En vivo", if (other) "Hay una prueba en curso." else "Modo Tablero / Tablet hands-free y sensores en tiempo real.", Accent)
+        Hero("En vivo", if (other) "Hay una prueba en curso." else "Modo Tablero / Tablet hands-free, Captura rápida (8 PIDs) y sensores en tiempo real.", Accent)
         PrimaryButton("Iniciar en vivo", !state.busy && !other && state.ecuTalking) { actions.startTest("LIVE") }
+        OutlinedButton(
+            onClick = { actions.startTest(GuidedTests.FAST_FAULT_ID) },
+            enabled = !state.busy && !other && state.ecuTalking,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Captura rápida de falla (8 PIDs críticos)", color = Accent)
+        }
         OutlinedButton(onClick = openBoard, modifier = Modifier.fillMaxWidth()) {
             Text("Abrir Modo Tablero (Hands-Free)", color = Text1)
         }
+        FuelEstimateCard(state, actions.markFullTank)
         if (!state.ecuTalking) Text("Primero conecta desde Estado.", color = Text2, fontSize = 13.sp)
         state.lastTripSummary?.let { TripSummaryCard(it) }
         return
@@ -449,12 +460,48 @@ private fun LiveTab(state: LabState, actions: ShellActions, openBoard: () -> Uni
     Row(verticalAlignment = Alignment.CenterVertically) {
         LinkStatusChip(state.liveLinkStatus)
         Spacer(Modifier.width(8.dp))
-        Text("%.1f Hz · %d s".format(state.testHz, state.testElapsedMs / 1000), color = Text2, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        val modeTag = if (fastFaultOn) "8 PIDs · " else ""
+        Text("$modeTag%.1f Hz · %d s".format(state.testHz, state.testElapsedMs / 1000), color = Text2, fontSize = 13.sp, modifier = Modifier.weight(1f))
         TextButton(onClick = openBoard) { Text("Tablero", color = Accent) }
         TextButton(onClick = actions.stopTest) { Text("Detener", color = Accent) }
     }
+    if (fastFaultOn) {
+        OutlinedButton(onClick = actions.mark, modifier = Modifier.fillMaxWidth()) {
+            Text("MARCAR EVENTO (Captura rápida 8 PIDs)", color = Color(0xFFFF8A80), fontWeight = FontWeight.Bold)
+        }
+    }
     state.drivingGuidance?.let { GuidanceStrip(it) }
+    FuelEstimateCard(state, actions.markFullTank)
     GaugeGrid(state)
+}
+
+@Composable
+private fun FuelEstimateCard(state: LabState, onMarkFullTank: () -> Unit) {
+    val est = state.fuelEstimate
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("COMBUSTIBLE · ESTIMACIÓN/INFERENCIA (R7)", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    est?.summaryText() ?: "Sin estimación · ESTIMACIÓN/INFERENCIA",
+                    color = Text1,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            OutlinedButton(onClick = onMarkFullTank) {
+                Text("Estanque lleno", fontSize = 12.sp, color = Accent)
+            }
+        }
+        Text(
+            est?.note ?: "Usa PID 0x2F si la ECU lo soporta, o integra PID 0x5E / MAF (0x10) desde «Estanque lleno». Nunca es medición directa.",
+            color = Text2,
+            fontSize = 11.sp,
+        )
+    }
 }
 
 @Composable
@@ -693,6 +740,7 @@ private val testBlurb = mapOf(
     "SNAP" to "¿Responden riel y turbo al acelerar?",
     "ELECTRIC" to "¿El alternador aguanta la carga?",
     "ROAD" to "Graba un recorrido y detecta cortes",
+    "FAST_FAULT" to "Perfil ligero de 8 PIDs críticos (evita saturar ELM327)",
 )
 
 @Composable

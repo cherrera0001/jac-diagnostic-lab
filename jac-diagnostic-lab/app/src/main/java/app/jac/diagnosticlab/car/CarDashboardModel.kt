@@ -79,6 +79,15 @@ object CarDashboardModel {
         val egt = v(GuidedTests.EGT) ?: v(GuidedTests.DPF_IN)
         val oil = v(GuidedTests.OIL)
         val fuel = v(GuidedTests.FUEL)
+        val fuelEstimate = state.fuelEstimate
+            ?: v(GuidedTests.FUEL_LEVEL)?.let { lvl ->
+                app.jac.diagnosticlab.analysis.FuelEstimator.estimate(
+                    supportedPids = state.supported,
+                    pid2fLevelPercent = lvl,
+                    fullTankAnchor = state.fullTankAnchor,
+                    tankCapacityLiters = state.tankCapacityLiters,
+                )
+            }
 
         // 1. Motor + guía de cambio calibrada JAC T8 (RPM + marcha inferida + sugerencia concreta «↑ 3ª» / «↓ 4ª»)
         val guidance = DrivingGuidanceEngine.evaluate(rpm, speed, load, ect)
@@ -223,6 +232,9 @@ object CarDashboardModel {
             CarRowItem(
                 title = "Combustible y riel",
                 line1 = "Riel: ${railMpa?.let { String.format(Locale.US, "%.1f MPa", it) } ?: "—"} · Flujo: ${fmt(fuel, " L/h", 1)}",
+                line2 = fuelEstimate?.estimatedRemainingLiters?.let { estL ->
+                    String.format(Locale.US, "Estanque: ~%.1f L (%s)", estL, fuelEstimate.classificationLabel)
+                },
             ),
             CarRowItem(
                 title = "Turbo y admisión",

@@ -2,6 +2,23 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.19.0 — SPEC-034 R7–R11: Combustible estimado, captura continua en 2º plano, Set Crítico de 8 PIDs y Diagnóstico Diferencial
+
+- **Tag:** `v1.19.0`
+- **versionCode:** 36
+- **Fecha:** 2026-11-22
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0 (`jac-diagnostic-lab-1.19.0-debug.apk` + `.sha256` + copia en `dist/`)
+- **SHA-256:** `fad3f334714eb368cb9c05f07346d74db56ccab169bd31e8ed4deba7fd3d2d5b`
+
+Implementación completa SDD + TDD de **SPEC-034 R7–R11** alineada con Issue `#1 (SAFE-001)` y Project #22 (`JAC T8 / C4A Automotive Security`):
+1. **R7 (`FuelEstimator.kt`):** estimación de combustible sin mirar el tablero leyendo `PID 0x2F` si la ECU lo soporta, o integrando `PID 0x5E` (Fuel Rate) / respaldo `PID 0x10` (MAF) desde evento manual **«Estanque lleno»**; etiquetado obligatorio **`ESTIMACIÓN/INFERENCIA`** (nunca medición directa) + prueba TDD `r23`.
+2. **R8 (`DiagnosticConnectionService` + `BackgroundCaptureNotification.kt`):** `ForegroundService` (`connectedDevice`) con notificación persistente actualizada en vivo (enlace, modo activo, rondas/muestras, reconexión y combustible estimado) y `PendingIntent` a la app, manteniendo la captura OBD-II y el registro de evidencia con pantalla apagada o usando otra app + prueba TDD `r24`.
+3. **R9 (`JacCarAppService` + `CarDashboardModel`):** soporte Android Auto (`androidx.car.app:app:1.7.0`, categoría `IOT`, `automotive_app_desc.xml`) en solo lectura con estado de enlace, DTCs activos, lecturas clave y combustible estimado R7 + prueba TDD `r25`.
+4. **R10 (`GuidedTests.FAST_FAULT`):** perfil ligero **«Captura rápida de falla»** limitado al Set Crítico de 8 PIDs (`0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) para evitar saturar adaptadores ELM327 y prevenir pérdidas de enlace + detección de caída de presión de riel `0x23` + prueba TDD `r26`.
+5. **R11 (`WorkshopReport.kt` / `WorkshopPdf.kt`):** bloque **Diagnóstico diferencial** en *Diagnóstico principal* separando hechos observables de hipótesis (corte de torque *brake override* `P0579`/`P2299` vs. apagado total por presión de riel `0x23` o tensión `0x42`) y recomendación automática del Set Crítico de 8 PIDs ante pérdida de enlace o datos no capturados en Mode 02 + prueba TDD `r27`.
+
+Verificado en verde (`:app:testDebugUnitTest`, `:app:lintDebug`, `:app:assembleDebug`) e **instalado en Xiaomi `2512BPNDAG` (`a525a763`, `versionCode=36`, `versionName=1.19.0`)**. **PENDING_VALIDATION en prueba real de vehículo para cerrar `#1 (SAFE-001)`.**
+
 ## v1.18.0 — Android Auto nativo (tablero horizontal 3×2) y guía de cambios 6M diésel JAC T8
 
 - **Tag:** `v1.18.0`

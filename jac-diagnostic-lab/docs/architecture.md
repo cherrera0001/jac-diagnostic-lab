@@ -32,11 +32,15 @@ AppShell Compose (Estado / En vivo / Pruebas / Datos / Señales / Informe)
                 Export JSON CSV TXT PDF GeoJSON GPX
 ```
 
-## Capas nuevas en 1.12.0–1.18.0
+## Capas nuevas en 1.12.0–1.19.0
 
 | Pieza | Rol |
 | --- | --- |
-| `car/JacCarAppService.kt` & `CarTileRenderer.kt` & `CarDashboardModel.kt` | Integración oficial de **Android Auto** (categoría `IOT`, `minCarAppApiLevel = 1`): tablero horizontal 3×2 pausado (1,2 s), vista de detalle (`PaneTemplate`) y vista de estado/DTC (`ListTemplate`) con botón «Marcar evento». Comparte `LabController` sin duplicar sockets BT ni tomar foco de audio (Spotify y Waze siguen intactos). |
+| `analysis/FuelEstimator.kt` | **SPEC-034 R7:** estimación de combustible sin mirar el tablero (`PID 0x2F` o respaldo `0x5E` / MAF `0x10` desde evento manual «Estanque lleno»), con invariante estricto `ESTIMACIÓN/INFERENCIA` (nunca medición directa) e integración con `DiagnosticInference` (R1) y Android Auto. |
+| `bt/BackgroundCaptureNotification.kt` & `DiagnosticConnectionService` | **SPEC-034 R8:** `ForegroundService` (`connectedDevice`) con notificación persistente actualizada dinámicamente (enlace, modo activo, rondas/muestras, reconexión y combustible estimado) y `PendingIntent` a la app para captura continua OBD-II con pantalla apagada o en segundo plano. |
+| `dynamic/GuidedTests.kt` (`FAST_FAULT`) | **SPEC-034 R10:** perfil ligero «Captura rápida de falla» restringido al Set Crítico de 8 PIDs (`0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) para evitar saturar el ELM327, con detección de caída de presión de riel `0x23` y tensión `0x42`. |
+| `report/WorkshopReport.kt` (`DifferentialDiagnosis`) | **SPEC-034 R11:** Diagnóstico diferencial en *Diagnóstico principal* separando hechos observables de hipótesis (corte de torque *brake override* vs. apagado total por riel `0x23`/tensión `0x42`) y recomendación automática del Set Crítico de 8 PIDs ante pérdida de enlace o Mode 02 incompleto. |
+| `car/JacCarAppService.kt` & `CarTileRenderer.kt` & `CarDashboardModel.kt` | **SPEC-034 R9:** integración oficial de **Android Auto** (categoría `IOT`, `minCarAppApiLevel = 1`): tablero horizontal 3×2 pausado (1,2 s), vista de detalle (`PaneTemplate`, incl. combustible estimado R7) y vista de estado/DTC (`ListTemplate`) con botón «Marcar evento». Comparte `LabController` sin duplicar sockets BT ni tomar foco de audio. |
 | `analysis/DrivingGuidanceEngine.kt` | Inferencia de marcha 6M diésel calibrada (JAC T8 2.0T) con filtro de embrague/neutro rodando y recomendación explícita de marcha destino (`SUBIR A 3ª`, `BAJAR A 4ª`). |
 | `signals/RadioMath.kt` | Conversión de canales Wi-Fi, LTE EARFCN y 5G NR-ARFCN (3GPP TS 38.104) a MHz, capacidad de Shannon–Hartley y FFT radix-2 con ventana de Hann. |
 | `signals/SignalsCore.kt` & `RadioScanner.kt` | Escáner pasivo de Wi-Fi, celdas 4G/5G/3G/2G, satélites GNSS y magnetómetro FFT + motor de auditoría defensiva (`VehicleSecurityAudit`: OBD expuesto, alerta `0x41`, downgrade 2G, Evil Twin Wi-Fi, anomalía magnética). |
