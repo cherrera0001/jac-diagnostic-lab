@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.17.0 — Hub «Señales»: espectro RF nativo (Wi-Fi, 4G/5G, GNSS, FFT magnético) y Escudo defensivo
+
+- **Tag:** `v1.17.0`
+- **versionCode:** 34
+- **Fecha:** 2026-11-22
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0 (`jac-diagnostic-lab-1.17.0-debug.apk` + `.sha256`)
+- **SHA-256:** `d192f60359a9f14c832bc0efeb31a868e6c2d784dabc184ab0c9cf8f43395f82`
+
+Pestaña **Señales** con 3 sub-vistas (`BLE / Tags`, `Redes y RF`, `Seguridad`): espectro Wi-Fi 2,4/5/6 GHz con gráfico de canales y detección de Evil Twin; celdas 5G NR / 4G LTE / 3G / 2G con conversión 3GPP `NR-ARFCN` y `EARFCN` a MHz y capacidad Shannon–Hartley; constelaciones GNSS y frecuencias portadoras; FFT radix-2 en vivo del magnetómetro (detección de oscilaciones e imanes > 120 µT); y auditoría defensiva del vehículo exportable a JSON (OBD expuesto, alerta `0x41`, downgrade 2G, Evil Twin, GNSS, magnetómetro) + guía física/SDR. Verificado por CI (`SignalsTest`) e instalado en Xiaomi `2512BPNDAG`. **PENDING_VALIDATION en campo.**
+
 ## v1.16.0 — Tags: categorías BLE reales e identificación activa GATT/DULT
 
 - **Tag:** `v1.16.0`

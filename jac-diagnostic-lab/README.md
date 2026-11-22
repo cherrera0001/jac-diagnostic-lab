@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.16.0** (`versionCode` 33), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática y pestaña Tags con categorías BLE reales, consulta GATT/IETF DULT bajo demanda y guía direccional. APK: [release v1.16.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0).
+**Versión actual: 1.17.0** (`versionCode` 34), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática y pestaña **Señales** (BLE/Tags con categorías reales y GATT/DULT, espectro RF nativo Wi-Fi/4G-5G/GNSS/FFT magnético y Escudo defensivo del vehículo). APK: [release v1.17.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -18,9 +18,9 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0 |
-| Archivo | `jac-diagnostic-lab-1.16.0-debug.apk` (con su `.sha256`) |
-| SHA-256 (v1.16.0) | `bf55b51290cf22d4d8ab9a7e478d19976a38808a6b3bb925123972cf894e3761` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0 |
+| Archivo | `jac-diagnostic-lab-1.17.0-debug.apk` (con su `.sha256`) |
+| SHA-256 (v1.17.0) | `d192f60359a9f14c832bc0efeb31a868e6c2d784dabc184ab0c9cf8f43395f82` |
 | Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
@@ -32,17 +32,17 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.16.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.17.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.16.0-debug.apk
+adb install -r jac-diagnostic-lab-1.17.0-debug.apk
 ```
 
-## Pantallas (v1.16.0)
+## Pantallas (v1.17.0)
 
-**Nuevo en 1.16.0:** diferenciación por categoría real en **Tags** (`Rastreador`, `Audio`, `Reloj / Pulsera`, `Teléfono / PC`, `TV / Hogar`, `Periférico`, `Auto / OBD`, `Baliza`, `BLE`) usando `GAP Appearance`, `BluetoothClass`, `Xiaomi MiBeacon 0xFE95`, bloques múltiples TLV Apple y modo FMDN `0x40`/`0x41`; botón opcional **«Identificar»** (GATT + estándar IETF DULT) y **«Datos BLE»** en la vista Buscar.
+**Nuevo en 1.17.0:** hub **Señales** con 3 sub-vistas (`BLE / Tags`, `Redes y RF`, `Seguridad`): espectro de canales Wi-Fi (2,4/5/6 GHz) con detección de Evil Twin, torres 4G/5G con frecuencias reales en MHz (`EARFCN`/`NR-ARFCN`) y capacidad Shannon–Hartley, satélites GNSS (L1/L5), **FFT magnético en vivo** y auditoría defensiva automática exportable a JSON + guía SDR.
 
 **Anterior reciente (1.11.2–1.14.0):** informe PDF unificado con sello vectorial C4A (`c4a.cl`), bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`), «Borrar y limpiar» por compuerta Mode 04 (`ClearDtcGate`) y forense de paros en ruta (`EventForensics`).
 
@@ -52,7 +52,7 @@ adb install -r jac-diagnostic-lab-1.16.0-debug.apk
 | **En vivo** | Medidores grandes con mini-gráfico: RPM, velocidad, refrigerante, tensión, carga, pedal, turbo, riel, torque, aire. |
 | **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco con forense de paros. Resultado con puntos de color y CSV. |
 | **Datos** | Todas las señales leídas, agrupadas y con buscador. Mode 06, datos de la ECU, horas de motor, km desde el borrado. |
-| **Tags** | Escaneo BLE pasivo de rastreadores y dispositivos cercanos con nombres reales, apodos locales, vista «Buscar» con flecha orientativa (GPS + RSSI silencioso o giro con brújula) y exportación GeoJSON/GPX. |
+| **Señales** | Hub de 3 vistas: **BLE / Tags** (categorías, GATT/DULT, apodos, flecha), **Redes y RF** (Wi-Fi MHz/canales, 4G/5G MHz/SINR, GNSS, FFT magnético) y **Seguridad** (auditoría defensiva del vehículo + reporte JSON). |
 | **Informe** | PDF con sello C4A / JSON / TXT / CSV / `.jacenc` cifrado, «Borrar y limpiar» y herramientas avanzadas. |
 
 ## Qué lee
