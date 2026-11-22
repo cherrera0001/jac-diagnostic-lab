@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.18.0 — 2026-11-22 (JAC Diagnostic Lab) — Soporte nativo de Android Auto (tablero horizontal y pausado para la JAC T8)
+
+- **Integración oficial de Android Auto (`androidx.car.app:app:1.7.0`, `car/JacCarAppService.kt`):**
+  - Declaración `CarAppService` (categoría `IOT`, `minCarAppApiLevel = 1`) y `res/xml/automotive_app_desc.xml` para proyectar directo en la pantalla OEM de la JAC T8 (`HS209A` / Android Auto) sin modificar el firmware de la radio.
+  - **Tablero principal horizontal (grilla 3×2, `GridTemplate`)** con mosaicos circulares minimalistas (`car/CarTileRenderer.kt`, 160×160 px cacheados) y refresco pausado cada 1,2 s: **Motor (RPM/velocidad/carga)**, **Refrigerante real (°C)**, **Batería ECU (PID 0x42)**, **Turbo / Riel**, **DPF / Regeneración activa («No apagar»)** y **Estado / DTC**.
+  - **Vista «Motor y DPF · Detalle» (`PaneTemplate`, 4 filas)** y **«Estado y Códigos» (`ListTemplate`, hasta 6 filas)** con botón rápido **«Marcar evento»** y controles directos **«Conectar» / «En vivo» / «Pausar»** compartiendo el mismo `LabController` (sin duplicar conexiones Bluetooth).
+- **Pruebas:** `CarDashboardModelTest` (3 casos: estado desconectado honesto + límites de plantillas, diésel normal en vivo, alertas de sobrecalentamiento ≥ 105 °C / batería baja < 11,8 V / regeneración DPF activa / DTCs almacenados). **PENDING_VALIDATION conectado por USB en la JAC T8.**
+
 ## v1.17.0 — 2026-11-22 (JAC Diagnostic Lab) — Pestaña «Señales»: espectro RF nativo (Wi-Fi, 4G/5G, GNSS, FFT magnético) y Escudo defensivo del vehículo
 
 - **Hub «Señales» (`ui/SignalsTab.kt`, reemplaza la etiqueta «Tags» con 3 sub-vistas limpias):**
