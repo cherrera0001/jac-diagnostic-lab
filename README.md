@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.16.0** (`versionCode` 33), validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.16.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0). Incluye diagnóstico OBD completo, informe PDF con sello C4A y bóveda privada, forense de paros en ruta, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Tags** (categorías BLE reales, identificación activa opcional GATT/IETF DULT, apodos y guía direccional por calibración espacial silenciosa). Issue abierto: **SAFE-001**.
+**App actual: JAC Diagnostic Lab 1.17.0** (`versionCode` 34), validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.17.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0). Incluye diagnóstico OBD completo, informe PDF con sello C4A y bóveda privada, forense de paros en ruta, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Señales** (BLE/Tags con categorías reales y GATT/DULT, espectro RF nativo Wi-Fi/4G-5G/GNSS/FFT magnético y Escudo defensivo del vehículo). Issue abierto: **SAFE-001**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
@@ -46,7 +46,7 @@ Condición: camioneta **estacionada**, freno de mano puesto, motor en marcha o c
 | En vivo | Medidores grandes con mini-gráfico | No inventa un PID de freno |
 | Pruebas | Ralentí, calentamiento, aceleración libre, carga eléctrica, ruta/banco | No mueve nada: solo registra |
 | Datos | Todas las señales, Mode 06, datos de la ECU | No muestra valores truncados como datos |
-| Tags | Escaneo BLE pasivo con nombres reales, apodos, guía direccional y exportación GeoJSON/GPX | No consulta nubes de Apple/Google ni inventa flecha sin respaldo |
+| Señales | BLE/Tags con categorías, GATT/DULT y flecha; espectro Wi-Fi/4G-5G/GNSS/FFT magnético; Escudo defensivo del vehículo | No sintoniza 315/433 MHz sin RTL-SDR ni consulta nubes de Apple/Google |
 | Informe | PDF con sello C4A / JSON / TXT / CSV / `.jacenc` cifrado y herramientas avanzadas | No sube nada a internet |
 
 El informe de una unidad concreta queda fuera de este repositorio.
@@ -97,7 +97,7 @@ gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 Instalar la APK debug con el teléfono desbloqueado:
 
 ```text
-adb install -r dist\jac-diagnostic-lab-1.16.0-debug.apk
+adb install -r dist\jac-diagnostic-lab-1.17.0-debug.apk
 ```
 
 ## Cómo se construye
@@ -106,7 +106,7 @@ El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numer
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.16.0 (`versionCode` 33). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.17.0 (`versionCode` 34). Los resultados de una unidad concreta no forman parte de este archivo.
 
 ## Licencia y uso
 

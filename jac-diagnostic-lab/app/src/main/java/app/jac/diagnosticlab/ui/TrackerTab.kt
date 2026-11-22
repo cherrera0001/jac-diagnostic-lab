@@ -141,9 +141,9 @@ private fun loadNicknames(prefs: android.content.SharedPreferences): Map<String,
 
 /** Pestaña «Tags»: escáner BLE con diferenciación por categoría, inspección GATT/DULT bajo demanda y vista Buscar minimalista. */
 @Composable
-internal fun TrackerTab() {
+internal fun TrackerTab(externalScanner: TrackerScanner? = null) {
     val context = LocalContext.current
-    val scanner = remember { TrackerScanner(context.applicationContext) }
+    val scanner = remember(externalScanner) { externalScanner ?: TrackerScanner(context.applicationContext) }
     val compass = remember { HeadingSensor(context.applicationContext) }
     val list by scanner.sightings.collectAsState()
     val running by scanner.running.collectAsState()
@@ -153,7 +153,12 @@ internal fun TrackerTab() {
     var filter by remember { mutableStateOf(DeviceFilter.ALL) }
     val prefs = remember { context.getSharedPreferences("jaclab_tags", Context.MODE_PRIVATE) }
     var nicknames by remember { mutableStateOf(loadNicknames(prefs)) }
-    DisposableEffect(Unit) { onDispose { scanner.stop(); compass.stop() } }
+    DisposableEffect(externalScanner) {
+        onDispose {
+            if (externalScanner == null) scanner.stop()
+            compass.stop()
+        }
+    }
 
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
         if (r.values.all { it }) scanner.start() else msg = "Hacen falta «dispositivos cercanos» y ubicación para escanear."

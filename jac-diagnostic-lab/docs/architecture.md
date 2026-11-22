@@ -3,11 +3,13 @@
 La aplicación es un módulo Android. El protocolo OBD no importa clases de Android, así las pruebas JUnit corren en la JVM sin el teléfono.
 
 ```text
-AppShell Compose (Estado / En vivo / Pruebas / Datos / Tags / Informe)
+AppShell Compose (Estado / En vivo / Pruebas / Datos / Señales / Informe)
     ├ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
-    ├ TrackerTab (pestaña Tags, pasiva por defecto + consulta GATT/DULT bajo demanda)
+    ├ SignalsHubTab (pestaña Señales: BLE/Tags · Redes y RF · Seguridad defensiva)
     │   ├ TrackerScanner / HeadingSensor / GattInspector (GAP + DIS + Battery + IETF DULT)
-    │   └ tracker/ (puro JVM): TrackerCore, BleAdParser, DeviceNaming, PositionEstimator, DirectionEstimator
+    │   ├ RadioScanner (Wi-Fi 2.4/5/6 GHz, Celular 4G/5G, GNSS L1/L5, Magnetómetro FFT)
+    │   ├ tracker/ (puro JVM): TrackerCore, BleAdParser, DeviceNaming, PositionEstimator, DirectionEstimator
+    │   └ signals/ (puro JVM): RadioMath (EARFCN/NR-ARFCN/Shannon/FFT), SignalsCore, VehicleSecurityAudit
     └ DiagnosticViewModel
         LabController          sesión, permisos, evidencia, snapshots, bóveda privada
             BluetoothRepository
@@ -26,10 +28,12 @@ AppShell Compose (Estado / En vivo / Pruebas / Datos / Tags / Informe)
                 Export JSON CSV TXT PDF GeoJSON GPX
 ```
 
-## Capas nuevas en 1.12.0–1.16.0
+## Capas nuevas en 1.12.0–1.17.0
 
 | Pieza | Rol |
 | --- | --- |
+| `signals/RadioMath.kt` | Conversión de canales Wi-Fi, LTE EARFCN y 5G NR-ARFCN (3GPP TS 38.104) a MHz, capacidad de Shannon–Hartley y FFT radix-2 con ventana de Hann. |
+| `signals/SignalsCore.kt` & `RadioScanner.kt` | Escáner pasivo de Wi-Fi, celdas 4G/5G/3G/2G, satélites GNSS y magnetómetro FFT + motor de auditoría defensiva (`VehicleSecurityAudit`: OBD expuesto, alerta `0x41`, downgrade 2G, Evil Twin Wi-Fi, anomalía magnética). |
 | `tracker/BleAdParser.kt` | Parser puro JVM de `GAP Appearance` (`AD 0x19`), bloques múltiples TLV Apple Continuity (`0x004C`) y respuestas IETF DULT (`0x0804`/`0x0805`/`0x0806`). |
 | `tracker/TrackerCore.kt` | Clasificador de firmas BLE públicas + categorización real (`DeviceCategory`: Rastreador, Audio, Reloj/Pulsera, Teléfono/PC, TV/Hogar, Periférico, Auto/OBD, Baliza, BLE), libro sincronizado (`SightingBook`), fusión ADV + SCAN_RSP y exportación GeoJSON/GPX + `geo:`. |
 | `tracker/GattInspector.kt` | Consulta activa opcional (solo al pulsar «Identificar»): lee GAP (`0x2A00`/`0x2A01`), DIS (`0x180A`), Batería (`0x180F`) y el servicio estándar IETF DULT (`15190001-…`) para fabricante, modelo y categoría. |
