@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.14.0 — 2026-11-21 (JAC Diagnostic Lab) — Tags: flecha de dirección y diseño minimalista
+
+- **Flecha orientativa en «Buscar» (`tracker/DirectionEstimator.kt`):** Bluetooth normal no entrega dirección, así que se estima: el usuario gira despacio con el teléfono plano delante, la app cruza la brújula (`TYPE_ROTATION_VECTOR`) con el RSSI de cada sector de 22,5° y la flecha apunta hacia el sector más fuerte (media circular ponderada; el cuerpo apantalla la señal por detrás). **Si el contraste entre el mejor sector y el opuesto es < 5 dB no se dibuja flecha** («Sin dirección clara: avance y gire otra vez») en vez de inventarla. Las muestras caducan a los 25 s. Cerca de la etiqueta (≥ −55 dBm) muestra «Está aquí».
+- **Diseño minimalista:** lista de una línea por dispositivo (punto de color + tipo + banda), vista Buscar a pantalla completa con anillo, flecha, una frase de instrucción y dBm en pequeño; arco de progreso mientras se gira; descripción accesible para TalkBack.
+- Pruebas: `DirectionEstimatorTest` (7: rumbo hacia 0/90/200/315°, cruce del norte, giro insuficiente, señal plana sin flecha, caducidad, reinicio, ángulo relativo con signo). **PENDING_VALIDATION con un tag físico:** la precisión real depende del teléfono, del cuerpo y del entorno.
+
 ## v1.13.0 — 2026-11-21 (JAC Diagnostic Lab) — pestaña «Tags»: rastreadores BLE cercanos
 
 - **Nueva pestaña «Tags»:** escaneo BLE pasivo (no se conecta), clasificación por firma pública (Apple Find My tipo 0x12; Google Find Hub trama 0xFEAA 0x40/0x41; Samsung SmartTag, Tile, Chipolo; fabricante Xiaomi 0x038F), modo **Buscar** caliente/frío con RSSI suavizado, tendencia y banda de proximidad, y **mapa de avistamientos**: cada avistamiento con la posición del teléfono; el punto es donde la señal fue más fuerte. Exporta GeoJSON y GPX (Descargas/JAC-lectura + copia privada) y abre el punto en cualquier app de mapas (`geo:`; sin API ni clave).
