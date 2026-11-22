@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.16.0 — Tags: categorías BLE reales e identificación activa GATT/DULT
+
+- **Tag:** `v1.16.0`
+- **versionCode:** 33
+- **Fecha:** 2026-11-22
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0 (`jac-diagnostic-lab-1.16.0-debug.apk` + `.sha256`)
+- **SHA-256:** `bf55b51290cf22d4d8ab9a7e478d19976a38808a6b3bb925123972cf894e3761`
+
+Categorías visuales y filtros por tipo de dispositivo (`Rastreador`, `Audio`, `Reloj / Pulsera`, `Teléfono / PC`, `TV / Hogar`, `Periférico`, `Auto / OBD`, `Baliza`, `BLE`) extrayendo `GAP Appearance` (`AD 0x19`), `BluetoothClass`, `Xiaomi MiBeacon 0xFE95`, `Samsung SmartTag 0xFD59/0xFD5A`, `Microsoft Swift Pair`, `Harman/JBL`, `Huami/Amazfit`, `Logitech`, Apple Continuity multi-TLV y modo Google Find Hub FMDN (`0x40`/`0x41`). Consulta activa bajo demanda **«Identificar»** (`GattInspector`: GAP + DIS + Batería + IETF DULT `15190001-…`) y diálogo **«Datos BLE»**. Verificado por CI e instalado en Xiaomi `2512BPNDAG`. **PENDING_VALIDATION con tag físico.**
+
 ## v1.15.0 — Tags: nombres BLE reales, calibración espacial silenciosa y UI minimalista
 
 - **Tag:** `v1.15.0`

@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.15.0** (`versionCode` 32), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática y pestaña Tags con nombres BLE reales y guía direccional. APK: [release v1.15.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.15.0).
+**Versión actual: 1.16.0** (`versionCode` 33), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática y pestaña Tags con categorías BLE reales, consulta GATT/IETF DULT bajo demanda y guía direccional. APK: [release v1.16.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -18,9 +18,9 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.15.0 |
-| Archivo | `jac-diagnostic-lab-1.15.0-debug.apk` (con su `.sha256`) |
-| SHA-256 (v1.15.0) | `1cf4d6e5db95595f6ff2f03923b9ca2698eecc635955b7967323db56fa4e71bb` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.16.0 |
+| Archivo | `jac-diagnostic-lab-1.16.0-debug.apk` (con su `.sha256`) |
+| SHA-256 (v1.16.0) | `bf55b51290cf22d4d8ab9a7e478d19976a38808a6b3bb925123972cf894e3761` |
 | Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
@@ -32,17 +32,17 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.15.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.16.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.15.0-debug.apk
+adb install -r jac-diagnostic-lab-1.16.0-debug.apk
 ```
 
-## Pantallas (v1.15.0)
+## Pantallas (v1.16.0)
 
-**Nuevo en 1.15.0:** pestaña **Tags** con nombres BLE reales (`scanRecord`, alias de Android y `device.name`), inferencia de fabricante/subtipo/servicios para dispositivos sin nombre anunciado, apodos locales, filtros rápidos (`Todos`, `Rastreadores`, `Con nombre`), calibración espacial GPS + RSSI en segundo plano sin obligar a abrir un mapa y vista «Buscar» minimalista con dial de precisión y arco de incertidumbre.
+**Nuevo en 1.16.0:** diferenciación por categoría real en **Tags** (`Rastreador`, `Audio`, `Reloj / Pulsera`, `Teléfono / PC`, `TV / Hogar`, `Periférico`, `Auto / OBD`, `Baliza`, `BLE`) usando `GAP Appearance`, `BluetoothClass`, `Xiaomi MiBeacon 0xFE95`, bloques múltiples TLV Apple y modo FMDN `0x40`/`0x41`; botón opcional **«Identificar»** (GATT + estándar IETF DULT) y **«Datos BLE»** en la vista Buscar.
 
 **Anterior reciente (1.11.2–1.14.0):** informe PDF unificado con sello vectorial C4A (`c4a.cl`), bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`), «Borrar y limpiar» por compuerta Mode 04 (`ClearDtcGate`) y forense de paros en ruta (`EventForensics`).
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.16.0 — 2026-11-22 (JAC Diagnostic Lab) — Tags: diferenciación por categoría BLE e identificación activa GATT/DULT
+
+- **Categorización real de dispositivos BLE cercanos (`tracker/TrackerCore.kt`, `tracker/BleAdParser.kt`, `tracker/DeviceNaming.kt`):**
+  - Nueva categoría visual (`DeviceCategory`) con insignia por fila y filtros rápidos (`Todos`, `Rastreadores`, `Audio`, `Relojes`, `Teléf./PC`, `Con nombre`): distingue `Rastreador`, `Audio`, `Reloj / Pulsera`, `Teléfono / PC`, `TV / Hogar`, `Periférico`, `Auto / OBD`, `Baliza` y `BLE`.
+  - Extrae campos BLE estándar que antes se descartaban: **GAP Appearance** (`AD Type 0x19` en `ScanRecord.bytes`), **`BluetoothClass`** del dispositivo, **Xiaomi MiBeacon (`0xFE95`)**, **Samsung SmartTag (`0xFD59`/`0xFD5A`)**, **Microsoft Swift Pair (`0x0006`)**, **Harman/JBL (`0x0057`)**, **Huami/Amazfit (`0x0157`)**, **Logitech (`0x01DA`)**, modo FMDN (`0x40` normal vs `0x41` alerta anti-rastreo) y recorrido completo de bloques **TLV Apple Continuity** (detecta Find My `0x12` aunque vaya tras `0x10`).
+- **Identificación activa opcional bajo demanda (`tracker/GattInspector.kt`):**
+  - Botón **«Identificar»** en la vista «Buscar» (el escaneo sigue siendo 100 % pasivo salvo que el usuario lo pulse): consulta solo lectura sobre **GAP** (`0x2A00` nombre, `0x2A01` apariencia), **Device Information** (`0x2A29` fabricante, `0x2A24` modelo, `0x2A26` firmware), **Batería** (`0x2A19`) y el servicio estándar **IETF DULT** (`15190001-12F4-C226-88ED-2AC5579F2A85` / `8E0C0001-1D68-FB92-BF61-48377421680E`: `Get_Manufacturer_Name 0x0004`, `Get_Model_Name 0x0005`, `Get_Accessory_Category 0x0006`). Si el tag rechaza la conexión (normal junto a su dueño), lo informa honestamente.
+  - Botón **«Datos BLE»** en «Buscar» para inspeccionar IDs de fabricante, prefijo hexadecimal, servicios UUID, apariencia GAP y resultado GATT/DULT de cualquier dispositivo.
+- **Claridad honesta sobre nombres de tags:** el nombre personalizado («Llaves», «Mochila»…) es propio de la app Google Find Hub / Apple Find My y vive cifrado en la nube; nunca se transmite por Bluetooth.
+- **Pruebas:** `BleAdParserTest` (5 pruebas: `AD 0x19`, Apple multi-TLV, respuestas DULT `0x0804`, diferenciación de 9 categorías incluido `0xFE95` MiBeacon y FMDN `0x41`, y `attachGatt` actualizando identidad). **PENDING_VALIDATION con tag físico.**
+
 ## v1.15.0 — 2026-11-22 (JAC Diagnostic Lab) — Tags: nombres BLE reales, calibración espacial silenciosa y diseño minimalista
 
 - **Nombres reales e identidad inferida (`tracker/DeviceNaming.kt`, `tracker/TrackerCore.kt`, `tracker/TrackerScanner.kt`):**
