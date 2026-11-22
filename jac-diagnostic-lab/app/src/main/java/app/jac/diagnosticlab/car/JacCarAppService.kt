@@ -20,8 +20,8 @@ import androidx.car.app.model.Template
 import androidx.car.app.validation.HostValidator
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import app.jac.diagnosticlab.JacApplication
 import app.jac.diagnosticlab.LabController
-import app.jac.diagnosticlab.ui.JacApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job

@@ -1,7 +1,9 @@
 package app.jac.diagnosticlab.car
 
 import app.jac.diagnosticlab.LabState
+import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
 import app.jac.diagnosticlab.analysis.HealthStatus
+import app.jac.diagnosticlab.analysis.ShiftCue
 import app.jac.diagnosticlab.bt.LinkPhase
 import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.obd.DtcReadState
@@ -78,22 +80,46 @@ object CarDashboardModel {
         val oil = v(GuidedTests.OIL)
         val fuel = v(GuidedTests.FUEL)
 
-        // 1. Motor (RPM + velocidad/carga)
+        // 1. Motor + guía de cambio calibrada JAC T8 (RPM + marcha inferida + sugerencia concreta «↑ 3ª» / «↓ 4ª»)
+        val guidance = DrivingGuidanceEngine.evaluate(rpm, speed, load, ect)
         val rpmTile = if (rpm != null) {
             val rpmInt = rpm.roundToInt()
-            val sub = buildList {
-                speed?.let { add("${it.roundToInt()} km/h") }
-                load?.let { add("Carga ${it.roundToInt()}%") }
-            }.joinToString(" · ").ifBlank { if (rpmInt < 400) "Motor detenido" else "En marcha" }
-            val tone = when {
-                rpmInt >= 4200 -> CarTone.ALERT
-                rpmInt >= 3500 -> CarTone.WARN
-                rpmInt >= 500 -> CarTone.OK
-                else -> CarTone.MUTED
+            val (unit, sub, tone) = when (guidance.cue) {
+                ShiftCue.SHIFT_UP -> {
+                    val target = guidance.recommendedGear
+                    Triple(
+                        if (target != null) "↑ ${target}ª" else "SUBIR",
+                        if (target != null) "↑ Subir a ${target}ª · ${speed?.roundToInt() ?: 0} km/h" else "↑ Subir marcha",
+                        CarTone.ACCENT,
+                    )
+                }
+                ShiftCue.SHIFT_DOWN -> {
+                    val target = guidance.recommendedGear
+                    Triple(
+                        if (target != null) "↓ ${target}ª" else "BAJAR",
+                        if (target != null) "↓ Bajar a ${target}ª · Carga ${load?.roundToInt() ?: 0}%" else "↓ Bajar marcha",
+                        if (guidance.isLugging) CarTone.ALERT else CarTone.WARN,
+                    )
+                }
+                else -> {
+                    val gearPart = guidance.gearInference.gear?.let { "${it}ª" }
+                    val subTxt = buildList {
+                        gearPart?.let { add(it) }
+                        speed?.let { add("${it.roundToInt()} km/h") }
+                        load?.let { add("Carga ${it.roundToInt()}%") }
+                    }.joinToString(" · ").ifBlank { if (rpmInt < 400) "Motor detenido" else "En marcha" }
+                    val t = when {
+                        rpmInt >= 4000 -> CarTone.ALERT
+                        rpmInt >= 3200 -> CarTone.WARN
+                        rpmInt >= 500 -> CarTone.OK
+                        else -> CarTone.MUTED
+                    }
+                    Triple(gearPart ?: "RPM", subTxt, t)
+                }
             }
-            CarTile("RPM", "Motor", "$rpmInt", "RPM", sub, tone, (rpm / 4500.0).toFloat().coerceIn(0f, 1f), CarTileTarget.DETAIL)
+            CarTile("RPM", "Motor / Cambio", "$rpmInt", unit, sub, tone, (rpm / 4500.0).toFloat().coerceIn(0f, 1f), CarTileTarget.DETAIL)
         } else {
-            CarTile("RPM", "Motor", "—", "RPM", if (connected) "Sin lectura" else "Desconectado", CarTone.MUTED, 0f, CarTileTarget.DETAIL)
+            CarTile("RPM", "Motor / Cambio", "—", "RPM", if (connected) "Sin lectura" else "Desconectado", CarTone.MUTED, 0f, CarTileTarget.DETAIL)
         }
 
         // 2. Refrigerante real (las agujas del tablero suavizan entre 75 y 105 °C)

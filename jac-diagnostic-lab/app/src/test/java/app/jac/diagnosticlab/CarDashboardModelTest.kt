@@ -100,4 +100,29 @@ class CarDashboardModelTest {
         assertTrue(snap.tiles[5].subtitle.contains("P0579"))
         assertTrue(snap.statusRows.any { it.title.contains("P0579") })
     }
+
+    @Test fun dieselSixSpeedGearAndShiftRecommendationsWorkAccurately() {
+        // 6ª marcha real en carretera (100 km/h @ 2050 rpm -> ratio 20.5 -> 6ª, óptimo)
+        val sixth = app.jac.diagnosticlab.analysis.DrivingGuidanceEngine.evaluate(2050.0, 100.0, 50.0, 88.0)
+        assertEquals(6, sixth.gearInference.gear)
+        assertEquals(app.jac.diagnosticlab.analysis.ShiftCue.OPTIMAL, sixth.cue)
+
+        // Embrague pisado / punto muerto rodando (900 rpm @ 40 km/h -> no inventar 6ª)
+        val clutch = app.jac.diagnosticlab.analysis.DrivingGuidanceEngine.evaluate(900.0, 40.0, 15.0, 88.0)
+        assertEquals(null, clutch.gearInference.gear)
+        assertEquals("N", clutch.gearInference.label)
+
+        // Acelerando en 2ª a 2400 rpm (34 km/h, ratio 70.6, carga 72%) -> subir de 2ª a 3ª
+        val up = app.jac.diagnosticlab.analysis.DrivingGuidanceEngine.evaluate(2400.0, 34.0, 72.0, 88.0)
+        assertEquals(2, up.gearInference.gear)
+        assertEquals(app.jac.diagnosticlab.analysis.ShiftCue.SHIFT_UP, up.cue)
+        assertEquals(3, up.recommendedGear)
+        assertTrue(up.actionLabel.contains("SUBIR A 3ª"))
+
+        // Reflejado en el mosaico de Android Auto
+        val frame = TraceFrame(3_000L, mapOf(GuidedTests.RPM to 2400.0, GuidedTests.SPEED to 34.0, GuidedTests.LOAD to 72.0, GuidedTests.ECT to 88.0))
+        val carSnap = CarDashboardModel.from(LabState(ecuTalking = true, linkPhase = LinkPhase.ECU_RESPONDING, activeTest = "LIVE", testLive = frame))
+        assertEquals("↑ 3ª", carSnap.tiles[0].unitText)
+        assertTrue(carSnap.tiles[0].subtitle.contains("Subir a 3ª"))
+    }
 }
