@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.17.0** (`versionCode` 34), validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.17.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0). Incluye diagnóstico OBD completo, informe PDF con sello C4A y bóveda privada, forense de paros en ruta, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Señales** (BLE/Tags con categorías reales y GATT/DULT, espectro RF nativo Wi-Fi/4G-5G/GNSS/FFT magnético y Escudo defensivo del vehículo). Issue abierto: **SAFE-001**.
+**App actual: JAC Diagnostic Lab 1.18.0** (`versionCode` 35), validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.18.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0). Incluye diagnóstico OBD completo, **soporte nativo de Android Auto** (tablero horizontal 3×2 pausado para la pantalla de la JAC T8, compatible en paralelo con Spotify y Waze/Maps), guía de cambios calibrada 6M diésel (`2ª → 3ª` / `4ª → 3ª`), informe PDF con sello C4A y bóveda privada, forense de paros en ruta, «Borrar y limpiar» con compuerta Mode 04 y pestaña **Señales** (BLE/Tags + espectro RF nativo + Escudo defensivo). Issue abierto: **SAFE-001**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
@@ -40,14 +40,15 @@ Condición: camioneta **estacionada**, freno de mano puesto, motor en marcha o c
 4. **En vivo** para ver los valores moverse; **Pruebas** para una prueba guiada.
 5. **Informe** → PDF. Llevarlo al servicio de la marca y pedir que lean los mismos números sin borrarlos.
 
-| Pestaña | Para qué sirve | Qué no hace |
+| Pestaña / Modo | Para qué sirve (qué hace cada función) | Qué no hace |
 |---|---|---|
-| Estado | Veredicto, códigos con título corto, salud por sistema | No da porcentaje ni certifica la camioneta |
-| En vivo | Medidores grandes con mini-gráfico | No inventa un PID de freno |
-| Pruebas | Ralentí, calentamiento, aceleración libre, carga eléctrica, ruta/banco | No mueve nada: solo registra |
-| Datos | Todas las señales, Mode 06, datos de la ECU | No muestra valores truncados como datos |
-| Señales | BLE/Tags con categorías, GATT/DULT y flecha; espectro Wi-Fi/4G-5G/GNSS/FFT magnético; Escudo defensivo del vehículo | No sintoniza 315/433 MHz sin RTL-SDR ni consulta nubes de Apple/Google |
-| Informe | PDF con sello C4A / JSON / TXT / CSV / `.jacenc` cifrado y herramientas avanzadas | No sube nada a internet |
+| **Estado** | Veredicto en una línea, códigos DTC (guardados/pendientes) tocables con detalle técnico y mosaicos de salud por sistema (motor, combustible, turbo, DPF, batería) | No da porcentaje global ni certifica aptitud para circular |
+| **En vivo** | Medidores grandes en tiempo real (RPM, velocidad, refrigerante real, tensión ECU, carga, pedal, turbo, riel, par) + **Modo Tablero manos libres** con guía de cambio calibrada 6M diésel (`SUBIR A 3ª`, `BAJAR A 4ª`) y filtro de embrague | No inventa PIDs de freno ni mide sensores internos de la caja (marcha es inferencia RPM/velocidad) |
+| **Android Auto** | Tablero horizontal 3×2 pausado (refresco 1,2 s) directo en la pantalla OEM de la JAC T8: Motor/Cambio, Refrigerante real, Batería ECU, Turbo/Riel, DPF/Regeneración («No apagar») y Estado/DTC, más vistas de detalle y «Marcar evento». Convive sin cortes con Spotify y Waze/Maps (categoría `IOT`, sin foco de audio) | No modifica el firmware Linux de la radio ni borra códigos desde la pantalla del auto |
+| **Pruebas** | Pruebas guiadas estacionarias (ralentí, calentamiento, aceleración libre, carga eléctrica) y registro en ruta/banco con **forense de paros (`EventForensics`)** y CSV | No mueve actuadores ni acelera/frena el vehículo |
+| **Datos** | Catálogo completo de señales leídas con buscador, Mode 06 (autopruebas ECU), Mode 09 (CALID, CVN, VIN), horas de motor y km desde borrado | No muestra ceros o tramas truncadas como datos válidos |
+| **Señales** | Hub de 3 sub-vistas: **BLE / Tags** (categorías reales, identificación activa opcional GATT/IETF DULT, apodos, flecha orientativa por calibración espacial silenciosa o giro con brújula y exportación GeoJSON/GPX), **Redes y RF** (canales Wi-Fi 2,4/5/6 GHz y Evil Twin, celdas 4G/5G con MHz reales y SINR, satélites GNSS, FFT magnético en vivo) y **Seguridad** (Escudo defensivo automático + reporte JSON) | No sintoniza 315/433 MHz sin RTL-SDR ni accede a cuentas nube de Apple/Google |
+| **Informe** | Genera PDF profesional con sello vectorial `C4A · c4a.cl` y huella SHA-256, JSON/TXT/CSV, copia en bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`) y «Borrar y limpiar» (Mode `04` detrás de `ClearDtcGate`) | No sube ningún dato a internet (`allowBackup=false`) |
 
 El informe de una unidad concreta queda fuera de este repositorio.
 
@@ -97,7 +98,7 @@ gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 Instalar la APK debug con el teléfono desbloqueado:
 
 ```text
-adb install -r dist\jac-diagnostic-lab-1.17.0-debug.apk
+adb install -r dist\jac-diagnostic-lab-1.18.0-debug.apk
 ```
 
 ## Cómo se construye
@@ -106,7 +107,7 @@ El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numer
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.17.0 (`versionCode` 34). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.18.0 (`versionCode` 35). Los resultados de una unidad concreta no forman parte de este archivo.
 
 ## Licencia y uso
 

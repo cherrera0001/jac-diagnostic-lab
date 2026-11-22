@@ -566,10 +566,15 @@ private fun HandsFreeDashboard(
                     verticalArrangement = Arrangement.SpaceBetween,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(g.cue.label, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(g.actionLabel, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
                     Text(g.cue.arrow, color = c, fontSize = 86.sp, fontWeight = FontWeight.Black)
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("MARCHA EST. ${g.gearInference.label}", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        val gearDisplay = if (g.recommendedGear != null && g.gearInference.gear != null) {
+                            "${g.gearInference.label} → ${g.recommendedGear}ª"
+                        } else {
+                            "MARCHA EST. ${g.gearInference.label}"
+                        }
+                        Text(gearDisplay, color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                         Text("Inferencia RPM/Vel · no es sensor de caja", color = Color(0xFFB0BEC5), fontSize = 12.sp)
                     }
                 }
@@ -590,9 +595,14 @@ private fun HandsFreeDashboard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(g.cue.label, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(g.actionLabel, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
                 Text(g.cue.arrow, color = c, fontSize = 76.sp, fontWeight = FontWeight.Black)
-                Text("MARCHA EST. ${g.gearInference.label}", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                val gearDisplay = if (g.recommendedGear != null && g.gearInference.gear != null) {
+                    "${g.gearInference.label} → ${g.recommendedGear}ª"
+                } else {
+                    "MARCHA EST. ${g.gearInference.label}"
+                }
+                Text(gearDisplay, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Text("Inferencia RPM/Velocidad (no sensor directo)", color = Color(0xFFB0BEC5), fontSize = 12.sp)
             }
             Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {

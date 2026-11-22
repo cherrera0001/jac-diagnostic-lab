@@ -66,6 +66,10 @@ data class DrivingGuidanceSnapshot(
     val isColdEngine: Boolean,
     val isGuidanceInference: Boolean = true,
     val note: String,
+    /** Marcha destino sugerida cuando cue es SHIFT_UP o SHIFT_DOWN (p. ej. 3 para «2ª → 3ª»). */
+    val recommendedGear: Int? = null,
+    /** Etiqueta corta y clara para tablero/Android Auto (p. ej. «SUBIR A 3ª» o «BAJAR A 4ª»). */
+    val actionLabel: String = cue.label,
 ) {
     init {
         require(isGuidanceInference) {
@@ -114,13 +118,16 @@ object DrivingGuidanceEngine {
     const val COLD_ENGINE_THRESHOLD_C = 70.0
     const val LUGGING_MAX_RPM = 1500.0
     const val LUGGING_MIN_LOAD_PCT = 75.0
-    const val SHIFT_UP_MIN_RPM = 2600.0
+    const val LOW_RPM_DOWNSHIFT = 1220.0
+    const val SHIFT_UP_MIN_RPM = 2300.0
+    const val SHIFT_UP_HIGH_RPM = 2700.0
     const val SHIFT_UP_COLD_MIN_RPM = 2200.0
-    const val SHIFT_UP_MAX_LOAD_PCT = 65.0
+    const val SHIFT_UP_MAX_LOAD_PCT = 82.0
 
     /**
-     * Infiere la marcha aproximada de una caja mecánica de 5–6 velocidades a partir de
-     * la relación RPM / Velocidad (solo cuando velocidad > 5 km/h y RPM > 400).
+     * Infiere la marcha aproximada de una caja mecánica de 6 velocidades diésel (calibrada para pickup 2.0T como JAC T8)
+     * a partir de la relación RPM / Velocidad (solo cuando velocidad > 5 km/h y RPM > 400).
+     * Filtra desacople de embrague / punto muerto en movimiento (velocidad > 18 km/h con RPM < 1050).
      */
     fun inferGear(rpm: Double?, speedKmh: Double?): GearInference {
         if (rpm == null || speedKmh == null || speedKmh <= MIN_MOVING_SPEED_KMH || rpm <= 400.0) {
@@ -131,13 +138,23 @@ object DrivingGuidanceEngine {
                 isInference = true,
             )
         }
+        // Embrague pisado o punto muerto rodando: evita saltos falsos a 5ª/6ª durante el cambio.
+        if (speedKmh > 18.0 && rpm < 1050.0) {
+            return GearInference(
+                gear = null,
+                label = "N",
+                ratioRpmPerKmh = rpm / speedKmh,
+                isInference = true,
+                originNote = "Posible embrague pisado o punto muerto rodando (inferencia RPM/Velocidad).",
+            )
+        }
         val ratio = rpm / speedKmh
         val gear = when {
-            ratio >= 88.0 -> 1
-            ratio >= 54.0 -> 2
-            ratio >= 37.0 -> 3
-            ratio >= 26.5 -> 4
-            ratio >= 20.0 -> 5
+            ratio >= 98.0 -> 1
+            ratio >= 58.0 -> 2
+            ratio >= 38.0 -> 3
+            ratio >= 27.5 -> 4
+            ratio >= 22.0 -> 5
             else -> 6
         }
         return GearInference(
@@ -150,7 +167,7 @@ object DrivingGuidanceEngine {
 
     /**
      * Evalúa una muestra observada (RPM, Velocidad, Carga, Refrigerante) y produce
-     * la guía hands-free para conducción segura.
+     * la guía hands-free para conducción segura con marcha destino concreta («2ª → 3ª», «4ª → 3ª»).
      */
     fun evaluate(
         rpm: Double?,
@@ -159,6 +176,7 @@ object DrivingGuidanceEngine {
         coolantC: Double?,
     ): DrivingGuidanceSnapshot {
         val gearInf = inferGear(rpm, speedKmh)
+        val g = gearInf.gear
         val cold = coolantC != null && coolantC < COLD_ENGINE_THRESHOLD_C
 
         if (rpm == null || speedKmh == null) {
@@ -196,9 +214,27 @@ object DrivingGuidanceEngine {
             )
         }
 
+        // Embrague pisado o punto muerto rodando: no disparar recomendaciones falsas en medio del cambio.
+        if (g == null) {
+            return DrivingGuidanceSnapshot(
+                observedRpm = rpm,
+                observedSpeedKmh = speedKmh,
+                observedLoadPct = loadPct,
+                observedCoolantC = coolantC,
+                gearInference = gearInf,
+                cue = if (cold) ShiftCue.COLD_ENGINE else ShiftCue.OPTIMAL,
+                zone = if (cold) TripZone.COLD_ENGINE else TripZone.OPTIMAL,
+                isLugging = false,
+                isColdEngine = cold,
+                note = "Cambio en curso o rodando en punto muerto.",
+                actionLabel = if (cold) ShiftCue.COLD_ENGINE.label else "CAMBIO / NEUTRO",
+            )
+        }
+
         // 1. Prioridad máxima de salud mecánica: evitar lugging / sobreesfuerzo en diésel/turbo.
         val lugging = loadPct != null && rpm < LUGGING_MAX_RPM && loadPct >= LUGGING_MIN_LOAD_PCT
-        if (lugging) {
+        if (lugging && g > 1) {
+            val target = g - 1
             return DrivingGuidanceSnapshot(
                 observedRpm = rpm,
                 observedSpeedKmh = speedKmh,
@@ -209,17 +245,52 @@ object DrivingGuidanceEngine {
                 zone = TripZone.LUGGING,
                 isLugging = true,
                 isColdEngine = cold,
-                note = "Sobreesfuerzo detectado: %.0f rpm con %.0f %% de carga. Bajar una marcha para proteger motor/turbo."
+                note = "Sobreesfuerzo (%.0f rpm, %.0f %% carga): bajar de ${g}ª a ${target}ª para proteger motor y turbo."
                     .format(Locale.ROOT, rpm, loadPct),
+                recommendedGear = target,
+                actionLabel = "BAJAR A ${target}ª (${g}ª→${target}ª)",
             )
         }
 
-        // 2. Motor frío (< 70 °C): aviso suave para evitar exigir el motor antes de temperatura de trabajo.
+        // 1b. Régimen demasiado bajo en marchas altas (3ª–6ª) al desacelerar: sugerir bajar cambio.
+        if (g >= 3 && rpm < LOW_RPM_DOWNSHIFT && speedKmh >= 18.0) {
+            val target = g - 1
+            return DrivingGuidanceSnapshot(
+                observedRpm = rpm,
+                observedSpeedKmh = speedKmh,
+                observedLoadPct = loadPct,
+                observedCoolantC = coolantC,
+                gearInference = gearInf,
+                cue = ShiftCue.SHIFT_DOWN,
+                zone = TripZone.LUGGING,
+                isLugging = false,
+                isColdEngine = cold,
+                note = "RPM bajas (%.0f rpm) en ${g}ª: bajar a ${target}ª para mantener respuesta."
+                    .format(Locale.ROOT, rpm),
+                recommendedGear = target,
+                actionLabel = "BAJAR A ${target}ª (${g}ª→${target}ª)",
+            )
+        }
+
+        // 2. Motor frío (< 70 °C): si ya pasó 2200 rpm en 1ª–5ª, sí sugerir subir cambio; si va suave, aviso de motor frío.
         if (cold) {
-            val coldNote = if (rpm >= SHIFT_UP_COLD_MIN_RPM) {
-                "Motor frío (${coolantC!!.roundToInt()} °C) y %.0f rpm: subir marcha y conducir suave.".format(Locale.ROOT, rpm)
-            } else {
-                "Motor frío (${coolantC!!.roundToInt()} °C): evitar aceleraciones fuertes hasta ~70 °C."
+            if (rpm >= SHIFT_UP_COLD_MIN_RPM && g < 6) {
+                val target = g + 1
+                return DrivingGuidanceSnapshot(
+                    observedRpm = rpm,
+                    observedSpeedKmh = speedKmh,
+                    observedLoadPct = loadPct,
+                    observedCoolantC = coolantC,
+                    gearInference = gearInf,
+                    cue = ShiftCue.SHIFT_UP,
+                    zone = TripZone.SHIFT_UP,
+                    isLugging = false,
+                    isColdEngine = true,
+                    note = "Motor frío (${coolantC!!.roundToInt()} °C) a %.0f rpm: subir de ${g}ª a ${target}ª."
+                        .format(Locale.ROOT, rpm),
+                    recommendedGear = target,
+                    actionLabel = "SUBIR A ${target}ª (${g}ª→${target}ª)",
+                )
             }
             return DrivingGuidanceSnapshot(
                 observedRpm = rpm,
@@ -231,15 +302,18 @@ object DrivingGuidanceEngine {
                 zone = TripZone.COLD_ENGINE,
                 isLugging = false,
                 isColdEngine = true,
-                note = coldNote,
+                note = "Motor frío (${coolantC!!.roundToInt()} °C): conducir suave hasta ~70 °C.",
+                actionLabel = "MOTOR FRÍO (${g}ª)",
             )
         }
 
-        // 3. Subir marcha: RPM altas con carga baja/media (si no está ya en 6ª).
-        val shouldShiftUp = rpm >= SHIFT_UP_MIN_RPM &&
-            (loadPct == null || loadPct <= SHIFT_UP_MAX_LOAD_PCT) &&
-            (gearInf.gear == null || gearInf.gear < 6)
+        // 3. Subir marcha en diésel 2.0T: desde 2300 rpm con carga <= 82%, o >= 2700 rpm con cualquier carga (si < 6ª).
+        val shouldShiftUp = g < 6 && (
+            rpm >= SHIFT_UP_HIGH_RPM ||
+                (rpm >= SHIFT_UP_MIN_RPM && (loadPct == null || loadPct <= SHIFT_UP_MAX_LOAD_PCT))
+            )
         if (shouldShiftUp) {
+            val target = g + 1
             return DrivingGuidanceSnapshot(
                 observedRpm = rpm,
                 observedSpeedKmh = speedKmh,
@@ -250,8 +324,10 @@ object DrivingGuidanceEngine {
                 zone = TripZone.SHIFT_UP,
                 isLugging = false,
                 isColdEngine = false,
-                note = "RPM elevadas (%.0f rpm) con carga moderada: subir marcha reduce consumo y desgaste."
+                note = "Subir de ${g}ª a ${target}ª (%.0f rpm) para reducir consumo y cuidar el turbo."
                     .format(Locale.ROOT, rpm),
+                recommendedGear = target,
+                actionLabel = "SUBIR A ${target}ª (${g}ª→${target}ª)",
             )
         }
 
@@ -266,7 +342,8 @@ object DrivingGuidanceEngine {
             zone = TripZone.OPTIMAL,
             isLugging = false,
             isColdEngine = false,
-            note = "Régimen y carga dentro de zona óptima de trabajo.",
+            note = "En ${g}ª · régimen y carga dentro de zona óptima diésel.",
+            actionLabel = "ÓPTIMO (${g}ª)",
         )
     }
 
