@@ -2,6 +2,7 @@ package app.jac.diagnosticlab.report
 
 import app.jac.diagnosticlab.analysis.HealthItem
 import app.jac.diagnosticlab.analysis.HealthStatus
+import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.dynamic.TestResult
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ResponseKind
@@ -102,6 +103,18 @@ data class WorkshopDoc(
 
 /** Qué verificar por código. Texto genérico (definición SAE J2012 + práctica de taller), no procedimiento JAC. */
 data class DtcHint(val meaning: String, val related: List<Int>, val checks: List<String>)
+
+/**
+ * SPEC-034 R11 — Diagnóstico diferencial que separa estrictamente hechos observables de hipótesis
+ * (corte de torque/potencia vs. apagado total de motor) y evalúa si recomendar el Set Crítico de 8 PIDs.
+ */
+data class DifferentialDiagnosis(
+    val observedFacts: List<String>,
+    val torqueCutHypothesis: String,
+    val engineStallHypothesis: String,
+    val recommendCriticalSet: Boolean,
+    val criticalSetReasons: List<String>,
+)
 
 object WorkshopReport {
     const val SCOPE_NOTE = "Verificación genérica según la definición pública SAE J2012/J1979 y práctica de taller. " +
@@ -219,6 +232,127 @@ object WorkshopReport {
         return rpm > 300 && (v(0x33) == 0.0 || v(0x42) == 0.0)
     }
 
+    /**
+     * SPEC-034 R11: Construye el diagnóstico diferencial separando estrictamente hechos observables
+     * de hipótesis (corte de torque/potencia tipo brake override P0579/P2299 vs. apagado total de motor
+     * por caída de presión de riel 0x23 o tensión ECU 0x42), y determina si recomendar el Set Crítico de 8 PIDs.
+     */
+    fun buildDifferentialDiagnosis(i: WorkshopInput): DifferentialDiagnosis {
+        val codeSet = codes(i).map { it.first }.toSet()
+        val byPid = i.signals.groupBy { it.pid }
+        fun liveVal(pid: Int): Double? = byPid[pid]?.firstOrNull()?.value
+        fun freezeVal(pid: Int): Double? = i.freezeValues.firstOrNull { it.pid == pid }?.signals?.firstOrNull()?.value
+        val zerosBad = freezeZerosUnreliable(i)
+
+        val brakeCodes = codeSet.intersect(setOf("P0579", "P2299", "P0571", "P2135", "P2138")).sorted()
+        val railCodes = codeSet.intersect(setOf("P0087", "P0088", "P0093", "P0190")).sorted()
+        val voltCodes = codeSet.intersect(setOf("P0562", "P0563", "P0606")).sorted()
+
+        val rail23Live = liveVal(0x23)
+        val rail23Freeze = freezeVal(0x23)?.takeUnless { zerosBad && it == 0.0 }
+        val volt42Live = liveVal(0x42)
+        val volt42Freeze = freezeVal(0x42)?.takeUnless { zerosBad && it == 0.0 }
+        val rpmLive = liveVal(0x0C)
+        val pedalDLive = liveVal(0x49)
+        val torqueLive = liveVal(0x62)
+
+        val allEvents = i.tests.flatMap { it.events }
+        val torqueCutEvents = allEvents.filter { it.kind == "CORTE DE POTENCIA" || it.kind == "CORTE POR FRENO" }
+        val stallEvents = allEvents.filter { it.kind == "MOTOR DETENIDO" || it.kind.startsWith("CAÍDA BRUSCA") }
+        val railDropEvents = allEvents.filter { it.kind == "CAÍDA PRESIÓN RIEL" }
+        val voltDropEvents = allEvents.filter { it.kind == "CAÍDA DE TENSIÓN" }
+
+        val railDropObserved = railCodes.isNotEmpty() ||
+            railDropEvents.isNotEmpty() ||
+            (rail23Live != null && (rpmLive ?: 0.0) >= 500.0 && rail23Live < 15_000.0) ||
+            (rail23Freeze != null && rail23Freeze < 15_000.0)
+        val voltDropObserved = voltCodes.isNotEmpty() ||
+            voltDropEvents.isNotEmpty() ||
+            (volt42Live != null && volt42Live < 11.5) ||
+            (volt42Freeze != null && volt42Freeze < 11.5)
+
+        val facts = buildList {
+            if (codeSet.isEmpty()) add("DTCs observados: ninguno en ECU de motor.")
+            else add("DTCs observados: ${codeSet.sorted().joinToString(", ")}.")
+            val railFact = buildList {
+                rail23Live?.let { add("en vivo %.0f kPa".format(Locale.ROOT, it)) }
+                rail23Freeze?.let { add("cuadro congelado %.0f kPa".format(Locale.ROOT, it)) }
+            }.joinToString(" / ").ifBlank { "no capturado" }
+            val voltFact = buildList {
+                volt42Live?.let { add("en vivo %.2f V".format(Locale.ROOT, it)) }
+                volt42Freeze?.let { add("cuadro congelado %.2f V".format(Locale.ROOT, it)) }
+            }.joinToString(" / ").ifBlank { "no capturado" }
+            add("Presión de riel (PID 0x23): $railFact · Tensión ECU (PID 0x42): $voltFact.")
+            if (rpmLive != null || pedalDLive != null || torqueLive != null) {
+                add("Lecturas en vivo: RPM=${rpmLive?.let { "%.0f".format(Locale.ROOT, it) } ?: "—"}, Pedal D (0x49)=${pedalDLive?.let { "%.1f%%".format(Locale.ROOT, it) } ?: "—"}, Par real (0x62)=${torqueLive?.let { "%.1f%%".format(Locale.ROOT, it) } ?: "—"}.")
+            }
+            if (torqueCutEvents.isNotEmpty() || stallEvents.isNotEmpty() || railDropEvents.isNotEmpty() || voltDropEvents.isNotEmpty()) {
+                add("Eventos dinámicos registrados: cortes de par=${torqueCutEvents.size}, paros/caídas RPM=${stallEvents.size}, caídas riel=${railDropEvents.size}, caídas tensión=${voltDropEvents.size}.")
+            }
+        }
+
+        val torqueHyp = buildString {
+            append("[HIPÓTESIS — NO CAUSA RAÍZ CONFIRMADA] ")
+            if (brakeCodes.isNotEmpty() || torqueCutEvents.isNotEmpty()) {
+                append("Evidencia compatible con corte comandado de torque/potencia (ej. brake override ${brakeCodes.ifEmpty { listOf("P0579/P2299") }.joinToString("/")})")
+                append(": la ECU reduce el par/inyección (PID 0x62 / 0x04) ante conflicto freno-acelerador (PID 0x49/0x4A) sin que necesariamente colapsen la presión de riel (0x23) ni la tensión ECU (0x42). ")
+            } else {
+                append("Sin códigos de conflicto freno/acelerador (P0579/P2299) ni eventos de corte de par registrados en esta sesión; ")
+                append("para confirmar o descartar brake override se requiere observar pedal (0x49/0x4A) sostenido frente a caída de par (0x62) y carga (0x04) con motor girando. ")
+            }
+            append("No constituye causa raíz confirmada sin verificación eléctrica del interruptor de freno y pistas del pedal.")
+        }
+
+        val stallHyp = buildString {
+            append("[HIPÓTESIS — NO CAUSA RAÍZ CONFIRMADA] ")
+            when {
+                railDropObserved && voltDropObserved ->
+                    append("Evidencia compatible con apagado total de motor por pérdida combinada de presión de riel (PID 0x23 / ${railCodes.joinToString().ifBlank { "caída medida" }}) y caída de tensión ECU (PID 0x42 / ${voltCodes.joinToString().ifBlank { "caída medida" }}). ")
+                railDropObserved ->
+                    append("Evidencia compatible con apagado total de motor por caída de presión de riel de combustible (PID 0x23 ${railCodes.joinToString().ifBlank { "bajo umbral" }}), diferenciable de un recorte electrónico por freno porque el riel colapsa antes o junto con las RPM (0x0C). ")
+                voltDropObserved ->
+                    append("Evidencia compatible con apagado total de motor o reinicio de ECU por caída de tensión de alimentación (PID 0x42 ${voltCodes.joinToString().ifBlank { "< 11,5 V" }}), diferenciable de brake override por pérdida eléctrica en bornes/masas/relé principal. ")
+                stallEvents.isNotEmpty() ->
+                    append("Se registraron ${stallEvents.size} paro(s)/caída(s) brusca(s) de RPM sin caída confirmada de riel (0x23) ni tensión (0x42) en los datos disponibles; se requiere captura rápida sincronizada de 0x23 y 0x42 durante el evento para distinguir apagado total de recorte de par. ")
+                else ->
+                    append("No se observó caída de presión de riel (PID 0x23) ni de tensión ECU (PID 0x42) en esta sesión; no obstante, su ausencia en reposo no descarta un apagado total intermitente en ruta sin captura en el instante de la falla.")
+            }
+        }
+
+        val linkLossKinds = setOf(
+            ResponseKind.DISCONNECTED,
+            ResponseKind.TIMEOUT,
+            ResponseKind.UNABLE_TO_CONNECT,
+            ResponseKind.CAN_ERROR,
+            ResponseKind.BUS_INIT_ERROR,
+            ResponseKind.STOPPED,
+            ResponseKind.PARTIAL,
+        )
+        val reasons = buildList {
+            val linkDrops = i.exchanges.count { it.kind in linkLossKinds }
+            val linkErrors = i.errors.any { err ->
+                val l = err.lowercase(Locale.ROOT)
+                "enlace" in l || "desconect" in l || "timeout" in l || "perdido" in l || "satur" in l
+            }
+            if (linkDrops > 0 || linkErrors) {
+                add("se detectó pérdida de enlace o fallos de comunicación OBD ($linkDrops intercambio(s) fallidos)")
+            }
+            val mode02Failed = i.exchanges.any { it.command.trim().startsWith("02") && it.kind != ResponseKind.OBD_DATA }
+            val mode02Missing = zerosBad || mode02Failed || (codeSet.isNotEmpty() && i.freezeValues.isEmpty())
+            if (mode02Missing) {
+                add("existen datos no capturados o rellenados con cero en cuadro congelado (Mode 02)")
+            }
+        }
+
+        return DifferentialDiagnosis(
+            observedFacts = facts,
+            torqueCutHypothesis = torqueHyp,
+            engineStallHypothesis = stallHyp,
+            recommendCriticalSet = reasons.isNotEmpty(),
+            criticalSetReasons = reasons,
+        )
+    }
+
     fun buildDoc(i: WorkshopInput, zone: ZoneId = ZoneId.systemDefault()): WorkshopDoc {
         val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(zone)
         fun t(ms: Long) = fmt.format(Instant.ofEpochMilli(ms))
@@ -281,6 +415,33 @@ object WorkshopReport {
                     "la prueba «Freno contra acelerador» de la app muestra si la ECU recibe el freno.", Tone.MUTED))
             }
             i.tests.filter { it.testId == "BRAKE" }.maxByOrNull { it.startedAtMs }?.let { add(Para("Prueba freno contra acelerador (${t(it.startedAtMs)}): ${it.summary}", tone(it.verdict), bold = true)) }
+
+            // SPEC-034 R11: Diagnóstico Diferencial (Hechos observables vs. Hipótesis) y recomendación del Set Crítico de 8 PIDs.
+            val diff = buildDifferentialDiagnosis(i)
+            add(Para("Diagnóstico diferencial (Hechos observables vs. Hipótesis)", Tone.INFO, bold = true))
+            add(
+                Table(
+                    headers = listOf("Clasificación", "Detalle"),
+                    weights = listOf(1.6f, 4.4f),
+                    rows = listOf(
+                        listOf("HECHO OBSERVABLE", diff.observedFacts.joinToString(" ")),
+                        listOf("HIPÓTESIS · Corte de torque / potencia (brake override)", diff.torqueCutHypothesis),
+                        listOf("HIPÓTESIS · Apagado total de motor (riel 0x23 / tensión 0x42)", diff.engineStallHypothesis),
+                    ),
+                    tones = listOf(Tone.INFO, Tone.ATTENTION, Tone.ATTENTION),
+                ),
+            )
+            if (diff.recommendCriticalSet) {
+                add(
+                    Para(
+                        "Recomendación automática para la siguiente captura — Set Crítico de 8 PIDs (Captura rápida de falla): " +
+                            "dado que ${diff.criticalSetReasons.joinToString(" y ")}, utilizar el perfil ligero «Captura rápida de falla» " +
+                            "limitado exclusivamente a ${GuidedTests.CRITICAL_FAULT_PIDS_LABEL} para evitar saturar el adaptador ELM327 y prevenir pérdidas de enlace.",
+                        Tone.ATTENTION,
+                        bold = true,
+                    ),
+                )
+            }
             add(Para(SCOPE_NOTE, Tone.MUTED))
         })
 

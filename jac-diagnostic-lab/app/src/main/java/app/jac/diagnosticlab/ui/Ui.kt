@@ -143,6 +143,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun startGuidedTest(id: String) = lab.startGuidedTest(id)
     fun stopGuidedTest() = lab.stopGuidedTest()
     fun markEvent() = lab.markEvent()
+    fun markFullTank() = lab.markFullTank()
 }
 
 class MainActivity : ComponentActivity() {
@@ -198,6 +199,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
             startTest = { model.startGuidedTest(it) },
             stopTest = { model.stopGuidedTest() },
             mark = { model.markEvent() },
+            markFullTank = { model.markFullTank() },
         ),
         exportSection = {
             WorkshopReportCard(state, model)

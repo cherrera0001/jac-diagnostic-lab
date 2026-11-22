@@ -114,4 +114,114 @@ class WorkshopReportTest {
         assertTrue(text.contains("0 % · no capturado"))
         assertTrue(text.contains("Tope de goma del pedal de freno"))
     }
+
+    @Test
+    fun r26_criticalFaultCaptureProfileRestrictsToEightEssentialPids() {
+        val expectedPids = listOf(0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42)
+        assertEquals(8, app.jac.diagnosticlab.dynamic.GuidedTests.CRITICAL_FAULT_PIDS.size)
+        assertEquals(expectedPids, app.jac.diagnosticlab.dynamic.GuidedTests.CRITICAL_FAULT_PIDS)
+
+        val profile = app.jac.diagnosticlab.dynamic.GuidedTests.byId(app.jac.diagnosticlab.dynamic.GuidedTests.FAST_FAULT_ID)
+        assertEquals(expectedPids, profile.pids)
+        assertTrue(profile.title.contains("Captura rápida", ignoreCase = true))
+
+        // Todos los comandos Mode 01 del set crítico deben estar permitidos por ObdCommandPolicy (solo lectura).
+        profile.pids.forEach { pid ->
+            ObdCommandPolicy.assertAllowed("01%02X".format(pid))
+        }
+
+        // Análisis de caída de presión de riel (0x23) y tensión (0x42) sobre el perfil ligero.
+        val frames = listOf(
+            app.jac.diagnosticlab.dynamic.TraceFrame(1_000L, mapOf("0C" to 1900.0, "0D" to 60.0, "49" to 35.0, "4A" to 17.5, "04" to 60.0, "62" to 55.0, "23" to 42_000.0, "42" to 14.1)),
+            app.jac.diagnosticlab.dynamic.TraceFrame(1_500L, mapOf("0C" to 1850.0, "0D" to 58.0, "49" to 35.0, "4A" to 17.5, "04" to 15.0, "62" to 10.0, "23" to 11_000.0, "42" to 11.2)),
+            app.jac.diagnosticlab.dynamic.TraceFrame(2_000L, mapOf("0C" to 1500.0, "0D" to 52.0, "49" to 35.0, "4A" to 17.5, "04" to 12.0, "62" to 8.0, "23" to 10_500.0, "42" to 11.1)),
+            app.jac.diagnosticlab.dynamic.TraceFrame(2_500L, mapOf("0C" to 1200.0, "0D" to 46.0, "49" to 35.0, "4A" to 17.5, "04" to 10.0, "62" to 5.0, "23" to 10_000.0, "42" to 11.0)),
+            app.jac.diagnosticlab.dynamic.TraceFrame(3_000L, mapOf("0C" to 900.0, "0D" to 40.0, "49" to 35.0, "4A" to 17.5, "04" to 10.0, "62" to 5.0, "23" to 9_500.0, "42" to 11.0)),
+        )
+        val result = app.jac.diagnosticlab.dynamic.GuidedTests.analyze(profile, frames)
+        assertTrue(result.events.any { it.kind == "CORTE DE POTENCIA" })
+        assertTrue(result.events.any { it.kind == "CAÍDA PRESIÓN RIEL" })
+        assertTrue(result.events.any { it.kind == "CAÍDA DE TENSIÓN" })
+        assertEquals(HealthStatus.CHECK, result.verdict)
+    }
+
+    @Test
+    fun r27_workshopReportIncludesDifferentialDiagnosisAndCriticalSetRecommendation() {
+        // Caso A: P0579 + P2299 (brake override) + datos no capturados en Mode 02 + pérdida de enlace ->
+        // debe separar HECHO OBSERVABLE de HIPÓTESIS y recomendar automáticamente el Set Crítico de 8 PIDs.
+        val p0579 = DtcHit("P0579", 0x05, 0x79, DtcScope.GENERIC, "SAE", "7E8", DtcCategory.STORED)
+        val p2299 = DtcHit("P2299", 0x22, 0x99, DtcScope.GENERIC, "SAE", "7E8", DtcCategory.STORED)
+        val dtcs = listOf(
+            DtcReadResult(DtcCategory.STORED, app.jac.diagnosticlab.elm.ResponseKind.OBD_DATA, listOf(p0579, p2299), false, "7E806430205792299", ""),
+        )
+        val unreliableFreeze = listOf(
+            FreezeFrame.decode(0x0C, ex("020C00", "7E8 05 42 0C 00 15 99"))!!,
+            FreezeFrame.decode(0x42, ex("024200", "7E8 05 42 42 00 00 00"))!!,
+        )
+        val timeoutEx = Exchange(
+            atEpochMs = 2_000L,
+            command = "0123",
+            raw = "",
+            kind = app.jac.diagnosticlab.elm.ResponseKind.TIMEOUT,
+            detail = "timeout",
+            promptSeen = false,
+            elapsedMs = 3_000L,
+            frames = emptyList(),
+        )
+        val brakeInput = empty().copy(
+            scanAtMs = 2_500L,
+            dtcs = dtcs,
+            freezeNotes = listOf(FreezeNote("7E8054202000579", "P0579", "")),
+            freezeValues = unreliableFreeze,
+            signals = PidCatalog.decode(0x0C, listOf(0x0C, 0x80)) +
+                PidCatalog.decode(0x23, listOf(0x0D, 0xAC)) + // 35000 kPa normal
+                PidCatalog.decode(0x42, listOf(0x37, 0x14)),  // 14.1 V normal
+            exchanges = listOf(timeoutEx),
+        )
+        val diffBrake = WorkshopReport.buildDifferentialDiagnosis(brakeInput)
+        assertTrue(diffBrake.observedFacts.any { it.contains("P0579") && it.contains("P2299") })
+        assertTrue(diffBrake.torqueCutHypothesis.contains("HIPÓTESIS"))
+        assertTrue(diffBrake.torqueCutHypothesis.contains("brake override", ignoreCase = true))
+        assertTrue(diffBrake.engineStallHypothesis.contains("HIPÓTESIS"))
+        assertTrue(diffBrake.recommendCriticalSet)
+        assertTrue(diffBrake.criticalSetReasons.any { it.contains("pérdida de enlace", ignoreCase = true) })
+        assertTrue(diffBrake.criticalSetReasons.any { it.contains("Mode 02", ignoreCase = true) })
+
+        val reportText = WorkshopReport.build(brakeInput, ZoneId.of("UTC")).lines.joinToString("\n")
+        assertTrue(reportText.contains("Diagnóstico diferencial (Hechos observables vs. Hipótesis)"))
+        assertTrue(reportText.contains("HECHO OBSERVABLE"))
+        assertTrue(reportText.contains("HIPÓTESIS · Corte de torque / potencia"))
+        assertTrue(reportText.contains("HIPÓTESIS · Apagado total de motor"))
+        assertTrue(reportText.contains("Set Crítico de 8 PIDs"))
+        assertTrue(reportText.contains("0x49") && reportText.contains("0x4A") && reportText.contains("0x23") && reportText.contains("0x42"))
+
+        // Caso B: Caída real de presión de riel (0x23) y tensión baja (0x42) -> hipótesis de apagado total activada;
+        // sin pérdida de enlace ni Mode 02 ausente -> NO dispara recomendación innecesaria.
+        val stallInput = empty().copy(
+            scanAtMs = 3_000L,
+            dtcs = listOf(
+                DtcReadResult(
+                    DtcCategory.STORED,
+                    app.jac.diagnosticlab.elm.ResponseKind.OBD_DATA,
+                    listOf(DtcHit("P0087", 0x00, 0x87, DtcScope.GENERIC, "SAE", "7E8", DtcCategory.STORED)),
+                    false,
+                    "43 00 87",
+                    "",
+                ),
+            ),
+            freezeValues = listOf(
+                FreezeFrame.decode(0x0C, ex("020C00", "7E8 05 42 0C 00 0C 80"))!!,
+                FreezeFrame.decode(0x23, ex("022300", "7E8 05 42 23 00 03 E8"))!!, // 10000 kPa
+                FreezeFrame.decode(0x42, ex("024200", "7E8 05 42 42 00 2A F8"))!!, // 11.0 V
+            ),
+            signals = PidCatalog.decode(0x0C, listOf(0x0C, 0x80)) +
+                PidCatalog.decode(0x23, listOf(0x03, 0xE8)) + // 10000 kPa
+                PidCatalog.decode(0x42, listOf(0x2A, 0xF8)),  // 11.0 V
+            exchanges = listOf(ex("022300", "7E8 05 42 23 00 03 E8")),
+        )
+        val diffStall = WorkshopReport.buildDifferentialDiagnosis(stallInput)
+        assertTrue(diffStall.engineStallHypothesis.contains("apagado total", ignoreCase = true))
+        assertTrue(diffStall.engineStallHypothesis.contains("0x23") && diffStall.engineStallHypothesis.contains("0x42"))
+        assertFalse("Sin pérdida de enlace ni Mode 02 faltante no debe forzar alerta de recomendación", diffStall.recommendCriticalSet)
+    }
 }

@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.18.0** (`versionCode` 35), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Diagnóstico OBD completo, **Android Auto nativo** (tablero horizontal 3×2 pausado para la pantalla de la JAC T8, compatible en paralelo con Spotify y Waze/Maps), guía de cambios calibrada 6M diésel (`2ª → 3ª` / `4ª → 3ª`), informe PDF con sello C4A y bóveda privada, y hub **Señales** (BLE/Tags + espectro RF + Escudo defensivo). APK: [release v1.18.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0).
+**Versión actual: 1.19.0** (`versionCode` 36), 22-11-2026, instalada en Xiaomi `2512BPNDAG` (base **validada en la unidad real** con ECU Delphi DCM6.2; ver `research/validation/2026-11-18-unidad-real.md`). Integra **SPEC-034 R7–R11**: estimación de combustible sin mirar el tablero (`PID 0x2F` o respaldo `0x5E`/MAF `0x10` desde «Estanque lleno», siempre etiquetada `ESTIMACIÓN/INFERENCIA`), captura continua en segundo plano (`ForegroundService` con notificación persistente), **Android Auto nativo** en solo lectura (tablero 3×2 + detalle + combustible estimado), **Perfil de Captura Rápida de Falla** (Set Crítico de 8 PIDs: `0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) y **Diagnóstico Diferencial** en informe PDF (`WorkshopReport`/`WorkshopPdf`) con recomendación automática del Set Crítico. APK: [release v1.19.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -18,10 +18,10 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0 |
-| Archivo | `jac-diagnostic-lab-1.18.0-debug.apk` (con su `.sha256`) |
-| SHA-256 (v1.18.0) | `eb0b70f557771dc64d22f3be304afb4709190b853f11c71b6131532bf8545495` |
-| Milestone | «v1.11.0 — Validada en la unidad real» |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0 |
+| Archivo | `jac-diagnostic-lab-1.19.0-debug.apk` (con su `.sha256` y copia en `dist/`) |
+| SHA-256 (v1.19.0) | `fad3f334714eb368cb9c05f07346d74db56ccab169bd31e8ed4deba7fd3d2d5b` |
+| Issue abierto | `#1 (SAFE-001)` · Project #22 (`JAC T8 / C4A Automotive Security`) |
 
 ### Antes de instalar
 
@@ -32,19 +32,22 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.18.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.19.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.18.0-debug.apk
+adb install -r jac-diagnostic-lab-1.19.0-debug.apk
 ```
 
-## Pantallas y modos (v1.18.0)
+## Pantallas y modos (v1.19.0)
 
-**Nuevo en 1.18.0:**
-- **Android Auto nativo (`androidx.car.app:app:1.7.0`, categoría `IOT`):** tablero horizontal 3×2 pausado (refresco 1,2 s) para la pantalla OEM de la JAC T8 (`HS209A`), con Motor/Cambio, Refrigerante real, Batería ECU (`PID 0x42`), Turbo/Riel, DPF/Regeneración («No apagar») y Estado/DTC, más vistas de Detalle y Códigos con «Marcar evento». No toma foco de audio: Spotify, llamadas y Waze/Maps siguen funcionando normalmente. *(Para verlo sin Play Store: activar «Fuentes desconocidas» en Ajustes de desarrollador de Android Auto en el teléfono.)*
-- **Guía de marchas calibrada 6M diésel JAC T8:** relaciones reales de 6 velocidades, filtro de embrague/neutro rodando y recomendación explícita de marcha destino (`SUBIR A 3ª`, `BAJAR A 4ª`) tanto en el teléfono como en Android Auto.
+**Nuevo en 1.19.0 (SPEC-034 R7–R11):**
+- **Estimación de combustible sin mirar el tablero (`R7`, `FuelEstimator.kt`):** lee `PID 0x2F` si la ECU lo soporta; en caso contrario integra `PID 0x5E` (L/h) o respaldo `PID 0x10` (MAF g/s) desde el botón manual **«Estanque lleno»**. Etiqueta siempre los litros como **`ESTIMACIÓN/INFERENCIA`** (nunca medición directa) con invariante en código y prueba TDD `r23`.
+- **Captura continua en segundo plano (`R8`, `DiagnosticConnectionService` + `BackgroundCaptureNotification.kt`):** `ForegroundService` (`connectedDevice`) con notificación persistente actualizada dinámicamente (estado de enlace, modo activo, rondas/muestras, reconexión y combustible estimado) y acceso directo a la app, manteniendo viva la captura OBD-II y el registro de evidencia con pantalla apagada o usando otra app en primer plano.
+- **Soporte Android Auto validado con TDD (`R9`, `androidx.car.app:app:1.7.0`):** `JacCarAppService` en solo lectura con estado de enlace, DTCs activos, lecturas clave y combustible estimado R7 etiquetado como `ESTIMACIÓN/INFERENCIA`, categoría `IOT` compatible con modo desarrollador / Fuentes desconocidas.
+- **Perfil de Captura Rápida de Falla (`R10`, `FAST_FAULT`):** monitoreo ligero que consulta exclusivamente el **Set Crítico de 8 PIDs** (`0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) para evitar saturar adaptadores ELM327 y prevenir pérdidas de enlace durante pruebas dinámicas (`#1 SAFE-001`).
+- **Diagnóstico Diferencial en Informe PDF (`R11`, `WorkshopReport.kt` / `WorkshopPdf.kt`):** en *Diagnóstico principal* separa estrictamente **Hechos observables** de **Hipótesis** (corte de torque/potencia *brake override* `P0579`/`P2299` vs. apagado total de motor por caída de presión de riel `0x23` o tensión `0x42`) y recomienda automáticamente el Set Crítico de 8 PIDs cuando hay pérdida de enlace o datos no capturados en Mode 02.
 
 **Anterior reciente (1.11.2–1.17.0):** hub **Señales** (`BLE / Tags` con categorías reales, GATT/DULT y flecha silenciosa; `Redes y RF` con canales Wi-Fi, 4G/5G MHz/SINR, GNSS y FFT magnético; `Seguridad` con Escudo defensivo), informe PDF C4A + bóveda privada + `.jacenc`, «Borrar y limpiar» (`ClearDtcGate`) y forense de paros (`EventForensics`).
 

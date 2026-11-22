@@ -18,6 +18,7 @@ import app.jac.diagnosticlab.analysis.AnalysisInput
 import app.jac.diagnosticlab.analysis.AnalysisReport
 import app.jac.diagnosticlab.analysis.JacAnalysis
 import app.jac.diagnosticlab.analysis.Symptom
+import app.jac.diagnosticlab.bt.BackgroundCaptureNotification
 import app.jac.diagnosticlab.bt.BleInspector
 import app.jac.diagnosticlab.bt.BluetoothRepository
 import app.jac.diagnosticlab.bt.BtDevice
@@ -75,6 +76,10 @@ import app.jac.diagnosticlab.obd.SessionTimeMetrics
 import app.jac.diagnosticlab.analysis.DashboardLinkStatus
 import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
 import app.jac.diagnosticlab.analysis.DrivingGuidanceSnapshot
+import app.jac.diagnosticlab.analysis.FuelEstimate
+import app.jac.diagnosticlab.analysis.FuelEstimator
+import app.jac.diagnosticlab.analysis.FuelProfile
+import app.jac.diagnosticlab.analysis.FullTankAnchor
 import app.jac.diagnosticlab.analysis.HealthAssessment
 import app.jac.diagnosticlab.analysis.HealthInput
 import app.jac.diagnosticlab.analysis.HealthItem
@@ -204,6 +209,11 @@ data class LabState(
     val liveLinkStatus: DashboardLinkStatus = DashboardLinkStatus.PAUSED,
     val drivingGuidance: DrivingGuidanceSnapshot? = null,
     val lastTripSummary: TripGuidanceSummary? = null,
+    // SPEC-034 R7 — Estimación de combustible sin mirar el tablero (siempre ESTIMACIÓN/INFERENCIA)
+    val tankCapacityLiters: Double = FuelEstimator.DEFAULT_TANK_CAPACITY_LITERS,
+    val fullTankAnchor: FullTankAnchor? = null,
+    val fuelConsumedSinceAnchorLiters: Double = 0.0,
+    val fuelEstimate: FuelEstimate? = null,
 )
 
 class LabController(private val app: Application) {
@@ -234,8 +244,85 @@ class LabController(private val app: Application) {
         if (!prefs.contains("declaredModel")) {
             prefs.edit().putString("declaredModel", "JAC T8").putString("declaredYear", "2023").apply()
         }
+        val savedCap = prefs.getFloat("fuelTankCapL", FuelEstimator.DEFAULT_TANK_CAPACITY_LITERS.toFloat()).toDouble()
+            .takeIf { it > 0.0 } ?: FuelEstimator.DEFAULT_TANK_CAPACITY_LITERS
+        val savedAnchorMs = prefs.getLong("fuelAnchorMs", -1L)
+        val savedConsumed = prefs.getFloat("fuelConsumedL", 0f).toDouble().coerceAtLeast(0.0)
+        val savedAnchor = if (savedAnchorMs > 0L) FullTankAnchor(savedAnchorMs, savedCap) else null
+        state.update {
+            it.copy(
+                tankCapacityLiters = savedCap,
+                fullTankAnchor = savedAnchor,
+                fuelConsumedSinceAnchorLiters = savedConsumed,
+            )
+        }
         refresh()
         recompute()
+    }
+
+    /**
+     * SPEC-034 R7: Registra el evento manual «Estanque lleno» como referencia de partida
+     * para estimar consumo acumulado por PID 0x5E (Fuel Rate) o PID 0x10 (MAF) cuando la ECU no expone 0x2F.
+     */
+    fun markFullTank(capacityLiters: Double = state.value.tankCapacityLiters) {
+        val cap = capacityLiters.takeIf { it.isFinite() && it > 0.0 } ?: FuelEstimator.DEFAULT_TANK_CAPACITY_LITERS
+        val now = System.currentTimeMillis()
+        val anchor = FullTankAnchor(atEpochMs = now, tankCapacityLiters = cap)
+        prefs.edit()
+            .putLong("fuelAnchorMs", now)
+            .putFloat("fuelTankCapL", cap.toFloat())
+            .putFloat("fuelConsumedL", 0f)
+            .apply()
+        if (state.value.activeTest != null) {
+            markEvent("Estanque lleno (${cap.toInt()} L · referencia R7)")
+        }
+        state.update {
+            it.copy(
+                tankCapacityLiters = cap,
+                fullTankAnchor = anchor,
+                fuelConsumedSinceAnchorLiters = 0.0,
+                statusLine = "Evento «Estanque lleno» registrado (${cap.toInt()} L). Estimación R7 lista.",
+            )
+        }
+        updateFuelEstimate()
+        if (state.value.ecuTalking || state.value.activeTest != null || state.value.polling) promote()
+    }
+
+    private fun updateFuelEstimate(previousFrame: TraceFrame? = null, currentFrame: TraceFrame? = null) {
+        val st = state.value
+        val profile = if (st.readiness?.compressionIgnition == false) FuelProfile.GASOLINE else FuelProfile.DIESEL
+        var consumed = st.fuelConsumedSinceAnchorLiters
+        val anchor = st.fullTankAnchor
+        if (anchor != null && currentFrame != null && currentFrame.atMs >= anchor.atEpochMs) {
+            val prevValid = previousFrame?.takeIf { it.atMs >= anchor.atEpochMs }
+            val (delta, _) = FuelEstimator.incrementalConsumedLiters(prevValid, currentFrame, profile)
+            if (delta > 0.0) {
+                consumed += delta
+                prefs.edit().putFloat("fuelConsumedL", consumed.toFloat()).apply()
+            }
+        }
+        val pid2f = currentFrame?.values?.get(FuelEstimator.KEY_FUEL_LEVEL)
+            ?: st.testLive?.values?.get(FuelEstimator.KEY_FUEL_LEVEL)
+            ?: st.scanSignals.firstOrNull { it.pid == FuelEstimator.PID_FUEL_LEVEL }?.value
+        val framesForEstimate = buildList {
+            currentFrame?.let { add(it) }
+            if (isEmpty()) st.testLive?.let { add(it) }
+        }
+        val est = FuelEstimator.estimate(
+            supportedPids = st.supported,
+            pid2fLevelPercent = pid2f,
+            frames = framesForEstimate,
+            fullTankAnchor = anchor,
+            priorConsumedLiters = consumed,
+            tankCapacityLiters = st.tankCapacityLiters,
+            fuelProfile = profile,
+        )
+        state.update {
+            it.copy(
+                fuelConsumedSinceAnchorLiters = consumed,
+                fuelEstimate = est,
+            )
+        }
     }
 
     fun declareVehicle(model: String, year: String) {
@@ -813,7 +900,7 @@ class LabController(private val app: Application) {
         transport = null
         session = null
         ble = null
-        app.stopService(Intent(app, DiagnosticConnectionService::class.java))
+        DiagnosticConnectionService.stop(app)
         state.update {
             it.copy(
                 link = "Desconectado",
@@ -846,7 +933,7 @@ class LabController(private val app: Application) {
         ble = null
         scope.launch(Dispatchers.IO) {
             runCatching { oldTransport?.disconnect() }
-            runCatching { app.stopService(Intent(app, DiagnosticConnectionService::class.java)) }
+            runCatching { DiagnosticConnectionService.stop(app) }
         }
         dtcs = emptyList()
         freeze = emptyList()
@@ -1291,6 +1378,7 @@ class LabController(private val app: Application) {
                 )
             }
             recomputeHealth()
+            updateFuelEstimate()
             refreshCapabilities()
             recompute()
             persist()
@@ -1425,6 +1513,8 @@ class LabController(private val app: Application) {
                         statusLine = "Prueba en curso: ${test.title}",
                     )
                 }
+                updateFuelEstimate(previousFrame = null, currentFrame = first)
+                promote()
                 val t0 = first.atMs
                 var misses = 0
                 // Ruta / en vivo: señales rápidas (1 trama) cada ronda; las de varias tramas, 1 de cada 4.
@@ -1441,19 +1531,26 @@ class LabController(private val app: Application) {
                     val frame = sampleRound(current, roundPids)
                     if (frame == null) {
                         misses++
-                        // SPEC-034 R6: ante microcortes BT no se borra la sesión; se marca RECONECTANDO.
+                        // SPEC-034 R6/R8: ante microcortes BT no se borra la sesión; se marca RECONECTANDO y se actualiza la notificación.
                         state.update { it.copy(liveLinkStatus = DashboardLinkStatus.RECONNECTING) }
+                        if (misses == 1) promote()
                         if (misses >= 5) {
                             explain("Enlace perdido durante la prueba (5 rondas sin respuesta). Se guarda lo capturado.")
                             break
                         }
                         continue
                     }
+                    val recoveredFromMiss = misses > 0
                     misses = 0
+                    val prevFrame = testFrames.lastOrNull()
                     testFrames += frame
                     if (testFrames.size > 30_000) testFrames.removeAt(0)
                     if (test.id == "WARMUP" && (frame.values[GuidedTests.ECT] ?: 0.0) >= 85.0) break
-                    val events = if (test.id == "ROAD" && testFrames.size % 10 == 0) GuidedTests.road(testFrames.takeLast(600)).second else state.value.testEvents
+                    val events = if ((test.id == "ROAD" || test.id == GuidedTests.FAST_FAULT_ID) && testFrames.size % 10 == 0) {
+                        GuidedTests.road(testFrames.takeLast(600)).second
+                    } else {
+                        state.value.testEvents
+                    }
                     val window = testFrames.takeLast(20)
                     val hz = if (window.size > 1) (window.size - 1) * 1000.0 / (window.last().atMs - window.first().atMs).coerceAtLeast(1) else 0.0
                     state.update {
@@ -1472,7 +1569,11 @@ class LabController(private val app: Application) {
                                 .distinctBy { e -> e.atMs to e.kind }.sortedBy { e -> e.atMs },
                         )
                     }
-                    if (test.id == "ROAD" && testFrames.size % 100 == 0) withContext(Dispatchers.IO) { saveTrace(test.id, null) }
+                    updateFuelEstimate(previousFrame = prevFrame, currentFrame = frame)
+                    if (recoveredFromMiss || testFrames.size % 20 == 0) promote()
+                    if ((test.id == "ROAD" || test.id == GuidedTests.FAST_FAULT_ID) && testFrames.size % 100 == 0) {
+                        withContext(Dispatchers.IO) { saveTrace(test.id, null) }
+                    }
                 }
             } finally {
                 withContext(NonCancellable) {
@@ -1512,7 +1613,11 @@ class LabController(private val app: Application) {
         }
         val test = GuidedTests.byId(id)
         val result = GuidedTests.analyze(test, testFrames.toList(), testManual.toList())
-        val tripSummary = if (id == "ROAD") DrivingGuidanceEngine.summarizeTrip(testFrames.toList()) else state.value.lastTripSummary
+        val tripSummary = if (id == "ROAD" || id == GuidedTests.FAST_FAULT_ID) {
+            DrivingGuidanceEngine.summarizeTrip(testFrames.toList())
+        } else {
+            state.value.lastTripSummary
+        }
         trace("PRUEBA $id fin frames=${result.frames} hz=%.2f veredicto=${result.verdict} ${result.summary}".format(result.effectiveHz))
         result.metrics.forEach { m -> trace("  ${m.name}: ${m.value?.let { "%.3f".format(it) } ?: "—"} ${m.unit} [${m.status.label}]") }
         result.events.forEach { e -> trace("  EVENTO ${e.kind}: ${e.detail}") }
@@ -1958,7 +2063,20 @@ class LabController(private val app: Application) {
 
     private fun promote() {
         try {
-            ContextCompat.startForegroundService(app, Intent(app, DiagnosticConnectionService::class.java))
+            val st = state.value
+            val count = if (st.activeTest != null) st.testFrameCount else st.samples.size
+            val fuelHint = st.fuelEstimate?.estimatedRemainingLiters?.let {
+                "Comb. est. ~%.1f L (inf.)".format(java.util.Locale.US, it)
+            }
+            val spec = BackgroundCaptureNotification.build(
+                linkPhase = st.linkPhase,
+                activeTest = st.activeTest,
+                polling = st.polling,
+                sampleCount = count,
+                liveStatus = st.liveLinkStatus,
+                fuelHint = fuelHint,
+            )
+            DiagnosticConnectionService.startOrUpdate(app, spec)
         } catch (error: Exception) {
             trace("Servicio en primer plano no disponible: ${error.message}. La sesión sigue en la aplicación.")
         }

@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.19.0 — 2026-11-22 (JAC Diagnostic Lab) — SPEC-034 R7–R11: Combustible estimado, captura continua en segundo plano, Set Crítico de 8 PIDs y Diagnóstico Diferencial
+
+- **Trazabilidad GitHub Issues / Projects:** revisión de `#1 (SAFE-001)` (OPEN, `P0/diag/safety`, Project #22 `JAC T8 / C4A Automotive Security`) y mapeo formal en `specs/034-evidence-engine-mvp/spec.md`.
+- **R7 — Estimación de combustible sin mirar el tablero (`analysis/FuelEstimator.kt`, `LabController.kt`, `ui/AppShell.kt`, `car/CarDashboardModel.kt`):**
+  - Jerarquía estricta: lee `PID 0x2F` (*Fuel Tank Level Input*) si la ECU lo soporta; en caso contrario integra consumo acumulado con `PID 0x5E` (*Fuel Rate*, L/h) o respaldo `PID 0x10` (MAF g/s, perfil diésel/gasolina) a partir del evento manual persistente **«Estanque lleno»**.
+  - Invariante en código que exige etiquetar siempre el resultado en litros como **`ESTIMACIÓN/INFERENCIA`** (`isInference = true`, `isDirectMeasurement = false`), nunca como medición directa, con exportación a `DiagnosticInference` (R1).
+- **R8 — Captura continua en segundo plano (`bt/BackgroundCaptureNotification.kt`, `bt/Bluetooth.kt`, `LabController.kt`):**
+  - `DiagnosticConnectionService` (`foregroundServiceType="connectedDevice"`) reforzado con `PendingIntent` a `MainActivity`, acción `ACTION_STOP` y actualización dinámica de la notificación persistente (`ongoing = true`, `BigTextStyle`) durante conexión, `LIVE`, `FAST_FAULT`, `ROAD`, monitor continuo y reconexión, manteniendo activa la captura OBD-II y persistencia de evidencia con pantalla apagada o usando otra app.
+- **R9 — Soporte Android Auto verificado (`car/JacCarAppService.kt`, `car/CarDashboardModel.kt`, `AndroidManifest.xml`, `res/xml/automotive_app_desc.xml`):**
+  - Librería oficial `androidx.car.app:app:1.7.0`, categoría `IOT` compatible con modo desarrollador / Fuentes desconocidas, pantalla glanceable en solo lectura (estado de enlace, DTCs activos, lecturas clave y combustible estimado R7).
+- **R10 — Perfil de Captura Rápida de Falla (`dynamic/GuidedTests.kt`, `LabController.kt`, `ui/AppShell.kt`):**
+  - Modo ligero `FAST_FAULT` («Captura rápida de falla») limitado exclusivamente al **Set Crítico de 8 PIDs** (`0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) accesible directo desde **En vivo** y **Pruebas** para evitar saturar el ELM327 y detectar caídas de presión de riel (`0x23`) y tensión (`0x42`).
+- **R11 — Diagnóstico Diferencial en Informe Técnico (`report/WorkshopReport.kt`, `report/WorkshopPdf.kt`):**
+  - En *Diagnóstico principal* agrega tabla estructurada **Diagnóstico diferencial (Hechos observables vs. Hipótesis)** distinguiendo evidencia compatible con corte de torque/potencia (*brake override* `P0579`/`P2299`) frente a apagado total de motor (caída de riel `0x23` o tensión `0x42`).
+  - Ante pérdida de enlace o datos no capturados / rellenados con cero en Mode 02, agrega automáticamente la recomendación de usar el Set Crítico de 8 PIDs en la siguiente captura.
+- **Pruebas TDD y entrega:** `r23`–`r27` en `EvidenceEngineTest` y `WorkshopReportTest`; `:app:testDebugUnitTest`, `:app:lintDebug` y `:app:assembleDebug` en verde; APK `jac-diagnostic-lab-1.19.0-debug.apk` instalado en Xiaomi `2512BPNDAG` (`versionCode=36`, `versionName=1.19.0`) y publicado en GitHub Releases (`v1.19.0`).
+
 ## v1.18.0 — 2026-11-22 (JAC Diagnostic Lab) — Soporte nativo de Android Auto (tablero horizontal y pausado para la JAC T8)
 
 - **Integración oficial de Android Auto (`androidx.car.app:app:1.7.0`, `car/JacCarAppService.kt`):**

@@ -510,25 +510,53 @@ class DiagnosticConnectionService : Service() {
     override fun onBind(intent: Intent?) = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+            return START_NOT_STICKY
+        }
         return try {
+            val fallback = BackgroundCaptureNotification.defaultSpec()
+            val title = intent?.getStringExtra(EXTRA_TITLE)?.takeIf { it.isNotBlank() } ?: fallback.title
+            val text = intent?.getStringExtra(EXTRA_TEXT)?.takeIf { it.isNotBlank() } ?: fallback.text
+
             val manager = getSystemService(NotificationManager::class.java)
             if (Build.VERSION.SDK_INT >= 26) {
                 manager.createNotificationChannel(
-                    NotificationChannel(CHANNEL, "Diagnóstico", NotificationManager.IMPORTANCE_LOW),
+                    NotificationChannel(CHANNEL, "Captura OBD-II en segundo plano", NotificationManager.IMPORTANCE_LOW),
+                )
+            }
+            val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val contentPendingIntent = openAppIntent?.let {
+                android.app.PendingIntent.getActivity(
+                    this,
+                    0,
+                    it,
+                    android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE,
                 )
             }
             val notification = NotificationCompat.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-                .setContentTitle("JAC Diagnostic Lab")
-                .setContentText("Sesión de lectura. El borrado de códigos exige confirmación y no modifica la ECU.")
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
                 .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+                .apply { contentPendingIntent?.let { setContentIntent(it) } }
                 .build()
             if (Build.VERSION.SDK_INT >= 29) {
-                startForeground(42, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
+                startForeground(
+                    CaptureNotificationSpec.NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE,
+                )
             } else {
-                startForeground(42, notification)
+                startForeground(CaptureNotificationSpec.NOTIFICATION_ID, notification)
             }
-            START_NOT_STICKY
+            START_STICKY
         } catch (_: Exception) {
             stopSelf()
             START_NOT_STICKY
@@ -536,6 +564,23 @@ class DiagnosticConnectionService : Service() {
     }
 
     companion object {
-        const val CHANNEL = "jac.diagnostic.session"
+        const val CHANNEL = CaptureNotificationSpec.CHANNEL_ID
+        const val ACTION_UPDATE = "app.jac.diagnosticlab.action.CAPTURE_UPDATE"
+        const val ACTION_STOP = "app.jac.diagnosticlab.action.CAPTURE_STOP"
+        const val EXTRA_TITLE = "extra_capture_title"
+        const val EXTRA_TEXT = "extra_capture_text"
+
+        fun startOrUpdate(context: Context, spec: CaptureNotificationSpec = BackgroundCaptureNotification.defaultSpec()) {
+            val intent = Intent(context, DiagnosticConnectionService::class.java).apply {
+                action = ACTION_UPDATE
+                putExtra(EXTRA_TITLE, spec.title)
+                putExtra(EXTRA_TEXT, spec.text)
+            }
+            androidx.core.content.ContextCompat.startForegroundService(context, intent)
+        }
+
+        fun stop(context: Context) {
+            context.stopService(Intent(context, DiagnosticConnectionService::class.java))
+        }
     }
 }

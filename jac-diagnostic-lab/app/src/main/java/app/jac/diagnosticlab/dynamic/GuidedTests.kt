@@ -47,10 +47,16 @@ data class GuidedTest(
 object GuidedTests {
     // Claves de catálogo
     const val RPM = "0C"; const val SPEED = "0D"; const val LOAD = "04"; const val ECT = "05"; const val VOLT = "42"
-    const val MAP = "0B"; const val MAF = "10"; const val PEDAL = "49"; const val TORQUE = "62"; const val DEMAND = "61"
-    const val RAIL = "59"; const val RAIL_CMD = "6D.CA"; const val RAIL_ACT = "6D.RA"; const val BOOST_CMD = "70.CA"; const val BOOST_ACT = "70.RA"
+    const val MAP = "0B"; const val MAF = "10"; const val PEDAL = "49"; const val PEDAL_E = "4A"; const val TORQUE = "62"; const val DEMAND = "61"
+    const val RAIL_GAUGE = "23"; const val RAIL = "59"; const val RAIL_CMD = "6D.CA"; const val RAIL_ACT = "6D.RA"; const val BOOST_CMD = "70.CA"; const val BOOST_ACT = "70.RA"
     const val DPF_DP = "7A.DP"; const val REGEN = "8B.REGEN"; const val SOOT = "8B.TRIG"; const val EGT = "78.S1"; const val DPF_IN = "7C.B1I"
-    const val FUEL = "5E"; const val OIL = "5C"; const val EGR_ERR = "69.EA"
+    const val FUEL = "5E"; const val FUEL_LEVEL = "2F"; const val OIL = "5C"; const val EGR_ERR = "69.EA"
+
+    /** SPEC-034 R10: Perfil de Captura Rápida de Falla — Set Crítico de exactamente 8 PIDs para evitar saturar ELM327. */
+    const val FAST_FAULT_ID = "FAST_FAULT"
+    val CRITICAL_FAULT_PIDS: List<Int> = listOf(0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42)
+    const val CRITICAL_FAULT_PIDS_LABEL =
+        "0x49 (Pedal D), 0x4A (Pedal E), 0x04 (Carga), 0x62 (Par real), 0x0C (RPM), 0x0D (Velocidad), 0x23 (Presión riel), 0x42 (Tensión ECU)"
 
     private fun stationary(m: Map<String, Double>): String? {
         val s = m[SPEED]
@@ -100,21 +106,39 @@ object GuidedTests {
         ) { m -> stationary(m) ?: running(m) },
         GuidedTest(
             "ROAD", "Registro en ruta / banco de rodillos", TestContext.ROAD, null,
-            listOf(0x0C, 0x0D, 0x04, 0x49, 0x61, 0x62, 0x42, 0x05, 0x70, 0x6D, 0x59, 0x7A, 0x8B, 0x78, 0x5E, 0x0B, 0x10),
+            listOf(0x0C, 0x0D, 0x04, 0x49, 0x61, 0x62, 0x42, 0x05, 0x70, 0x6D, 0x59, 0x7A, 0x8B, 0x78, 0x5E, 0x2F, 0x0B, 0x10),
             "Solo con un acompañante que opere el teléfono, o en banco de rodillos. El conductor no toca el teléfono. " +
                 "Si el vehículo tiene el corte al frenar (SAFE-001) abierto, NO salir a la calle: usar banco o pista cerrada.",
             listOf("Iniciar la grabación con el vehículo detenido.", "Conducir normalmente; la app detecta eventos sola.", "El acompañante pulsa «Marcar evento» si nota algo (tirón, corte, ruido).", "Detener la grabación con el vehículo detenido."),
         ) { _ -> null },
+        GuidedTest(
+            FAST_FAULT_ID, "Captura rápida de falla (8 PIDs críticos)", TestContext.ROAD, null,
+            CRITICAL_FAULT_PIDS,
+            "Perfil ligero (8 PIDs) diseñado para no saturar adaptadores ELM327 y prevenir pérdida de enlace. " +
+                "Con SAFE-001 abierto, usar solo con acompañante o en banco/pista cerrada.",
+            listOf(
+                "Consulta únicamente los 8 PIDs críticos: $CRITICAL_FAULT_PIDS_LABEL.",
+                "Permite distinguir corte de par (pedal/carga/torque) frente a apagado total de motor (presión de riel 0x23 o tensión 0x42).",
+                "Mantiene captura continua en segundo plano y permite «Marcar evento» al instante.",
+            ),
+        ) { _ -> null },
     )
+
+    /** Perfil de acceso rápido al set crítico de 8 PIDs (SPEC-034 R10). */
+    val fastFault: GuidedTest get() = catalog.first { it.id == FAST_FAULT_ID }
 
     /** Vista en vivo: muestreo continuo sin veredicto (no aparece en la lista de pruebas). */
     val live = GuidedTest(
         "LIVE", "En vivo", TestContext.STATIONARY, null,
-        listOf(0x0C, 0x0D, 0x05, 0x42, 0x04, 0x0B, 0x70, 0x6D, 0x59, 0x7A, 0x8B, 0x78, 0x10, 0x5E, 0x49, 0x62),
+        listOf(0x0C, 0x0D, 0x05, 0x42, 0x04, 0x0B, 0x70, 0x6D, 0x59, 0x7A, 0x8B, 0x78, 0x10, 0x5E, 0x2F, 0x49, 0x62),
         "", emptyList(),
     ) { _ -> null }
 
-    fun byId(id: String) = if (id == "LIVE") live else catalog.first { it.id == id }
+    fun byId(id: String) = when (id) {
+        "LIVE" -> live
+        FAST_FAULT_ID -> fastFault
+        else -> catalog.first { it.id == id }
+    }
 
     /* ───────────── utilidades estadísticas ───────────── */
 
@@ -336,7 +360,14 @@ object GuidedTests {
                 }
             }
             val v = f.values[VOLT]
-            if (v != null && v < 11.8 && (lowVoltAt == null || f.atMs - lowVoltAt!! > 10_000)) { lowVoltAt = f.atMs; events += TraceEvent(f.atMs, "CAÍDA DE TENSIÓN", "%.2f V".format(v)) }
+            if (v != null && v < 11.8 && (lowVoltAt == null || f.atMs - lowVoltAt > 10_000)) { lowVoltAt = f.atMs; events += TraceEvent(f.atMs, "CAÍDA DE TENSIÓN", "%.2f V".format(Locale.ROOT, v)) }
+            val rail23 = f.values[RAIL_GAUGE]
+            val rpmNow = f.values[RPM]
+            if (rail23 != null && rpmNow != null && rpmNow >= 500.0 && rail23 < 15_000.0 &&
+                events.none { it.kind == "CAÍDA PRESIÓN RIEL" && f.atMs - it.atMs < 10_000 }
+            ) {
+                events += TraceEvent(f.atMs, "CAÍDA PRESIÓN RIEL", "PID 0x23 %.0f kPa (%.1f MPa) a %.0f rpm".format(Locale.ROOT, rail23, rail23 / 1000.0, rpmNow))
+            }
             val r = f.values[REGEN]?.let { it >= 1 }
             if (r != null && regen != null && r != regen) events += TraceEvent(f.atMs, if (r) "INICIO REGENERACIÓN DPF" else "FIN REGENERACIÓN DPF", "Hollín %s %%".format(f.values[SOOT]?.let { "%.0f".format(it) } ?: "—"))
             if (r != null) regen = r
@@ -371,6 +402,7 @@ object GuidedTests {
             TestMetric("EGT máxima", vals(fr, EGT).maxOrNull(), "°C", vals(fr, EGT).maxOrNull()?.let { st(it > 850, it > 750) } ?: HealthStatus.NO_DATA),
             TestMetric("Refrigerante máximo", vals(fr, ECT).maxOrNull(), "°C", vals(fr, ECT).maxOrNull()?.let { st(it > 108, it > 102) } ?: HealthStatus.NO_DATA),
             TestMetric("Tensión mínima", vals(fr, VOLT).minOrNull(), "V", vals(fr, VOLT).minOrNull()?.let { st(it < 11.8, it < 12.8) } ?: HealthStatus.NO_DATA),
+            TestMetric("Presión riel mínima (0x23)", vals(fr, RAIL_GAUGE).minOrNull(), "kPa", vals(fr, RAIL_GAUGE).minOrNull()?.let { st(it < 15_000.0, it < 20_000.0) } ?: HealthStatus.NO_DATA),
             TestMetric("Cortes de potencia detectados", cuts.toDouble(), "", if (cuts > 0) HealthStatus.CHECK else HealthStatus.OK),
             TestMetric("ΔP DPF máxima", vals(fr, DPF_DP).maxOrNull(), "kPa", HealthStatus.INFO, "Bajo carga sube; comparar entre recorridos."),
             TestMetric("Consumo medio", mean(vals(fr, FUEL)), "L/h", HealthStatus.INFO),
