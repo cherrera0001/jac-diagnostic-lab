@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.17.0** (`versionCode` 34), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Informe de taller PDF profesional, detalle tocable en Estado, prueba «Freno contra acelerador», reconexión BLE automática y pestaña **Señales** (BLE/Tags con categorías reales y GATT/DULT, espectro RF nativo Wi-Fi/4G-5G/GNSS/FFT magnético y Escudo defensivo del vehículo). APK: [release v1.17.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0).
+**Versión actual: 1.18.0** (`versionCode` 35), 22-11-2026, **validada en la unidad real** (ECU Delphi DCM6.2 confirmada; ver `research/validation/2026-11-18-unidad-real.md`). Diagnóstico OBD completo, **Android Auto nativo** (tablero horizontal 3×2 pausado para la pantalla de la JAC T8, compatible en paralelo con Spotify y Waze/Maps), guía de cambios calibrada 6M diésel (`2ª → 3ª` / `4ª → 3ª`), informe PDF con sello C4A y bóveda privada, y hub **Señales** (BLE/Tags + espectro RF + Escudo defensivo). APK: [release v1.18.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -18,9 +18,9 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 | Qué | Dónde |
 | --- | --- |
-| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.17.0 |
-| Archivo | `jac-diagnostic-lab-1.17.0-debug.apk` (con su `.sha256`) |
-| SHA-256 (v1.17.0) | `d192f60359a9f14c832bc0efeb31a868e6c2d784dabc184ab0c9cf8f43395f82` |
+| Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0 |
+| Archivo | `jac-diagnostic-lab-1.18.0-debug.apk` (con su `.sha256`) |
+| SHA-256 (v1.18.0) | `eb0b70f557771dc64d22f3be304afb4709190b853f11c71b6131532bf8545495` |
 | Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
@@ -32,27 +32,30 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.17.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.18.0-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.17.0-debug.apk
+adb install -r jac-diagnostic-lab-1.18.0-debug.apk
 ```
 
-## Pantallas (v1.17.0)
+## Pantallas y modos (v1.18.0)
 
-**Nuevo en 1.17.0:** hub **Señales** con 3 sub-vistas (`BLE / Tags`, `Redes y RF`, `Seguridad`): espectro de canales Wi-Fi (2,4/5/6 GHz) con detección de Evil Twin, torres 4G/5G con frecuencias reales en MHz (`EARFCN`/`NR-ARFCN`) y capacidad Shannon–Hartley, satélites GNSS (L1/L5), **FFT magnético en vivo** y auditoría defensiva automática exportable a JSON + guía SDR.
+**Nuevo en 1.18.0:**
+- **Android Auto nativo (`androidx.car.app:app:1.7.0`, categoría `IOT`):** tablero horizontal 3×2 pausado (refresco 1,2 s) para la pantalla OEM de la JAC T8 (`HS209A`), con Motor/Cambio, Refrigerante real, Batería ECU (`PID 0x42`), Turbo/Riel, DPF/Regeneración («No apagar») y Estado/DTC, más vistas de Detalle y Códigos con «Marcar evento». No toma foco de audio: Spotify, llamadas y Waze/Maps siguen funcionando normalmente. *(Para verlo sin Play Store: activar «Fuentes desconocidas» en Ajustes de desarrollador de Android Auto en el teléfono.)*
+- **Guía de marchas calibrada 6M diésel JAC T8:** relaciones reales de 6 velocidades, filtro de embrague/neutro rodando y recomendación explícita de marcha destino (`SUBIR A 3ª`, `BAJAR A 4ª`) tanto en el teléfono como en Android Auto.
 
-**Anterior reciente (1.11.2–1.14.0):** informe PDF unificado con sello vectorial C4A (`c4a.cl`), bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`), «Borrar y limpiar» por compuerta Mode 04 (`ClearDtcGate`) y forense de paros en ruta (`EventForensics`).
+**Anterior reciente (1.11.2–1.17.0):** hub **Señales** (`BLE / Tags` con categorías reales, GATT/DULT y flecha silenciosa; `Redes y RF` con canales Wi-Fi, 4G/5G MHz/SINR, GNSS y FFT magnético; `Seguridad` con Escudo defensivo), informe PDF C4A + bóveda privada + `.jacenc`, «Borrar y limpiar» (`ClearDtcGate`) y forense de paros (`EventForensics`).
 
-| Pestaña | Para qué sirve |
+| Pestaña / Modo | Qué hace cada función |
 | --- | --- |
-| **Estado** | Veredicto en una línea, códigos con título corto y mosaicos por sistema (Bien / Atención / Revisar). Un toque abre la evidencia. |
-| **En vivo** | Medidores grandes con mini-gráfico: RPM, velocidad, refrigerante, tensión, carga, pedal, turbo, riel, torque, aire. |
-| **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco con forense de paros. Resultado con puntos de color y CSV. |
-| **Datos** | Todas las señales leídas, agrupadas y con buscador. Mode 06, datos de la ECU, horas de motor, km desde el borrado. |
-| **Señales** | Hub de 3 vistas: **BLE / Tags** (categorías, GATT/DULT, apodos, flecha), **Redes y RF** (Wi-Fi MHz/canales, 4G/5G MHz/SINR, GNSS, FFT magnético) y **Seguridad** (auditoría defensiva del vehículo + reporte JSON). |
+| **Estado** | Veredicto en una línea, códigos DTC tocables con detalle y mosaicos por sistema (Bien / Atención / Revisar). |
+| **En vivo** | Medidores con mini-gráfico y **Modo Tablero manos libres** con recomendación de cambio calibrada 6M diésel (`2ª → 3ª`, `4ª → 3ª`). |
+| **Android Auto** | Tablero horizontal 3×2 en la pantalla de la camioneta (refresco pausado 1,2 s), vista de detalle motor/DPF y vista de estado/DTC + «Marcar evento», en paralelo con Spotify y Waze. |
+| **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco con forense de paros y CSV. |
+| **Datos** | Todas las señales leídas con buscador, Mode 06, datos Mode 09 de la ECU, horas de motor y km desde borrado. |
+| **Señales** | Hub de 3 vistas: **BLE / Tags** (categorías, GATT/DULT, apodos, flecha), **Redes y RF** (Wi-Fi MHz/canales/Evil Twin, 4G/5G MHz/SINR, GNSS, FFT magnético) y **Seguridad** (Escudo defensivo del vehículo + reporte JSON). |
 | **Informe** | PDF con sello C4A / JSON / TXT / CSV / `.jacenc` cifrado, «Borrar y limpiar» y herramientas avanzadas. |
 
 ## Qué lee

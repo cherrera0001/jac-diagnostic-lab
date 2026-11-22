@@ -2,6 +2,16 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.18.0 — Android Auto nativo (tablero horizontal 3×2) y guía de cambios 6M diésel JAC T8
+
+- **Tag:** `v1.18.0`
+- **versionCode:** 35
+- **Fecha:** 2026-11-22
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.18.0 (`jac-diagnostic-lab-1.18.0-debug.apk` + `.sha256`)
+- **SHA-256:** `eb0b70f557771dc64d22f3be304afb4709190b853f11c71b6131532bf8545495`
+
+Integración oficial de **Android Auto** (`androidx.car.app:app:1.7.0`, categoría `IOT`, `minCarAppApiLevel = 1`, sin foco de audio para convivir con Spotify y Waze/Maps): tablero horizontal 3×2 pausado (1,2 s) con mosaicos minimalistas (`Motor / Cambio`, `Refrigerante real`, `Batería ECU`, `Turbo / Riel`, `DPF / Regeneración`, `Estado / DTC`), vista de detalle motor/DPF (`PaneTemplate`) y vista de estado/DTC (`ListTemplate`) con botón «Marcar evento». Recalibración de `DrivingGuidanceEngine` para caja manual de 6 marchas diésel 2.0T (reconoce correctamente `6ª`, filtra embrague/neutro rodando y muestra marcha destino explícita `SUBIR A 3ª` / `BAJAR A 4ª`). Verificado por CI (`CarDashboardModelTest`) e instalado en Xiaomi `2512BPNDAG`. **PENDING_VALIDATION conectado por USB a la pantalla Android Auto de la JAC T8.**
+
 ## v1.17.0 — Hub «Señales»: espectro RF nativo (Wi-Fi, 4G/5G, GNSS, FFT magnético) y Escudo defensivo
 
 - **Tag:** `v1.17.0`
