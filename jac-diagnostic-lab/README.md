@@ -20,7 +20,7 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 | --- | --- |
 | Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.15.0 |
 | Archivo | `jac-diagnostic-lab-1.15.0-debug.apk` (con su `.sha256`) |
-| Copia en el repo | `dist/jac-diagnostic-lab-1.15.0-debug.apk` |
+| SHA-256 (v1.15.0) | `1cf4d6e5db95595f6ff2f03923b9ca2698eecc635955b7967323db56fa4e71bb` |
 | Milestone | «v1.11.0 — Validada en la unidad real» |
 
 ### Antes de instalar
@@ -40,19 +40,20 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 adb install -r jac-diagnostic-lab-1.15.0-debug.apk
 ```
 
-## Pantallas (1.8.0, ampliadas en 1.9.0)
+## Pantallas (v1.15.0)
 
-**Nuevo en 1.10.0:** en Informe, tarjeta «Informe para el taller» («Leer todo y generar informe»): PDF técnico + .sha256 + JSON completo, generado al terminar el escaneo. Cabecera y pestañas ajustadas al teléfono.
+**Nuevo en 1.15.0:** pestaña **Tags** con nombres BLE reales (`scanRecord`, alias de Android y `device.name`), inferencia de fabricante/subtipo/servicios para dispositivos sin nombre anunciado, apodos locales, filtros rápidos (`Todos`, `Rastreadores`, `Con nombre`), calibración espacial GPS + RSSI en segundo plano sin obligar a abrir un mapa y vista «Buscar» minimalista con dial de precisión y arco de incertidumbre.
 
-**Nuevo en 1.9.0:** pie con la versión en uso en todas las pantallas; en Herramientas avanzadas → Capacidad, tarjeta «Perfil del vehículo» con «Identificar ECU (Mode 09)», respuestas por ECU, campo para la etiqueta física de la ECU, estado del perfil (IDENTIFIED / SUPPLIER_ONLY / AMBIGUOUS / PARTIAL), chequeo del año del VIN y cobertura del catálogo. «Consultar VIN» ya no pide autorización.
+**Anterior reciente (1.11.2–1.14.0):** informe PDF unificado con sello vectorial C4A (`c4a.cl`), bóveda privada (`filesDir/vault/`), exportación cifrada AES-256-GCM (`.jacenc`), «Borrar y limpiar» por compuerta Mode 04 (`ClearDtcGate`) y forense de paros en ruta (`EventForensics`).
 
 | Pestaña | Para qué sirve |
 | --- | --- |
 | **Estado** | Veredicto en una línea, códigos con título corto y mosaicos por sistema (Bien / Atención / Revisar). Un toque abre la evidencia. |
 | **En vivo** | Medidores grandes con mini-gráfico: RPM, velocidad, refrigerante, tensión, carga, pedal, turbo, riel, torque, aire. |
-| **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco. Resultado con puntos de color y CSV. |
+| **Pruebas** | Ralentí (60 s), calentamiento/termostato (10 min), aceleración libre (40 s), carga eléctrica (60 s) y registro en ruta o banco con forense de paros. Resultado con puntos de color y CSV. |
 | **Datos** | Todas las señales leídas, agrupadas y con buscador. Mode 06, datos de la ECU, horas de motor, km desde el borrado. |
-| **Informe** | PDF / JSON / TXT / CSV. Las pantallas anteriores (Hoy, Monitor, Taller, Avisos) quedan en «Herramientas avanzadas». |
+| **Tags** | Escaneo BLE pasivo de rastreadores y dispositivos cercanos con nombres reales, apodos locales, vista «Buscar» con flecha orientativa (GPS + RSSI silencioso o giro con brújula) y exportación GeoJSON/GPX. |
+| **Informe** | PDF con sello C4A / JSON / TXT / CSV / `.jacenc` cifrado, «Borrar y limpiar» y herramientas avanzadas. |
 
 ## Qué lee
 
@@ -62,7 +63,7 @@ adb install -r jac-diagnostic-lab-1.15.0-debug.apk
 | `0101` / `0141` | Monitores de emisiones, interpretados como diésel o gasolina según el bit de encendido por compresión. |
 | `03` / `07` / `0A` / `02` | Códigos guardados, pendientes, permanentes y freeze frame. |
 | `06` | Pruebas a bordo con valor, mínimo, máximo y aprobado/fallado. |
-| `09` | Calibración (CALID), CVN, nombre de la ECU y rendimiento en uso. VIN solo con autorización. |
+| `09` | Calibración (CALID), CVN, nombre de la ECU, rendimiento en uso y VIN cuando la ECU lo declara (anonimizable al exportar). |
 
 La salud se evalúa con rangos genéricos de taller para un diésel common-rail. **No son especificaciones JAC** y no hay porcentaje global.
 
@@ -97,8 +98,9 @@ Orden típico: `ATZ` → `ATE0` → `ATL0` → `ATS0` → `ATH1` → `ATI` → `
 
 ## Evidencia y privacidad
 
-- Sesiones, telemetría y trazas CSV en almacenamiento privado de la app.
-- Exportación con opción de anonimizar VIN y dirección Bluetooth.
+- Sesiones, telemetría, trazas CSV y bóveda privada (`filesDir/vault/` con `MANIFEST.sha256.txt`) en almacenamiento privado de la app.
+- Exportación con opción de anonimizar VIN y dirección Bluetooth, y empaquetado cifrado AES-256-GCM (`.jacenc`).
+- La pestaña **Tags** solicita ubicación en ejecución (y `BLUETOOTH_SCAN` sin `neverForLocation`) únicamente para registrar avistamientos locales y triangular por GPS + RSSI en el teléfono; no usa APIs en la nube.
 - Sin permiso de internet; `allowBackup=false`.
 - Las lecturas reales de una unidad (VIN, PDF, sesiones) **no** se suben al repositorio. Ver [CONTRIBUTING.md](../CONTRIBUTING.md).
 
