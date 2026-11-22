@@ -2,6 +2,66 @@
 
 Los **milestones** de GitHub organizan el trabajo. La **APK** se publica en **Releases** (GitHub no adjunta binarios a un milestone).
 
+## v1.15.0 — Tags: nombres BLE reales, calibración espacial silenciosa y UI minimalista
+
+- **Tag:** `v1.15.0`
+- **versionCode:** 32
+- **Fecha:** 2026-11-22
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.15.0 (`jac-diagnostic-lab-1.15.0-debug.apk` + `.sha256`)
+- **SHA-256:** `1cf4d6e5db95595f6ff2f03923b9ca2698eecc635955b7967323db56fa4e71bb`
+
+Nombres BLE reales (`scanRecord.deviceName`, `device.alias` en Android 11+, `device.name`) con fusión ADV + respuesta de escaneo; inferencia Bluetooth SIG / subtipo Apple / servicios cuando no hay nombre anunciado; apodos locales persistentes y filtros rápidos (`Todos`, `Rastreadores`, `Con nombre`); estimador espacial GPS + RSSI alimentado silenciosamente en segundo plano (calibrado con varianza residual `σ²`, `R²`, `RMS` y rechazo de caminatas en línea recta o ruido puro); vista Buscar minimalista con arco de incertidumbre, detección de señal perdida y soporte de `BackHandler`. Verificado por CI (tests, lint, APK) e instalado en Xiaomi `2512BPNDAG`. **PENDING_VALIDATION con tag físico.**
+
+## v1.14.0 — Tags: flecha de dirección orientativa y diseño minimalista (sin release propio; incluido en v1.15.0)
+
+- **versionCode:** 31 · **Fecha:** 2026-11-21
+- Brújula (`TYPE_ROTATION_VECTOR`) + `DirectionEstimator` por sectores de 22,5° con contraste mínimo de 5 dB; pruebas `DirectionEstimatorTest`.
+
+## v1.13.0 — Pestaña Tags: rastreadores BLE, modo Buscar y mapa exportable
+
+- **Tag:** `v1.13.0`
+- **versionCode:** 30
+- **Fecha:** 2026-11-21
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.13.0
+
+Escaneo BLE pasivo, clasificación por firma pública (Apple Find My, Google Find Hub, Samsung SmartTag, Tile, Chipolo, Xiaomi), bandas de proximidad y exportación GeoJSON/GPX + `geo:`. Quita `neverForLocation` de `BLUETOOTH_SCAN`. **PENDING_VALIDATION con tag físico.**
+
+## v1.12.1 — Borrar y limpiar: partir desde cero
+
+- **Tag:** `v1.12.1`
+- **versionCode:** 29
+- **Fecha:** 2026-11-21
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.1
+
+Un solo botón «Borrar y limpiar» con copia privada automática previa, Mode 04 por compuerta (`ClearDtcGate`) y relectura 03/07/0A. **PENDING_VALIDATION en vehículo.**
+
+## v1.12.0 — Borrado seguro de códigos (Mode 04) y forense de paros al frenar
+
+- **Tag:** `v1.12.0`
+- **versionCode:** 28
+- **Fecha:** 2026-11-21
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.0
+
+Compuerta `ClearDtcGate` para Mode 04 y módulo `EventForensics` en ruta con 5 hipótesis rivales. **PENDING_VALIDATION en vehículo.**
+
+## v1.11.2 — Informe profesional con sello C4A, bóveda privada y exportación cifrada
+
+- **Tag:** `v1.11.2`
+- **versionCode:** 27
+- **Fecha:** 2026-11-21
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.11.2
+
+PDF unificado con sello vectorial `C4A · c4a.cl` + huella SHA-256, bóveda privada (`filesDir/vault/`) y exportación cifrada AES-256-GCM (`.jacenc`).
+
+## v1.11.1 — Iteración A (P0)
+
+- **Tag:** `v1.11.1`
+- **versionCode:** 26
+- **Fecha:** 2026-11-21
+- **APK:** https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.11.1
+
+Semántica estricta de medición (`DtcReadState`, plausibilidad `UNVERIFIED`, ventana temporal, prueba de freno honesta) y CI con `gradlew` ejecutable.
+
 ## v1.11.0 — Validada en la unidad real: ECU DCM6.2 e informe profesional
 
 - **Tag:** `v1.11.0`

@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.15.0 — 2026-11-22 (JAC Diagnostic Lab) — Tags: nombres BLE reales, calibración espacial silenciosa y diseño minimalista
+
+- **Nombres reales e identidad inferida (`tracker/DeviceNaming.kt`, `tracker/TrackerCore.kt`, `tracker/TrackerScanner.kt`):**
+  - Captura el nombre desde `scanRecord.deviceName`, alias del sistema (Android 11+) y `device.name`, fusionando paquetes ADV + respuesta de escaneo sin que un nombre corto (`0x08`) pise al completo (`0x09`).
+  - Cuando un dispositivo no anuncia nombre por privacidad (como los tags Find My / Find Hub), muestra fabricante Bluetooth SIG, subtipo Apple (`AirPods / Beats`, `iPhone/iPad/Mac`, `Find My`…) o servicio conocido, declarando «sin nombre anunciado».
+  - Apodos persistentes por teléfono (guardados en `SharedPreferences`, accesibles desde un diálogo limpio en «Buscar» sin ensuciar la pantalla del radar) e incluidos en la exportación GeoJSON y GPX.
+  - Lista con filtros rápidos (`Todos`, `Rastreadores`, `Con nombre`), contador en vivo y tendencia (`↑`/`↓`).
+- **Calibración espacial silenciosa por debajo (`tracker/PositionEstimator.kt`):**
+  - El escáner alimenta el estimador GPS + RSSI en segundo plano por cada dispositivo mientras caminas: al abrir «Buscar» el recorrido ya cuenta sin obligarte a abrir un mapa.
+  - Agrupa lecturas muy cercanas (< 1,5 m) suavizando el RSSI en ese punto para no sesgar el ajuste cuando te detienes.
+  - Calibra la región de incertidumbre con la varianza residual real (`σ²`), `R²` y `RMS`, y pondera el centroide por verosimilitud gaussiana: rechaza recorridos en línea recta (ambigüedad simétrica) y señales ruidosas / tags en movimiento en lugar de inventar una flecha.
+  - Seguro para hilos (`@Synchronized` + copia instantánea en `estimate()` + contador de versión para no recalcular en vacío).
+- **Vista «Buscar» minimalista (`ui/TrackerTab.kt`):**
+  - Dial de precisión con anillos concéntricos, marca sutil del norte, arco de sector de incertidumbre (se estrecha al caminar), flecha suavizada, núcleo de proximidad «Aquí cerca», detección de señal perdida (> 10 s), soporte del botón Atrás del sistema (`BackHandler`) y acceso opcional al mapa solo si el usuario lo pide.
+- **Correcciones:** `SightingBook` sincronizado para hilos; captura de `bestPoint` cuando el GPS fija después de un paquete inicial sin GPS; eliminación de escritura de estado durante composición en el desenrollado del ángulo.
+- **Pruebas:** `PositionEstimatorTest` (7 casos: caminata en L, rechazo de línea recta, rechazo de ruido puro, colapso de lecturas quietas, filtro de baja precisión GPS, `Geo`, reinicio), `DeviceNamingTest` (8 casos: prioridad de nombres, inferencia Apple/servicios, fusión ADV+SCAN_RSP, GPS tardío, alimentación silenciosa) y `TrackerTest` ampliado (exportación con apodo y posición estimada). **PENDING_VALIDATION con dispositivo físico en exterior e interior.**
+
 ## v1.14.0 — 2026-11-21 (JAC Diagnostic Lab) — Tags: flecha de dirección y diseño minimalista
 
 - **Flecha orientativa en «Buscar» (`tracker/DirectionEstimator.kt`):** Bluetooth normal no entrega dirección, así que se estima: el usuario gira despacio con el teléfono plano delante, la app cruza la brújula (`TYPE_ROTATION_VECTOR`) con el RSSI de cada sector de 22,5° y la flecha apunta hacia el sector más fuerte (media circular ponderada; el cuerpo apantalla la señal por detrás). **Si el contraste entre el mejor sector y el opuesto es < 5 dB no se dibuja flecha** («Sin dirección clara: avance y gire otra vez») en vez de inventarla. Las muestras caducan a los 25 s. Cerca de la etiqueta (≥ −55 dBm) muestra «Está aquí».

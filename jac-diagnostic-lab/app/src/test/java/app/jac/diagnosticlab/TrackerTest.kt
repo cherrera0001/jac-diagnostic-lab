@@ -3,6 +3,7 @@ package app.jac.diagnosticlab
 import app.jac.diagnosticlab.tracker.Advert
 import app.jac.diagnosticlab.tracker.Confidence
 import app.jac.diagnosticlab.tracker.GeoPoint
+import app.jac.diagnosticlab.tracker.PositionEstimate
 import app.jac.diagnosticlab.tracker.ProximityBand
 import app.jac.diagnosticlab.tracker.SightingBook
 import app.jac.diagnosticlab.tracker.TrackerClassifier
@@ -74,5 +75,17 @@ class TrackerTest {
         val x = TrackerExport.gpx(bk.all())
         assertTrue(x.contains("lat=\"-33.45\" lon=\"-70.66\""))
         assertTrue(TrackerExport.geoUri(GeoPoint(-33.45, -70.66), "Tag & co").startsWith("geo:-33.45,-70.66?q="))
+    }
+    @Test fun exportPrefersUsableEstimateAndIncludesNickname() {
+        val bk = SightingBook()
+        bk.observe("AA:BB", Advert(name = "Mi Tag"), -70, 1, GeoPoint(-33.45, -70.66))
+        val est = PositionEstimate(GeoPoint(-33.46, -70.67), 9.0, 2.2, -58.0, 2.1, 0.82, 16, usable = true)
+        val g = TrackerExport.geoJson(bk.all(), mapOf("AA:BB" to "Llaves camioneta"), mapOf("AA:BB" to est))
+        assertTrue(g.contains("\"displayName\": \"Llaves camioneta\""))
+        assertTrue(g.contains("\"pointSource\": \"estimated\""))
+        assertTrue(g.contains("-70.67"))
+        val x = TrackerExport.gpx(bk.all(), mapOf("AA:BB" to "Llaves & Tag"), mapOf("AA:BB" to est))
+        assertTrue(x.contains("Llaves &amp; Tag"))
+        assertTrue(x.contains("lat=\"-33.46\" lon=\"-70.67\""))
     }
 }

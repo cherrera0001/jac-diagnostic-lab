@@ -1,15 +1,15 @@
-# Seguridad operativa y de solo lectura
+# Seguridad operativa y control de comandos
 
-Esta versión solo lee.
+La operación normal es de **solo lectura**. Desde `v1.12.0`/`v1.12.1`, la única excepción controlada es **«Borrar y limpiar»** (servicio OBD `04` detrás de `ClearDtcGate`), que exige confirmación, respaldo automático previo en la bóveda privada, ECU respondiendo y vehículo detenido (velocidad 0), seguido de relectura 03/07/0A.
 
 ## Permitido
 
-Conectar Bluetooth, configurar el ELM327, consultar servicios OBD estandarizados de lectura (`01`, `02`, `03`, `06`, `07`, `09`, `0A`), registrar sensores, ejecutar pruebas guiadas que solo leen, guardar capturas antes/después, exportar PDF/JSON/CSV/TXT.
+Conectar Bluetooth, configurar el ELM327, consultar servicios OBD estandarizados de lectura (`01`, `02`, `03`, `06`, `07`, `09`, `0A`), ejecutar «Borrar y limpiar» (`04` puntual autorizado por `ClearDtcGate`), registrar sensores, ejecutar pruebas guiadas que solo leen, guardar capturas antes/después, escanear anuncios BLE pasivos en la pestaña **Tags** y exportar PDF/JSON/CSV/TXT/`.jacenc`/GeoJSON/GPX.
 
 ## Prohibido (bloqueado antes de escribir al socket)
 
-- servicio OBD `04` y cualquier comando que empiece por `04`;
-- borrar sesiones o DTC desde la aplicación;
+- servicio OBD `04` fuera de una autorización puntual vigente de `ClearDtcGate` y cualquier forma extendida (`0400`, `04;03`, etc.);
+- borrar archivos de la bóveda privada (`filesDir/vault/`);
 - cabeceras CAN (`ATSH`), monitor de bus (`ATMA`) y controles del adaptador fuera de lista;
 - modo `08` y cualquier comando que no esté en la lista;
 - comandos compuestos con `;` o con más de una línea;
@@ -38,7 +38,7 @@ El banner en la UI y el ciclo **Taller** repiten esa regla.
 
 ## Datos sensibles
 
-El VIN no se pide hasta autorización explícita, y solo si `0900` indica soporte del PID `02`. La exportación puede anonimizar VIN y dirección Bluetooth. No hay permiso de internet. `android:allowBackup` está en falso.
+El VIN se consulta cuando `0900` declara soporte del PID `02`, y la exportación permite anonimizar VIN y dirección Bluetooth o empaquetar cifrado con AES-256-GCM (`.jacenc`). La pestaña **Tags** solicita ubicación en ejecución solo para registrar avistamientos locales y triangular por GPS + RSSI en el teléfono, sin servicios en la nube. No hay permiso de internet. `android:allowBackup` está en falso.
 
 ## Qué no afirma la app
 

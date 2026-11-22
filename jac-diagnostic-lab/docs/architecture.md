@@ -3,25 +3,40 @@
 La aplicación es un módulo Android. El protocolo OBD no importa clases de Android, así las pruebas JUnit corren en la JVM sin el teléfono.
 
 ```text
-AppShell Compose (Estado / En vivo / Pruebas / Datos / Informe)
-    └ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
-    DiagnosticViewModel
-        LabController          sesión, permisos, evidencia, snapshots
+AppShell Compose (Estado / En vivo / Pruebas / Datos / Tags / Informe)
+    ├ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
+    ├ TrackerTab (pestaña Tags, pasiva, sin conectar a dispositivos BLE)
+    │   ├ TrackerScanner / HeadingSensor
+    │   └ tracker/ (puro JVM): TrackerCore, DeviceNaming, PositionEstimator, DirectionEstimator
+    └ DiagnosticViewModel
+        LabController          sesión, permisos, evidencia, snapshots, bóveda privada
             BluetoothRepository
             ClassicElmTransport    RFCOMM SPP
             BleInspector           GATT, sin escritura hasta validar ATI
             ElmSession
-                ReadOnlyGate / ObdCommandPolicy
+                ReadOnlyGate / ObdCommandPolicy / ClearDtcGate (Mode 04 controlado)
                 ElmParser
                 DtcDecoder / PidDecoder / PidCatalog (J1979 multi-señal)
                 ReadinessDecoder / Mode06Decoder / Mode09Decoder
-                HealthAssessment        reglas de salud por sistema
-                GuidedTests             pruebas guiadas, eventos en ruta, CSV
+                HealthAssessment / EvidenceEngine
+                GuidedTests / EventForensics (paros y caídas de RPM en ruta)
                 Present                 texto corto para la UI
                 JacAnalysis / FaultIdentification
-                WorkshopGuide + monitor ordenado
-                Export JSON CSV TXT PDF
+                WorkshopGuide + WorkshopPdf (sello C4A) + SecureArchive (.jacenc AES-256-GCM)
+                Export JSON CSV TXT PDF GeoJSON GPX
 ```
+
+## Capas nuevas en 1.12.0–1.15.0
+
+| Pieza | Rol |
+| --- | --- |
+| `tracker/TrackerCore.kt` | Clasificador de firmas BLE públicas, libro de avistamientos sincronizado (`SightingBook`), fusión ADV + SCAN_RSP y exportación GeoJSON/GPX + `geo:`. |
+| `tracker/DeviceNaming.kt` | Resuelve nombres BLE reales, apodos locales e inferencia Bluetooth SIG / subtipo Apple / servicios para dispositivos sin nombre anunciado. |
+| `tracker/PositionEstimator.kt` | Calibración espacial silenciosa (GPS + RSSI) en segundo plano con agrupación espacial, varianza residual (`σ²`), `R²`/`RMS` y rechazo de recorridos ambiguos (línea recta) o ruido puro. |
+| `tracker/DirectionEstimator.kt` | Rumbo orientativo por giro con brújula (`HeadingSensor`, `TYPE_ROTATION_VECTOR`) exigiendo contraste mínimo de 5 dB. |
+| `security/ClearDtcGate.kt` | Compuerta para «Borrar y limpiar» (Mode `04` de un solo uso con respaldo previo y relectura 03/07/0A). |
+| `dynamic/EventForensics.kt` | Detección de paros / caídas de RPM con pedal pisado y evaluación de 5 hipótesis rivales. |
+| `report/WorkshopPdf.kt` & `evidence/SecureArchive.kt` | Generación PDF unificada con sello vectorial `C4A · c4a.cl`, bóveda privada (`filesDir/vault/`) y paquete cifrado `.jacenc`. |
 
 ## Capas nuevas en 1.8.0
 
@@ -56,4 +71,4 @@ Transportes tipados (`TransportKind`):
 - `ProductionVehicle` — RFCOMM/GATT reales; único aceptado por `LabController.bindProductionTransport`.
 - `ResearchLab` — `ResearchLabTransport` / `FakeObdTransport` (tests y lab). Rechazado en producción (`TransportIsolation`, LAB-CAN-001).
 
-La evidencia se escribe tras cada tramo en almacenamiento privado. No hay borrado de DTC ni de sesiones desde la UI.
+La evidencia se escribe tras cada tramo en almacenamiento privado (`filesDir/vault/` con `MANIFEST.sha256.txt`). La única operación de escritura OBD es «Borrar y limpiar» (Mode `04` detrás de `ClearDtcGate`, con respaldo privado previo y relectura 03/07/0A).
