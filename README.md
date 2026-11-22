@@ -2,7 +2,7 @@
 
 Evaluación del **11 de noviembre de 2026** sobre una JAC T8 estacionada, con un ELM327 Mini Bluetooth y un Xiaomi. No es una certificación ISO/SAE 21434 ni UNECE R155. Es un procedimiento reproducible: medir, guardar la respuesta cruda y separar la falla técnica de la ciberseguridad.
 
-**App actual: JAC Diagnostic Lab 1.12.1**, validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.12.1](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.12.1). En 1.10.0: Nuevo: informe para el taller después de leer todo ([SPEC-033](specs/033-workshop-report/spec.md)). En 1.9.0: Nuevo: identificación de ECU Mode 09 y perfil JAC T8 con fuentes ([SPEC-031](specs/031-vehicle-fingerprint-profiles/spec.md), [research/](research/)). Última publicada: [release v1.8.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0). Estado por sistema, escaneo de todos los PID declarados, Mode 06/09 y pruebas dinámicas. Issue abierto: **SAFE-001**.
+**App actual: JAC Diagnostic Lab 1.13.0**, validada en la unidad el 2026-11-18 ([resultados](research/validation/2026-11-18-unidad-real.md): ECU Delphi DCM6.2, P0579 + P2299 persistentes). APK: [release v1.13.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.13.0). En 1.10.0: Nuevo: informe para el taller después de leer todo ([SPEC-033](specs/033-workshop-report/spec.md)). En 1.9.0: Nuevo: identificación de ECU Mode 09 y perfil JAC T8 con fuentes ([SPEC-031](specs/031-vehicle-fingerprint-profiles/spec.md), [research/](research/)). Última publicada: [release v1.8.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.8.0). Estado por sistema, escaneo de todos los PID declarados, Mode 06/09 y pruebas dinámicas. Issue abierto: **SAFE-001**.
 
 El informe de la medición no se versiona. Queda solo en el equipo donde se generó.
 
@@ -96,7 +96,7 @@ gradlew.bat :app:testDebugUnitTest :app:assembleDebug
 Instalar la APK debug con el teléfono desbloqueado:
 
 ```text
-adb install -r dist\jac-diagnostic-lab-1.12.1-debug.apk
+adb install -r dist\jac-diagnostic-lab-1.13.0-debug.apk
 ```
 
 ## Cómo se construye
@@ -105,7 +105,7 @@ El trabajo nuevo entra por [specs/PROCESO.md](specs/PROCESO.md): requisito numer
 
 ## Versión
 
-La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.12.1 (`versionCode` 29). Los resultados de una unidad concreta no forman parte de este archivo.
+La serie de cambios de software está en [CHANGELOG.md](CHANGELOG.md). La app informa `versionName` 1.13.0 (`versionCode` 30). Los resultados de una unidad concreta no forman parte de este archivo.
 
 ## Licencia y uso
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.13.0 — 2026-11-21 (JAC Diagnostic Lab) — pestaña «Tags»: rastreadores BLE cercanos
+
+- **Nueva pestaña «Tags»:** escaneo BLE pasivo (no se conecta), clasificación por firma pública (Apple Find My tipo 0x12; Google Find Hub trama 0xFEAA 0x40/0x41; Samsung SmartTag, Tile, Chipolo; fabricante Xiaomi 0x038F), modo **Buscar** caliente/frío con RSSI suavizado, tendencia y banda de proximidad, y **mapa de avistamientos**: cada avistamiento con la posición del teléfono; el punto es donde la señal fue más fuerte. Exporta GeoJSON y GPX (Descargas/JAC-lectura + copia privada) y abre el punto en cualquier app de mapas (`geo:`; sin API ni clave).
+- **Límites declarados en pantalla:** un Xiaomi Tag se anuncia como accesorio de la red Apple o Google elegida al configurarlo: por BLE no se distingue el fabricante. La ubicación en la nube de un tag solo la ve su dueño (Find My / Find Hub); no hay API pública. Las firmas están **sin validar con dispositivos físicos** (PENDING_VALIDATION).
+- **Manifiesto:** se quita `neverForLocation` de `BLUETOOTH_SCAN` y se pide ubicación en ejecución solo al escanear tags (Android filtra anuncios tipo baliza con ese flag). Cambia la declaración de permisos para tiendas.
+- Pruebas: `TrackerTest` (clasificación, bandas, tendencia, mejor punto, GeoJSON lon/lat, GPX).
+
 ## v1.12.1 — 2026-11-21 (JAC Diagnostic Lab) — «Borrar y limpiar»: partir desde cero
 
 - **Un solo botón «Borrar y limpiar»** (reemplaza el flujo de tres pasos y la frase escrita): copia privada automática (PDF + JSON) → vacía los datos de la sesión (muestras, pruebas, salud, capturas, registro) y abre una sesión nueva → Mode 04 → relee 03/07/0A para mostrar el estado real de la ECU. Un diálogo de confirmación. Casilla para vaciar también el historial de telemetría (se archiva antes en la bóveda privada).

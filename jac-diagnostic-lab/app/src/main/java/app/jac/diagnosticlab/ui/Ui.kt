@@ -1378,7 +1378,7 @@ private fun ClearCodesCard(state: LabState, model: DiagnosticViewModel) {
     }
 }
 
-private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
+internal fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
     if (Build.VERSION.SDK_INT >= 29) {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
@@ -1407,7 +1407,7 @@ private fun professionalPdf(model: DiagnosticViewModel, live: Boolean, title: St
     else app.jac.diagnosticlab.report.WorkshopPdf.renderPlain(title, lines, appVersion, stamp())
 
 /** Copia privada de la app (no visible a otras apps) con manifiesto SHA-256. */
-private fun vaultSave(context: Context, session: String, files: Map<String, ByteArray>): String =
+internal fun vaultSave(context: Context, session: String, files: Map<String, ByteArray>): String =
     app.jac.diagnosticlab.evidence.ReportVault(File(context.filesDir, "vault")).save(session, files).name
 
 data class PlainReading(
