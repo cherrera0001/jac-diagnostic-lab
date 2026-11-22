@@ -36,6 +36,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import app.jac.diagnosticlab.saveDownload
+import app.jac.diagnosticlab.vaultSave
 import app.jac.diagnosticlab.tracker.Confidence
 import app.jac.diagnosticlab.tracker.ProximityBand
 import app.jac.diagnosticlab.tracker.Sighting
