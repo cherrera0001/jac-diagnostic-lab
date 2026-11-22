@@ -5,9 +5,9 @@ La aplicación es un módulo Android. El protocolo OBD no importa clases de Andr
 ```text
 AppShell Compose (Estado / En vivo / Pruebas / Datos / Tags / Informe)
     ├ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
-    ├ TrackerTab (pestaña Tags, pasiva, sin conectar a dispositivos BLE)
-    │   ├ TrackerScanner / HeadingSensor
-    │   └ tracker/ (puro JVM): TrackerCore, DeviceNaming, PositionEstimator, DirectionEstimator
+    ├ TrackerTab (pestaña Tags, pasiva por defecto + consulta GATT/DULT bajo demanda)
+    │   ├ TrackerScanner / HeadingSensor / GattInspector (GAP + DIS + Battery + IETF DULT)
+    │   └ tracker/ (puro JVM): TrackerCore, BleAdParser, DeviceNaming, PositionEstimator, DirectionEstimator
     └ DiagnosticViewModel
         LabController          sesión, permisos, evidencia, snapshots, bóveda privada
             BluetoothRepository
@@ -26,12 +26,14 @@ AppShell Compose (Estado / En vivo / Pruebas / Datos / Tags / Informe)
                 Export JSON CSV TXT PDF GeoJSON GPX
 ```
 
-## Capas nuevas en 1.12.0–1.15.0
+## Capas nuevas en 1.12.0–1.16.0
 
 | Pieza | Rol |
 | --- | --- |
-| `tracker/TrackerCore.kt` | Clasificador de firmas BLE públicas, libro de avistamientos sincronizado (`SightingBook`), fusión ADV + SCAN_RSP y exportación GeoJSON/GPX + `geo:`. |
-| `tracker/DeviceNaming.kt` | Resuelve nombres BLE reales, apodos locales e inferencia Bluetooth SIG / subtipo Apple / servicios para dispositivos sin nombre anunciado. |
+| `tracker/BleAdParser.kt` | Parser puro JVM de `GAP Appearance` (`AD 0x19`), bloques múltiples TLV Apple Continuity (`0x004C`) y respuestas IETF DULT (`0x0804`/`0x0805`/`0x0806`). |
+| `tracker/TrackerCore.kt` | Clasificador de firmas BLE públicas + categorización real (`DeviceCategory`: Rastreador, Audio, Reloj/Pulsera, Teléfono/PC, TV/Hogar, Periférico, Auto/OBD, Baliza, BLE), libro sincronizado (`SightingBook`), fusión ADV + SCAN_RSP y exportación GeoJSON/GPX + `geo:`. |
+| `tracker/GattInspector.kt` | Consulta activa opcional (solo al pulsar «Identificar»): lee GAP (`0x2A00`/`0x2A01`), DIS (`0x180A`), Batería (`0x180F`) y el servicio estándar IETF DULT (`15190001-…`) para fabricante, modelo y categoría. |
+| `tracker/DeviceNaming.kt` | Resuelve apodos locales, identidad GATT/DULT, nombres BLE reales e inferencia Bluetooth SIG / subtipo Apple / servicios para dispositivos sin nombre anunciado. |
 | `tracker/PositionEstimator.kt` | Calibración espacial silenciosa (GPS + RSSI) en segundo plano con agrupación espacial, varianza residual (`σ²`), `R²`/`RMS` y rechazo de recorridos ambiguos (línea recta) o ruido puro. |
 | `tracker/DirectionEstimator.kt` | Rumbo orientativo por giro con brújula (`HeadingSensor`, `TYPE_ROTATION_VECTOR`) exigiendo contraste mínimo de 5 dB. |
 | `security/ClearDtcGate.kt` | Compuerta para «Borrar y limpiar» (Mode `04` de un solo uso con respaldo previo y relectura 03/07/0A). |
