@@ -133,7 +133,7 @@ object GuidedTests {
     }
     private fun worst(ms: List<TestMetric>, ev: List<TraceEvent> = emptyList()): HealthStatus {
         val m = ms.filter { it.status != HealthStatus.NO_DATA }.maxByOrNull { it.status.rank }?.status ?: HealthStatus.NO_DATA
-        val e = if (ev.any { !it.manual && it.kind.startsWith("CORTE") }) HealthStatus.CHECK else HealthStatus.OK
+        val e = if (ev.any { !it.manual && (it.kind.startsWith("CORTE") || it.kind == "MOTOR DETENIDO" || it.kind.startsWith("CAÍDA BRUSCA")) }) HealthStatus.CHECK else HealthStatus.OK
         return if (e.rank > m.rank) e else m
     }
     private fun st(bad: Boolean, warn: Boolean) = when { bad -> HealthStatus.CHECK; warn -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
@@ -192,7 +192,7 @@ object GuidedTests {
         val metrics = listOf(
             TestMetric("Aceleraciones mantenidas", held.toDouble(), "", if (held == 0) HealthStatus.NO_DATA else HealthStatus.INFO, "Se esperaban 3."),
             TestMetric("Cortes de par al frenar", cuts.toDouble(), "", when { held == 0 -> HealthStatus.NO_DATA; cuts == 0 -> HealthStatus.ATTENTION; else -> HealthStatus.OK },
-                "Corte = la ECU recibió la señal de freno."),
+                "Observable: RPM cae bajo acelerador mantenido. Es una inferencia, no mide el interruptor de freno."),
             TestMetric("Pedal pista D en reposo", rest, "%", if (rest == null) HealthStatus.NO_DATA else HealthStatus.INFO),
             TestMetric("Relación pistas D/E", rm, "", if (rm == null) HealthStatus.NO_DATA else st(ratioBad, false),
                 if (rs != null && rm != null) "Variación %.0f %%. Las dos pistas deben moverse en proporción fija.".format(Locale.ROOT, rs / rm * 100) else ""),
@@ -200,8 +200,8 @@ object GuidedTests {
         )
         val summary = when {
             held == 0 -> "No se detectó acelerador mantenido. Repetir siguiendo los pasos."
-            cuts > 0 -> "La ECU cortó el par $cuts vez/veces al pisar el freno: recibe la señal principal del freno. Con P0579/P2299 revisar el SEGUNDO contacto del interruptor (plausibilidad) y su ajuste contra el pedal."
-            else -> "La ECU no cortó el par al frenar en $held intento(s). O no recibe la señal de freno, o esta calibración no corta en neutro. Medir el interruptor de freno (ambos contactos) y comprobar que encienden las luces de freno."
+            cuts > 0 -> "Observable: la RPM cayó $cuts vez/veces al frenar con el acelerador pisado. Inferencia (no confirmada): la ECU pudo reaccionar a una señal de freno; también explican la caída el corte por plausibilidad APP, el soltar el pedal o una estrategia de la calibración. Falta medir: estado eléctrico de AMBOS contactos del interruptor de freno (equipo externo) y leer DTC/freeze frame. Con P0579/P2299 priorizar el protocolo estacionario."
+            else -> "Observable: no hubo caída de RPM al frenar en $held intento(s). No demuestra que la ECU no reciba el freno: la calibración puede no cortar en esta condición. Falta medir: ambos contactos del interruptor de freno con multímetro/osciloscopio y que enciendan las luces de freno."
         }
         return Triple(metrics, events, summary + if (ratioBad) " Las pistas del pedal no se mueven en proporción: revisar el pedal." else "")
     }
@@ -335,10 +335,6 @@ object GuidedTests {
                     events += TraceEvent(f.atMs, "CORTE DE POTENCIA", "Torque %.0f→%.0f %% con pedal %.0f %% a %.0f km/h (posible SAFE-001)".format(maxTq, tq, pedal, spd))
                 }
             }
-            val rpm = f.values[RPM]
-            if (rpm != null && rpm < 300 && spd != null && spd > 10) {
-                if (events.none { it.kind == "MOTOR DETENIDO" && f.atMs - it.atMs < 10_000 }) events += TraceEvent(f.atMs, "MOTOR DETENIDO", "RPM %.0f con %.0f km/h".format(rpm, spd))
-            }
             val v = f.values[VOLT]
             if (v != null && v < 11.8 && (lowVoltAt == null || f.atMs - lowVoltAt!! > 10_000)) { lowVoltAt = f.atMs; events += TraceEvent(f.atMs, "CAÍDA DE TENSIÓN", "%.2f V".format(v)) }
             val r = f.values[REGEN]?.let { it >= 1 }
@@ -354,6 +350,17 @@ object GuidedTests {
             val ect = f.values[ECT]
             if (ect != null && ect > 108 && events.none { it.kind == "SOBRETEMPERATURA" && f.atMs - it.atMs < 60_000 }) events += TraceEvent(f.atMs, "SOBRETEMPERATURA", "Refrigerante %.0f °C".format(ect))
         }
+        val forensic = EventForensics.assess(fr)
+        forensic.events.forEach { e ->
+            events += TraceEvent(
+                e.atMs, e.kind.label,
+                "RPM %.0f→%.0f, vel %s km/h, pedal D %s %%, tensión mín %s V%s".format(
+                    Locale.ROOT, e.rpmBefore, e.rpmAfter, e.speedAt?.let { "%.0f".format(Locale.ROOT, it) } ?: "—",
+                    e.pedalD?.let { "%.0f".format(Locale.ROOT, it) } ?: "—", e.voltMin?.let { "%.1f".format(Locale.ROOT, it) } ?: "—",
+                    if (e.decelerating || e.stopped) " (frenando/detenido, inferido)" else ""),
+            )
+        }
+        events.sortBy { it.atMs }
         val spd = vals(fr, SPEED)
         val cuts = events.count { it.kind == "CORTE DE POTENCIA" }
         val metrics = listOf(
@@ -368,7 +375,12 @@ object GuidedTests {
             TestMetric("ΔP DPF máxima", vals(fr, DPF_DP).maxOrNull(), "kPa", HealthStatus.INFO, "Bajo carga sube; comparar entre recorridos."),
             TestMetric("Consumo medio", mean(vals(fr, FUEL)), "L/h", HealthStatus.INFO),
         )
-        return Triple(metrics, events, "%.1f km, %d evento(s) automáticos.".format(distanceKm, events.size))
+        val hyp = forensic.hypotheses.joinToString(" ") { "[${it.support.label}] ${it.name}: ${it.evidence} Medir: ${it.nextMeasurement}" }
+        return Triple(
+            metrics + TestMetric("Paros / caídas de RPM", forensic.events.size.toDouble(), "", if (forensic.events.isEmpty()) HealthStatus.OK else HealthStatus.CHECK, forensic.summary),
+            events,
+            "%.1f km, %d evento(s) automáticos. %s %s".format(Locale.ROOT, distanceKm, events.size, forensic.summary, hyp),
+        )
     }
 
     /** CSV ancho: una fila por ronda, una columna por señal. Para Excel / MATLAB / el taller. */

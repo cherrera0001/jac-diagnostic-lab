@@ -1,5 +1,55 @@
 # Changelog
 
+## v1.14.0 — 2026-11-21 (JAC Diagnostic Lab) — Tags: flecha de dirección y diseño minimalista
+
+- **Flecha orientativa en «Buscar» (`tracker/DirectionEstimator.kt`):** Bluetooth normal no entrega dirección, así que se estima: el usuario gira despacio con el teléfono plano delante, la app cruza la brújula (`TYPE_ROTATION_VECTOR`) con el RSSI de cada sector de 22,5° y la flecha apunta hacia el sector más fuerte (media circular ponderada; el cuerpo apantalla la señal por detrás). **Si el contraste entre el mejor sector y el opuesto es < 5 dB no se dibuja flecha** («Sin dirección clara: avance y gire otra vez») en vez de inventarla. Las muestras caducan a los 25 s. Cerca de la etiqueta (≥ −55 dBm) muestra «Está aquí».
+- **Diseño minimalista:** lista de una línea por dispositivo (punto de color + tipo + banda), vista Buscar a pantalla completa con anillo, flecha, una frase de instrucción y dBm en pequeño; arco de progreso mientras se gira; descripción accesible para TalkBack.
+- Pruebas: `DirectionEstimatorTest` (7: rumbo hacia 0/90/200/315°, cruce del norte, giro insuficiente, señal plana sin flecha, caducidad, reinicio, ángulo relativo con signo). **PENDING_VALIDATION con un tag físico:** la precisión real depende del teléfono, del cuerpo y del entorno.
+
+## v1.13.0 — 2026-11-21 (JAC Diagnostic Lab) — pestaña «Tags»: rastreadores BLE cercanos
+
+- **Nueva pestaña «Tags»:** escaneo BLE pasivo (no se conecta), clasificación por firma pública (Apple Find My tipo 0x12; Google Find Hub trama 0xFEAA 0x40/0x41; Samsung SmartTag, Tile, Chipolo; fabricante Xiaomi 0x038F), modo **Buscar** caliente/frío con RSSI suavizado, tendencia y banda de proximidad, y **mapa de avistamientos**: cada avistamiento con la posición del teléfono; el punto es donde la señal fue más fuerte. Exporta GeoJSON y GPX (Descargas/JAC-lectura + copia privada) y abre el punto en cualquier app de mapas (`geo:`; sin API ni clave).
+- **Límites declarados en pantalla:** un Xiaomi Tag se anuncia como accesorio de la red Apple o Google elegida al configurarlo: por BLE no se distingue el fabricante. La ubicación en la nube de un tag solo la ve su dueño (Find My / Find Hub); no hay API pública. Las firmas están **sin validar con dispositivos físicos** (PENDING_VALIDATION).
+- **Manifiesto:** se quita `neverForLocation` de `BLUETOOTH_SCAN` y se pide ubicación en ejecución solo al escanear tags (Android filtra anuncios tipo baliza con ese flag). Cambia la declaración de permisos para tiendas.
+- Pruebas: `TrackerTest` (clasificación, bandas, tendencia, mejor punto, GeoJSON lon/lat, GPX).
+
+## v1.12.1 — 2026-11-21 (JAC Diagnostic Lab) — «Borrar y limpiar»: partir desde cero
+
+- **Un solo botón «Borrar y limpiar»** (reemplaza el flujo de tres pasos y la frase escrita): copia privada automática (PDF + JSON) → vacía los datos de la sesión (muestras, pruebas, salud, capturas, registro) y abre una sesión nueva → Mode 04 → relee 03/07/0A para mostrar el estado real de la ECU. Un diálogo de confirmación. Casilla para vaciar también el historial de telemetría (se archiva antes en la bóveda privada).
+- La compuerta exige solo lo técnico de J1979: ECU respondiendo y velocidad 0. Sin velocidad vigente ya no bloquea (la ECU decide). El resultado informa lo que la ECU dijo (aceptó / rechazó `7F 04 xx` / sin respuesta / códigos que reaparecen); los permanentes (0A) se indican.
+- **Issue SAFE-001 corregido:** el alcance ahora incluye borrar y limpiar; criterios actualizados; sigue abierto hasta identificar y corregir la causa.
+- Pruebas actualizadas (`ClearDtcGateTest`). **PENDING_VALIDATION en vehículo:** aceptación de Mode 04 por la ECU DCM6.2.
+
+## v1.12.0 — 2026-11-21 (JAC Diagnostic Lab) — borrado seguro de códigos y forense de paros al frenar
+
+Motivo: el síntoma sigue activo (≈10 paros en 30 min de conducción). Se necesita partir de cero y capturar el evento, no solo leer códigos.
+
+- **Borrar códigos (Mode 04) por compuerta (`security/ClearDtcGate.kt`):** exige ECU respondiendo, velocidad vigente = 0 (sin velocidad no se asume detenido), evidencia «antes de borrar» (PDF + JSON, ≤ 10 min) y escribir BORRAR. La autorización del comando `04` es de un solo uso y dura 20 s; cualquier otra forma (`0400`, `04;03`, UDS `14`, etc.) sigue bloqueada. Tras el borrado relee 03/07/0A y solo declara «confirmado» si la relectura es válida y vacía; informa rechazo `7F 04 xx`, sin respuesta, o códigos que reaparecen. No borra permanentes (0A) y lo dice.
+- **Forense de paros (`dynamic/EventForensics.kt`), dentro de «Registro en ruta»:** detecta MOTOR DETENIDO (RPM < 300 viniendo de ≥ 600) y CAÍDA BRUSCA DE RPM con el pedal aún pisado; levantar el pie o el embrague no cuenta. Por evento guarda velocidad, pedal D/E, tensión, riel y turbo, y marca si fue frenando/detenido (inferido de la velocidad). Pondera 5 hipótesis rivales (freno, alimentación eléctrica, pedal, combustible, turbo) como «compatible / no respaldada / sin datos». Ordena qué medir; **no identifica la pieza** y declara que falta el estado eléctrico del interruptor de freno.
+- Corregido: `README` ya no afirma que la app nunca borra códigos.
+- Pruebas: `ClearDtcGateTest` (precondiciones, autorización, decodificación 44 / 7F 04 22 / NO DATA, resultado sin falso «confirmado») y `EventForensicsTest` (paro frenando, pie fuera no es evento, 10 eventos, caída de tensión, sin datos ≠ descartado). **PENDING_VALIDATION en vehículo:** si la ECU DCM6.2 acepta Mode 04 y el comportamiento real de la detección con el ELM327.
+- SAFE-001 sigue abierto: el borrado no es una solución.
+
+## v1.11.2 — 2026-11-21 (JAC Diagnostic Lab) — informe profesional con sello C4A y almacenamiento seguro
+
+- **Causa raíz del formato perdido:** solo la tarjeta «Informe para el taller» usaba el generador profesional (`WorkshopPdf`). El botón «Guardar informe PDF» del asistente y «PDF del informe» de Exportar usaban un volcado de texto plano. Ahora las tres rutas usan `WorkshopPdf`; una sesión guardada sin lectura en vivo se dibuja dentro del mismo marco (`renderPlain`).
+- **Sello C4A · c4a.cl** (vectorial, sin imágenes): en cada cabecera, en la portada, en el pie y en una caja final «Sello de integridad» con la huella SHA-256 del contenido. Es una huella de integridad, no una firma digital ni una certificación.
+- **Guardado seguro:** cada informe se copia además a un almacén privado de la app (`filesDir/vault/<sesión>/`, con `allowBackup=false`) con `MANIFEST.sha256.txt` verificable y escritura atómica.
+- **Exportación segura:** «Exportar cifrado (.jacenc)»: ZIP + manifiesto, AES-256-GCM, clave PBKDF2-HMAC-SHA256 (210 000 iteraciones), encabezado autenticado. Contraseña mínima de 8 caracteres.
+- Pruebas: `SecureArchiveTest` (8: ida y vuelta, contraseña errónea, alteración de cabecera/cuerpo, vault y path traversal). El render visual del PDF no es comprobable en JVM: **PENDING_VALIDATION en dispositivo**.
+
+## v1.11.1 — 2026-11-21 (JAC Diagnostic Lab) — Iteración A (P0)
+
+Corrige semántica de medición. Verificado por CI (tests, lint, APK); **no validado aún en vehículo**.
+
+- **CI:** `gradlew` estaba en Git sin bit ejecutable (modo 100644) y el runner fallaba con exit 126; ahora 100755 y el workflow invoca `bash ./gradlew`.
+- **DTC (P0.2):** nuevo `DtcReadState` (NOT_READ, READ_ERROR, UNSUPPORTED, VALID_EMPTY, VALID_WITH_CODES). «Sin códigos» solo si Mode 03 respondió válido y vacío; no leído, error o `7F` (p. ej. Mode 0A `7F 0A 13`) se muestra como SIN DATO, nunca OK.
+- **Plausibilidad (P0.3):** nuevo estado `UNVERIFIED`. Presión diferencial DPF negativa o fuera de rango, NaN e infinitos ya no reciben OK; se indica revisar bytes crudos y fórmula antes de atribuir avería.
+- **Contexto temporal (P0.4):** sin velocidad vigente no se presume vehículo detenido ni ralentí; `signalAgesMs` permite descartar señales de otro instante (ventana 5 s).
+- **Prueba de freno (P0.5):** el texto separa observable, inferencia y medida faltante (interruptor de freno, ambos contactos); ya no afirma que la ECU recibió el freno. SAFE-001 sigue abierto.
+- Incluye SPEC-034 (EvidenceEngine) que estaba sin confirmar en el árbol.
+- Pendiente: P0.6 remediación (ver informe), P1–P5.
+
 ## v1.11.0 — 2026-11-18 (JAC Diagnostic Lab) — validada en la unidad real
 
 Primera lectura completa de la unidad con la app nueva: [research/validation/2026-11-18-unidad-real.md](research/validation/2026-11-18-unidad-real.md).

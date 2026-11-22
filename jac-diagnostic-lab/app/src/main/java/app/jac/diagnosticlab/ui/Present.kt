@@ -25,7 +25,7 @@ object Present {
     }
 
     fun worst(items: List<HealthItem>): HealthStatus =
-        items.filter { it.status != HealthStatus.NO_DATA }.maxByOrNull { it.status.rank }?.status ?: HealthStatus.NO_DATA
+        items.filter { it.status.rank >= 0 }.maxByOrNull { it.status.rank }?.status ?: HealthStatus.NO_DATA
 
     fun word(s: HealthStatus) = when (s) {
         HealthStatus.OK -> "Bien"
@@ -33,6 +33,7 @@ object Present {
         HealthStatus.ATTENTION -> "Atención"
         HealthStatus.CHECK -> "Revisar"
         HealthStatus.NO_DATA -> "Sin dato"
+        HealthStatus.UNVERIFIED -> "No verificable"
     }
 
     /** Grupo de una señal para la pestaña Datos. */
@@ -73,7 +74,7 @@ object Present {
         return when (key) {
             "05" -> when { v > 108 -> HealthStatus.CHECK; v > 102 -> HealthStatus.ATTENTION; v < 70 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
             "42" -> if (!running) null else when { v < 12.8 || v > 15.2 -> HealthStatus.CHECK; v < 13.3 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
-            "7A.DP" -> when { v > 5 -> HealthStatus.CHECK; v > 2.5 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
+            "7A.DP" -> if (!app.jac.diagnosticlab.analysis.Plausibility.dpfDifferentialOk(v)) HealthStatus.UNVERIFIED else when { v > 5 -> HealthStatus.CHECK; v > 2.5 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
             "8B.TRIG" -> when { v >= 95 -> HealthStatus.CHECK; v >= 80 -> HealthStatus.ATTENTION; else -> HealthStatus.OK }
             "78.S1" -> when { v > 850 -> HealthStatus.CHECK; v > 750 -> HealthStatus.ATTENTION; else -> null }
             else -> null

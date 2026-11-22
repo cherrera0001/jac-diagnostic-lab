@@ -1,5 +1,6 @@
 package app.jac.diagnosticlab.ui
 
+import android.content.res.Configuration
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -48,12 +50,18 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.jac.diagnosticlab.LabState
+import app.jac.diagnosticlab.analysis.DashboardLinkStatus
+import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
 import app.jac.diagnosticlab.analysis.HealthStatus
+import app.jac.diagnosticlab.analysis.ShiftCue
+import app.jac.diagnosticlab.analysis.TripGuidanceSummary
 import app.jac.diagnosticlab.bt.LinkPhase
 import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.dynamic.TestContext
@@ -75,6 +83,7 @@ private fun tone(s: HealthStatus?): Color = when (s) {
     HealthStatus.ATTENTION -> Color(0xFFFFCA28)
     HealthStatus.CHECK -> Color(0xFFEF5350)
     HealthStatus.NO_DATA -> Color(0xFF5C6773)
+    HealthStatus.UNVERIFIED -> Color(0xFF9575CD)
     null -> Text1
 }
 
@@ -97,7 +106,23 @@ fun AppShell(
     advancedSection: @Composable ColumnScope.() -> Unit,
 ) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    val tabs = listOf("Estado", "En vivo", "Pruebas", "Datos", "Informe")
+    var handsFreeBoard by rememberSaveable { mutableStateOf(false) }
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val liveOn = state.activeTest == "LIVE"
+    val showBoard = handsFreeBoard || (tab == 1 && liveOn && isLandscape)
+    if (showBoard) {
+        HandsFreeDashboard(
+            state = state,
+            isLandscape = isLandscape,
+            onExit = { handsFreeBoard = false },
+            onStop = {
+                handsFreeBoard = false
+                actions.stopTest()
+            },
+        )
+        return
+    }
+    val tabs = listOf("Estado", "En vivo", "Pruebas", "Datos", "Tags", "Informe")
     Scaffold(
         containerColor = Bg,
         topBar = { ConnectionBar(state, actions) },
@@ -124,9 +149,10 @@ fun AppShell(
             state.error?.let { ErrorStrip(it, state.recovery) }
             when (tab) {
                 0 -> StatusTab(state, actions) { tab = 3 }
-                1 -> LiveTab(state, actions)
+                1 -> LiveTab(state, actions) { handsFreeBoard = true }
                 2 -> TestsTab(state, actions)
                 3 -> DataTab(state)
+                4 -> TrackerTab()
                 else -> ReportTab(exportSection, advancedSection, actions)
             }
             Spacer(Modifier.height(12.dp))
@@ -407,22 +433,198 @@ private val liveGauges = listOf(
 )
 
 @Composable
-private fun LiveTab(state: LabState, actions: ShellActions) {
+private fun LiveTab(state: LabState, actions: ShellActions, openBoard: () -> Unit) {
     val liveOn = state.activeTest == "LIVE"
     val other = state.activeTest != null && !liveOn
     if (!liveOn) {
-        Hero("En vivo", if (other) "Hay una prueba en curso." else "Números grandes, actualizados varias veces por segundo.", Accent)
-        PrimaryButton("Iniciar", !state.busy && !other && state.ecuTalking) { actions.startTest("LIVE") }
+        Hero("En vivo", if (other) "Hay una prueba en curso." else "Modo Tablero / Tablet hands-free y sensores en tiempo real.", Accent)
+        PrimaryButton("Iniciar en vivo", !state.busy && !other && state.ecuTalking) { actions.startTest("LIVE") }
+        OutlinedButton(onClick = openBoard, modifier = Modifier.fillMaxWidth()) {
+            Text("Abrir Modo Tablero (Hands-Free)", color = Text1)
+        }
         if (!state.ecuTalking) Text("Primero conecta desde Estado.", color = Text2, fontSize = 13.sp)
+        state.lastTripSummary?.let { TripSummaryCard(it) }
         return
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFFEF5350)))
+        LinkStatusChip(state.liveLinkStatus)
         Spacer(Modifier.width(8.dp))
-        Text("%.1f actualizaciones/s · %d s".format(state.testHz, state.testElapsedMs / 1000), color = Text2, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        Text("%.1f Hz · %d s".format(state.testHz, state.testElapsedMs / 1000), color = Text2, fontSize = 13.sp, modifier = Modifier.weight(1f))
+        TextButton(onClick = openBoard) { Text("Tablero", color = Accent) }
         TextButton(onClick = actions.stopTest) { Text("Detener", color = Accent) }
     }
+    state.drivingGuidance?.let { GuidanceStrip(it) }
     GaugeGrid(state)
+}
+
+@Composable
+private fun LinkStatusChip(status: DashboardLinkStatus) {
+    val color = when (status) {
+        DashboardLinkStatus.CONNECTED -> Color(0xFF2ECC71)
+        DashboardLinkStatus.RECONNECTING -> Color(0xFFFFC107)
+        DashboardLinkStatus.PAUSED -> Color(0xFF90A4AE)
+    }
+    Row(
+        Modifier.clip(RoundedCornerShape(12.dp)).background(color.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(9.dp).clip(CircleShape).background(color))
+        Spacer(Modifier.width(6.dp))
+        Text(status.label, color = color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+private fun cueColor(cue: ShiftCue): Color = when (cue) {
+    ShiftCue.SHIFT_DOWN -> Color(0xFFFF5252)
+    ShiftCue.SHIFT_UP -> Color(0xFFFFC107)
+    ShiftCue.COLD_ENGINE -> Color(0xFF4FC3F7)
+    ShiftCue.OPTIMAL -> Color(0xFF2ECC71)
+    ShiftCue.IDLE_OR_STOPPED, ShiftCue.INSUFFICIENT_DATA -> Color(0xFFB0BEC5)
+}
+
+@Composable
+private fun GuidanceStrip(g: app.jac.diagnosticlab.analysis.DrivingGuidanceSnapshot) {
+    val c = cueColor(g.cue)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.copy(alpha = 0.14f)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(g.cue.arrow, color = c, fontSize = 36.sp, fontWeight = FontWeight.Black, modifier = Modifier.width(44.dp))
+        Column(Modifier.weight(1f)) {
+            Text(g.cue.label, color = c, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(g.note, color = Text1, fontSize = 12.sp)
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text(g.gearInference.label, color = Text1, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            Text("Marcha (inf.)", color = Text2, fontSize = 10.sp)
+        }
+    }
+}
+
+@Composable
+private fun TripSummaryCard(summary: TripGuidanceSummary) {
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("RESUMEN POST-VIAJE (R6)", color = Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        summary.summaryLines.forEach { line ->
+            Text("• $line", color = Text1, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            "${summary.movingSamples} muestras en movimiento de ${summary.totalSamples} totales · sin puntaje global inventado.",
+            color = Text2,
+            fontSize = 11.sp,
+        )
+    }
+}
+
+/**
+ * SPEC-034 R6: Modo Tablero / Tablet Hands-Free.
+ * Alto contraste, tipografía gigante para lectura de un vistazo en soporte fijo, cero interacción
+ * requerida al conducir y pantalla siempre activa.
+ */
+@Composable
+private fun HandsFreeDashboard(
+    state: LabState,
+    isLandscape: Boolean,
+    onExit: () -> Unit,
+    onStop: () -> Unit,
+) {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        val prev = view.keepScreenOn
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = prev }
+    }
+    val live = state.testLive?.values.orEmpty()
+    val g = state.drivingGuidance ?: DrivingGuidanceEngine.evaluateFrame(live)
+    val c = cueColor(g.cue)
+    val rpmTxt = live["0C"]?.let { "%.0f".format(it) } ?: "—"
+    val spdTxt = live["0D"]?.let { "%.0f".format(it) } ?: "—"
+    val loadTxt = live["04"]?.let { "%.0f".format(it) } ?: "—"
+    val ectTxt = live["05"]?.let { "%.0f".format(it) } ?: "—"
+
+    Column(
+        Modifier.fillMaxSize().background(Color(0xFF05080C)).statusBarsPadding().navigationBarsPadding().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            LinkStatusChip(state.liveLinkStatus)
+            Spacer(Modifier.width(12.dp))
+            Text("MODO TABLERO · SOLO LECTURA", color = Color(0xFFB0BEC5), fontSize = 13.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            if (state.activeTest == "LIVE") {
+                TextButton(onClick = onStop) { Text("Detener viaje", color = Color(0xFFFF5252), fontWeight = FontWeight.Bold) }
+            }
+            TextButton(onClick = onExit) { Text("Salir", color = Accent, fontWeight = FontWeight.Bold) }
+        }
+
+        if (isLandscape) {
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(
+                    Modifier.weight(1.1f).fillMaxSize().clip(RoundedCornerShape(20.dp)).background(c.copy(alpha = 0.16f)).padding(20.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(g.cue.label, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                    Text(g.cue.arrow, color = c, fontSize = 86.sp, fontWeight = FontWeight.Black)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("MARCHA EST. ${g.gearInference.label}", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text("Inferencia RPM/Vel · no es sensor de caja", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+                    }
+                }
+                Column(Modifier.weight(1.4f).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        BoardMetricTile("RPM", rpmTxt, "rpm", Color.White, Modifier.weight(1f))
+                        BoardMetricTile("VELOCIDAD", spdTxt, "km/h", Color.White, Modifier.weight(1f))
+                    }
+                    Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        BoardMetricTile("CARGA MOTOR", loadTxt, "%", if (g.isLugging) Color(0xFFFF5252) else Color.White, Modifier.weight(1f))
+                        BoardMetricTile("REFRIGERANTE", ectTxt, "°C", if (g.isColdEngine) Color(0xFF4FC3F7) else Color(0xFF2ECC71), Modifier.weight(1f))
+                    }
+                }
+            }
+        } else {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(c.copy(alpha = 0.16f)).padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(g.cue.label, color = c, fontSize = 22.sp, fontWeight = FontWeight.Black)
+                Text(g.cue.arrow, color = c, fontSize = 76.sp, fontWeight = FontWeight.Black)
+                Text("MARCHA EST. ${g.gearInference.label}", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("Inferencia RPM/Velocidad (no sensor directo)", color = Color(0xFFB0BEC5), fontSize = 12.sp)
+            }
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BoardMetricTile("RPM", rpmTxt, "rpm", Color.White, Modifier.weight(1f))
+                BoardMetricTile("VELOCIDAD", spdTxt, "km/h", Color.White, Modifier.weight(1f))
+            }
+            Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                BoardMetricTile("CARGA MOTOR", loadTxt, "%", if (g.isLugging) Color(0xFFFF5252) else Color.White, Modifier.weight(1f))
+                BoardMetricTile("REFRIGERANTE", ectTxt, "°C", if (g.isColdEngine) Color(0xFF4FC3F7) else Color(0xFF2ECC71), Modifier.weight(1f))
+            }
+        }
+        Text(
+            "Uso seguro: fijar en soporte; no manipular al conducir · ${state.appVersion}",
+            color = Color(0xFF90A4AE),
+            fontSize = 11.sp,
+        )
+    }
+}
+
+@Composable
+private fun BoardMetricTile(label: String, value: String, unit: String, valueColor: Color, modifier: Modifier) {
+    Column(
+        modifier.fillMaxSize().clip(RoundedCornerShape(18.dp)).background(Color(0xFF111820)).padding(16.dp),
+        verticalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = Color(0xFF90A4AE), fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(value, color = valueColor, fontSize = 52.sp, fontWeight = FontWeight.Black)
+            Spacer(Modifier.width(6.dp))
+            Text(unit, color = Color(0xFF90A4AE), fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
+        }
+    }
 }
 
 @Composable

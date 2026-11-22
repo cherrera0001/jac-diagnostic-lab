@@ -36,6 +36,8 @@ import app.jac.diagnosticlab.telemetry.ChannelStats
 import app.jac.diagnosticlab.telemetry.SessionSummary
 import app.jac.diagnosticlab.telemetry.TelemetryStore
 import app.jac.diagnosticlab.telemetry.VehicleTelemetryEngine
+import app.jac.diagnosticlab.evidence.EvidenceBundle
+import app.jac.diagnosticlab.evidence.EvidenceEngine
 import app.jac.diagnosticlab.evidence.Sample
 import app.jac.diagnosticlab.evidence.SessionRecord
 import app.jac.diagnosticlab.evidence.SnapshotReading
@@ -47,6 +49,13 @@ import app.jac.diagnosticlab.evidence.toJson
 import app.jac.diagnosticlab.evidence.toTxt
 import app.jac.diagnosticlab.obd.CapabilitySnapshot
 import app.jac.diagnosticlab.obd.DtcCategory
+import app.jac.diagnosticlab.security.ClearDtcDecoder
+import app.jac.diagnosticlab.report.WorkshopReport
+import app.jac.diagnosticlab.report.WorkshopPdf
+import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.evidence.ReportVault
+import app.jac.diagnosticlab.security.ClearDtcGate
+import app.jac.diagnosticlab.obd.DtcReadState
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.obd.FreezeNote
 import app.jac.diagnosticlab.obd.ObdCapabilityDiscoveryEngine
@@ -63,9 +72,13 @@ import app.jac.diagnosticlab.obd.OperationalState
 import app.jac.diagnosticlab.obd.VoltageAssessment
 import app.jac.diagnosticlab.obd.assessAdapterVoltage
 import app.jac.diagnosticlab.obd.SessionTimeMetrics
+import app.jac.diagnosticlab.analysis.DashboardLinkStatus
+import app.jac.diagnosticlab.analysis.DrivingGuidanceEngine
+import app.jac.diagnosticlab.analysis.DrivingGuidanceSnapshot
 import app.jac.diagnosticlab.analysis.HealthAssessment
 import app.jac.diagnosticlab.analysis.HealthInput
 import app.jac.diagnosticlab.analysis.HealthItem
+import app.jac.diagnosticlab.analysis.TripGuidanceSummary
 import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.dynamic.TestResult
 import app.jac.diagnosticlab.dynamic.TraceEvent
@@ -146,6 +159,8 @@ data class LabState(
     val freezeValues: List<FreezeValue> = emptyList(),
     val busy: Boolean = false,
     val statusLine: String = "Listo para buscar el adaptador.",
+    /** Resultado del último «Borrar y limpiar». */
+    val lastClear: String? = null,
     val protocol: String = "0",
     val simulated: Boolean = false,
     val security: SecurityDashboard? = null,
@@ -185,6 +200,10 @@ data class LabState(
     val testResults: List<TestResult> = emptyList(),
     /** Últimas rondas para mini-gráficos (En vivo / prueba en curso). */
     val testHistory: List<TraceFrame> = emptyList(),
+    // SPEC-034 R6 — Modo Tablero / Tablet Hands-Free y asistencia de conducción segura
+    val liveLinkStatus: DashboardLinkStatus = DashboardLinkStatus.PAUSED,
+    val drivingGuidance: DrivingGuidanceSnapshot? = null,
+    val lastTripSummary: TripGuidanceSummary? = null,
 )
 
 class LabController(private val app: Application) {
@@ -396,6 +415,98 @@ class LabController(private val app: Application) {
         applyInit(report)
         state.update { it.copy(busy = false) }
         persist()
+    }
+
+    /**
+     * «Borrar y limpiar» — parte desde cero:
+     *  1) copia privada automática de lo que hay (PDF + JSON) en la bóveda de la app;
+     *  2) limpia datos de la sesión (muestras, pruebas, salud, capturas) y abre una sesión nueva;
+     *  3) Mode 04 en la ECU (si hay enlace) y relectura 03/07/0A: el estado mostrado es el real de la ECU;
+     *  4) opcionalmente archiva y vacía el historial de telemetría del teléfono.
+     */
+    fun cleanAndClear(deleteHistory: Boolean) = scope.launch {
+        if (!autodiagGate.compareAndSet(false, true)) return@launch state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
+        try {
+            testJob?.cancel(); testJob = null
+            pollJob?.cancel(); pollJob = null
+            telemetry.pause()
+            state.update { it.copy(busy = true, statusLine = "Guardando copia y limpiando…") }
+            val oldId = sessionId
+            val notes = mutableListOf<String>()
+            val vault = ReportVault(java.io.File(app.filesDir, "vault"))
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val pdf = WorkshopPdf.render(WorkshopReport.buildDoc(workshopInput()))
+                    val name = "JAC-ANTES-DE-LIMPIAR-$oldId"
+                    vault.save("$oldId-antes-de-limpiar", mapOf(
+                        "$name.pdf" to pdf,
+                        "$name.json" to sessionJson().toByteArray(Charsets.UTF_8),
+                        "$name.pdf.sha256" to "${sha256Hex(pdf)}  $name.pdf\n".toByteArray(Charsets.UTF_8),
+                    ))
+                    notes += "Copia previa en la bóveda privada de la app."
+                }.onFailure { notes += "No se pudo crear la copia previa (${it.message.orEmpty()}); se limpió igual." }
+                if (deleteHistory) runCatching {
+                    val dir = java.io.File(app.filesDir, "telemetry")
+                    val files = dir.listFiles()?.filter { it.isFile }.orEmpty()
+                    if (files.isNotEmpty()) {
+                        vault.save("$oldId-historial", files.associate { it.name to it.readBytes() })
+                        files.forEach { it.delete() }
+                        notes += "Historial (${files.size} archivo(s)) archivado en la bóveda y vaciado."
+                    }
+                }.onFailure { notes += "No se pudo vaciar el historial: ${it.message.orEmpty()}." }
+            }
+            // Datos de la sesión → cero.
+            telemetry.reset()
+            dtcs = emptyList(); freeze = emptyList(); samples = emptyList(); errors.clear()
+            testFrames = mutableListOf(); testManual = mutableListOf()
+            sessionId = newId(); startedAt = System.currentTimeMillis()
+            session?.exchanges?.clear()
+            state.update {
+                it.copy(
+                    sessionId = sessionId, dtcs = emptyList(), samples = emptyList(), analysis = null, freeze = emptyList(),
+                    freezeValues = emptyList(), scanSignals = emptyList(), scanAtMs = null, readiness = null, readinessCycle = null,
+                    mode06 = emptyList(), health = emptyList(), testEvents = emptyList(), testResults = emptyList(),
+                    testHistory = emptyList(), testLive = null, testFrameCount = 0, beforeSnapshot = null, afterSnapshot = null,
+                    lastTripSummary = null, drivingGuidance = null, error = null, recovery = null, channelStats = emptyMap(),
+                    exchanges = emptyList(), polling = false, sessionHistory = telemetryStore.listSessions(),
+                )
+            }
+            val current = session
+            var ecuMsg = "Sin enlace con la ECU: solo se limpió la app."
+            if (current != null && state.value.ecuTalking) {
+                val speed = current.readPid(0x0D).takeIf { it.valid }?.value
+                val rpm = current.readPid(0x0C).takeIf { it.valid }?.value
+                val verdict = ClearDtcGate.evaluate(ClearDtcGate.Preconditions(true, speed, rpm))
+                trace("BORRADO y LIMPIEZA: velocidad=$speed rpm=$rpm permitido=${verdict.allowed}")
+                if (!verdict.allowed) {
+                    ecuMsg = "No se envió el borrado a la ECU. " + verdict.blockers.joinToString(" ")
+                } else {
+                    val response = ClearDtcDecoder.decode(current.clearDtcs())
+                    trace("BORRADO respuesta: $response")
+                    dtcs = listOf(
+                        current.readDtc(DtcCategory.STORED),
+                        current.readDtc(DtcCategory.PENDING),
+                        current.readDtc(DtcCategory.PERMANENT),
+                    )
+                    val stored = dtcs.first { it.category == DtcCategory.STORED }
+                    val reread = stored.state == DtcReadState.VALID_EMPTY || stored.state == DtcReadState.VALID_WITH_CODES
+                    val outcome = ClearDtcDecoder.outcome(response, reread, stored.codes.size)
+                    val detail = (response as? ClearDtcDecoder.Response.Rejected)?.let { " (${ClearDtcDecoder.nrcText(it.nrc)})" }.orEmpty()
+                    val perm = dtcs.firstOrNull { it.category == DtcCategory.PERMANENT }?.codes?.size ?: 0
+                    ecuMsg = outcome.label + detail +
+                        (if (perm > 0) " Quedan $perm permanente(s) (Mode 0A): se borran solos al corregirse la causa." else "") +
+                        " Los monitores quedan incompletos hasta completar ciclos de manejo."
+                }
+                state.update { it.copy(dtcs = dtcs, exchanges = current.exchanges.toList()) }
+            }
+            val msg = (listOf(ecuMsg) + notes).joinToString(" ")
+            state.update { it.copy(busy = false, lastClear = msg, statusLine = "Listo: sesión nueva desde cero.") }
+            recompute(); recomputeHealth(); persist()
+        } finally {
+            ClearDtcGate.disarm()
+            autodiagGate.set(false)
+            state.update { it.copy(busy = false) }
+        }
     }
 
     fun readAllDtcs() = scope.launch {
@@ -1219,8 +1330,12 @@ class LabController(private val app: Application) {
             exchanges = st.exchanges,
             errors = errors.toList(),
             tests = st.testResults,
+            catalogVersion = JacT8Catalog.v1.version,
         )
     }
+
+    /** SPEC-034: paquete canónico de evidencia offline (JSON + PDF + SHA-256 + catálogo). */
+    fun evidenceBundle(): EvidenceBundle = EvidenceEngine.exportBundle(workshopInput(), JacT8Catalog.v1)
 
     private fun recomputeHealth() {
         val st = state.value
@@ -1235,6 +1350,8 @@ class LabController(private val app: Application) {
                 readinessThisCycle = st.readinessCycle,
                 storedDtcs = reads.filter { it.category == DtcCategory.STORED }.flatMap { r -> r.codes.map { it.code } },
                 pendingDtcs = reads.filter { it.category == DtcCategory.PENDING }.flatMap { r -> r.codes.map { it.code } },
+                storedState = reads.firstOrNull { it.category == DtcCategory.STORED }?.state ?: DtcReadState.NOT_READ,
+                pendingState = reads.firstOrNull { it.category == DtcCategory.PENDING }?.state,
                 mode06 = st.mode06,
                 vehicleInfo = st.vehicleInfo,
                 adapterVoltage = parseAdapterVoltage(st.voltageText),
@@ -1292,8 +1409,22 @@ class LabController(private val app: Application) {
                 }
                 started = true
                 testFrames += first
+                val firstGuidance = DrivingGuidanceEngine.evaluateFrame(first.values)
                 trace("PRUEBA ${test.id} inicio pids=${pids.joinToString { "%02X".format(it) }}")
-                state.update { it.copy(activeTest = test.id, testEvents = emptyList(), testFrameCount = 1, testLive = first, testHistory = listOf(first), error = null, busy = false, statusLine = "Prueba en curso: ${test.title}") }
+                state.update {
+                    it.copy(
+                        activeTest = test.id,
+                        testEvents = emptyList(),
+                        testFrameCount = 1,
+                        testLive = first,
+                        testHistory = listOf(first),
+                        liveLinkStatus = DashboardLinkStatus.CONNECTED,
+                        drivingGuidance = firstGuidance,
+                        error = null,
+                        busy = false,
+                        statusLine = "Prueba en curso: ${test.title}",
+                    )
+                }
                 val t0 = first.atMs
                 var misses = 0
                 // Ruta / en vivo: señales rápidas (1 trama) cada ronda; las de varias tramas, 1 de cada 4.
@@ -1310,6 +1441,8 @@ class LabController(private val app: Application) {
                     val frame = sampleRound(current, roundPids)
                     if (frame == null) {
                         misses++
+                        // SPEC-034 R6: ante microcortes BT no se borra la sesión; se marca RECONECTANDO.
+                        state.update { it.copy(liveLinkStatus = DashboardLinkStatus.RECONNECTING) }
                         if (misses >= 5) {
                             explain("Enlace perdido durante la prueba (5 rondas sin respuesta). Se guarda lo capturado.")
                             break
@@ -1324,14 +1457,17 @@ class LabController(private val app: Application) {
                     val window = testFrames.takeLast(20)
                     val hz = if (window.size > 1) (window.size - 1) * 1000.0 / (window.last().atMs - window.first().atMs).coerceAtLeast(1) else 0.0
                     state.update {
+                        val merged = it.testLive?.values.orEmpty() + frame.values
                         it.copy(
                             // Pantalla: último valor conocido de cada señal. El CSV guarda solo lo leído en la ronda.
-                            testLive = TraceFrame(frame.atMs, it.testLive?.values.orEmpty() + frame.values),
+                            testLive = TraceFrame(frame.atMs, merged),
                             testHistory = (it.testHistory + frame).takeLast(90),
                             testFrameCount = testFrames.size,
                             testElapsedMs = frame.atMs - t0,
                             testHz = hz,
                             testCue = cueFor(test.id, frame.atMs - t0),
+                            liveLinkStatus = DashboardLinkStatus.CONNECTED,
+                            drivingGuidance = DrivingGuidanceEngine.evaluateFrame(merged),
                             testEvents = (events.filter { e -> it.testEvents.none { o -> o.atMs == e.atMs && o.kind == e.kind } } + it.testEvents)
                                 .distinctBy { e -> e.atMs to e.kind }.sortedBy { e -> e.atMs },
                         )
@@ -1342,7 +1478,7 @@ class LabController(private val app: Application) {
                 withContext(NonCancellable) {
                     if (started) finishTest(test.id)
                     autodiagGate.set(false)
-                    state.update { it.copy(activeTest = null, testCue = null, busy = false) }
+                    state.update { it.copy(activeTest = null, testCue = null, busy = false, liveLinkStatus = DashboardLinkStatus.PAUSED) }
                 }
             }
         }
@@ -1363,17 +1499,31 @@ class LabController(private val app: Application) {
 
     private suspend fun finishTest(id: String) {
         if (id == "LIVE") {
+            val tripSummary = DrivingGuidanceEngine.summarizeTrip(testFrames.toList())
             withContext(Dispatchers.IO) { saveTrace(id, null) }
-            state.update { it.copy(statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.") }
+            state.update {
+                it.copy(
+                    lastTripSummary = tripSummary,
+                    liveLinkStatus = DashboardLinkStatus.PAUSED,
+                    statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.",
+                )
+            }
             return
         }
         val test = GuidedTests.byId(id)
         val result = GuidedTests.analyze(test, testFrames.toList(), testManual.toList())
+        val tripSummary = if (id == "ROAD") DrivingGuidanceEngine.summarizeTrip(testFrames.toList()) else state.value.lastTripSummary
         trace("PRUEBA $id fin frames=${result.frames} hz=%.2f veredicto=${result.verdict} ${result.summary}".format(result.effectiveHz))
         result.metrics.forEach { m -> trace("  ${m.name}: ${m.value?.let { "%.3f".format(it) } ?: "—"} ${m.unit} [${m.status.label}]") }
         result.events.forEach { e -> trace("  EVENTO ${e.kind}: ${e.detail}") }
         withContext(Dispatchers.IO) { saveTrace(id, result) }
-        state.update { it.copy(testResults = (it.testResults + result).takeLast(20), statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}") }
+        state.update {
+            it.copy(
+                testResults = (it.testResults + result).takeLast(20),
+                lastTripSummary = tripSummary,
+                statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}",
+            )
+        }
         persist()
     }
 

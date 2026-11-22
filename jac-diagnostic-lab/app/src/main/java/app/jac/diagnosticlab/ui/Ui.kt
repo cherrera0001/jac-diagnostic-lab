@@ -113,6 +113,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun validateBle(write: String, notify: String) = lab.validateBle(write, notify)
     fun initialize() = lab.initialize()
     fun readDtcs() = lab.readAllDtcs()
+    fun cleanAndClear(deleteHistory: Boolean) = lab.cleanAndClear(deleteHistory)
     fun readSupported() = lab.readSupported()
     fun startPoll(pids: Set<Int>) = lab.startPoll(pids)
     fun stopPoll() = lab.stopPoll()
@@ -200,6 +201,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
         ),
         exportSection = {
             WorkshopReportCard(state, model)
+            ClearCodesCard(state, model)
             EvidenceScreen(state, model, compact = true)
         },
         advancedSection = {
@@ -302,12 +304,13 @@ private fun TodayScreen(state: LabState, model: DiagnosticViewModel, requestPerm
             } else runCatching {
                 val facts = factsFromState(state, codes, adapterId, ecuTalking, saved)
                 val document = readingReport(facts)
-                val pdf = renderReadingPdf(document.title, document.lines, state.appVersion)
+                val pdf = professionalPdf(model, refusal == null, document.title, document.lines, state.appVersion)
                 val stamp = facts.sessionId.ifBlank { "sin-sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")
                 val pdfName = "JAC-lectura-$stamp.pdf"
                 val hash = sha256Hex(pdf)
                 val where = saveDownload(context, pdfName, pdf, "application/pdf")
                 saveDownload(context, "$pdfName.sha256", "$hash  $pdfName\n".toByteArray(Charsets.UTF_8), "text/plain")
+                vaultSave(context, stamp, mapOf(pdfName to pdf, "$pdfName.sha256" to "$hash  $pdfName\n".toByteArray(Charsets.UTF_8)))
                 pdfHash = hash
                 pdfWhere = where
                 pdfError = ""
@@ -987,7 +990,8 @@ private fun EvidenceScreen(state: LabState, model: DiagnosticViewModel, compact:
             0,
             facts.adapterId,
         )
-        val bytes = if (refusal == null) renderReadingPdf(readingReport(facts).title, readingReport(facts).lines, state.appVersion) else ByteArray(0)
+        val doc = readingReport(facts)
+        val bytes = if (refusal == null) professionalPdf(model, !pdfFromSaved, doc.title, doc.lines, state.appVersion) else ByteArray(0)
         model.exportBytes(uri, bytes, refusal)
     }
     val json = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
@@ -1267,6 +1271,17 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
     var pending by remember { mutableStateOf(false) }
     var saving by remember { mutableStateOf(false) }
     var result by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var bundle by remember { mutableStateOf<Map<String, ByteArray>?>(null) }
+    val sealedExport = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val files = bundle
+        if (uri == null || files == null) return@rememberLauncherForActivityResult
+        runCatching {
+            val bytes = app.jac.diagnosticlab.evidence.SecureArchive.seal(files, password.toCharArray())
+            model.exportBytes(uri, bytes, null)
+            result = "Exportado cifrado (AES-256-GCM). Sin la contraseña no se puede abrir; guárdala aparte."
+        }.onFailure { result = "No se pudo cifrar: ${it.message.orEmpty()}" }
+    }
     val connected = state.ecuTalking
     val missing = remember(state.scanAtMs, state.dtcs, state.ecuIdentification) { app.jac.diagnosticlab.report.WorkshopReport.missing(model.workshopInput()) }
     fun generate() {
@@ -1279,8 +1294,12 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
             val hash = sha256Hex(pdf)
             val where = saveDownload(context, name, pdf, "application/pdf")
             saveDownload(context, "$name.sha256", "$hash  $name\n".toByteArray(Charsets.UTF_8), "text/plain")
-            saveDownload(context, "JAC-taller-$stamp.json", model.sessionJson().toByteArray(Charsets.UTF_8), "application/json")
-            result = "Guardado en $where (PDF + .sha256 + JSON con el registro completo)."
+            val sessionJson = model.sessionJson().toByteArray(Charsets.UTF_8)
+            saveDownload(context, "JAC-taller-$stamp.json", sessionJson, "application/json")
+            val files = mapOf(name to pdf, "$name.sha256" to "$hash  $name\n".toByteArray(Charsets.UTF_8), "JAC-taller-$stamp.json" to sessionJson)
+            vaultSave(context, stamp, files)
+            bundle = files
+            result = "Guardado en $where (PDF + .sha256 + JSON) y copia privada en la app, con verificación SHA-256."
         }.onFailure { result = "No se pudo guardar el informe. ${it.message.orEmpty()}" }
         saving = false
     }
@@ -1305,13 +1324,61 @@ private fun WorkshopReportCard(state: LabState, model: DiagnosticViewModel) {
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(if (missing.isEmpty()) "Generar informe de taller (PDF)" else "Leer todo y generar informe") }
             if (missing.isNotEmpty() && !connected) Text("Conecte primero con «Conectar y diagnosticar» en Estado.", fontSize = 12.sp)
+            if (bundle != null) {
+                Text("Exportar en formato seguro", style = MaterialTheme.typography.titleSmall)
+                Text("Descargas es visible a otras apps. El archivo .jacenc va cifrado (AES-256-GCM) y con manifiesto SHA-256.", fontSize = 12.sp)
+                androidx.compose.material3.OutlinedTextField(
+                    value = password, onValueChange = { password = it }, singleLine = true,
+                    label = { Text("Contraseña (mínimo 8 caracteres)") },
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedButton(
+                    onClick = { sealedExport.launch("JAC-taller-${state.sessionId.ifBlank { "sesion" }.replace(Regex("[^A-Za-z0-9-]"), "")}.jacenc") },
+                    enabled = password.length >= app.jac.diagnosticlab.evidence.SecureArchive.MIN_PASSWORD,
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Exportar cifrado (.jacenc)") }
+            }
             if (pending && state.busy) Text(state.statusLine, fontSize = 12.sp)
             if (result.isNotBlank()) Text(result, fontSize = 12.sp)
         }
     }
 }
 
-private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
+/** «Borrar y limpiar»: borra los códigos en la ECU y deja la app en cero con una sesión nueva. */
+@Composable
+private fun ClearCodesCard(state: LabState, model: DiagnosticViewModel) {
+    var deleteHistory by remember { mutableStateOf(true) }
+    var confirm by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Borrar y limpiar (partir de cero)", style = MaterialTheme.typography.titleMedium)
+            Text("Con contacto ON y la camioneta detenida: borra los códigos almacenados y pendientes y el cuadro congelado en la ECU, relee para mostrar el estado real, vacía los datos de esta sesión y abre una sesión nueva. Guarda antes una copia privada automática.", fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(checked = deleteHistory, onCheckedChange = { deleteHistory = it })
+                Text("Vaciar también el historial de telemetría del teléfono", fontSize = 13.sp)
+            }
+            Button(
+                onClick = { confirm = true },
+                enabled = !state.busy,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Borrar y limpiar") }
+            state.lastClear?.let { Text(it, fontSize = 13.sp, color = Color(0xFFF5C16C)) }
+        }
+    }
+    if (confirm) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirm = false },
+            title = { Text("¿Borrar y partir de cero?") },
+            text = { Text("Se borran los códigos en la ECU y se vacía la sesión${if (deleteHistory) " y el historial" else ""}. Queda una copia privada en la app.") },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { confirm = false; model.cleanAndClear(deleteHistory) }) { Text("Borrar y limpiar") } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { confirm = false }) { Text("Cancelar") } },
+        )
+    }
+}
+
+internal fun saveDownload(context: Context, name: String, bytes: ByteArray, mime: String): String {
     if (Build.VERSION.SDK_INT >= 29) {
         val values = ContentValues().apply {
             put(MediaStore.Downloads.DISPLAY_NAME, name)
@@ -1332,78 +1399,16 @@ private fun saveDownload(context: Context, name: String, bytes: ByteArray, mime:
     return dir.absolutePath + "/" + name
 }
 
-private fun renderReadingPdf(title: String, lines: List<String>, appVersion: String): ByteArray {
-    val document = PdfDocument()
-    val heading = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = 16f
-        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        color = 0xFF1A1A1A.toInt()
-    }
-    val body = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = 11f
-        color = 0xFF1A1A1A.toInt()
-    }
-    val footer = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = 9f
-        color = 0xFF5C6570.toInt()
-    }
-    val pageWidth = 595
-    val pageHeight = 842
-    val margin = 48f
-    val maxWidth = pageWidth - margin * 2
-    fun wrap(paint: Paint, text: String): List<String> {
-        if (text.isEmpty()) return listOf("")
-        val rows = mutableListOf<String>()
-        var rest = text
-        while (rest.isNotEmpty()) {
-            val count = paint.breakText(rest, true, maxWidth, null).coerceAtLeast(1)
-            var cut = count.coerceAtMost(rest.length)
-            if (cut < rest.length) {
-                val space = rest.lastIndexOf(' ', cut - 1)
-                if (space > 0) cut = space
-            }
-            rows += rest.substring(0, cut).trimEnd()
-            rest = rest.substring(cut).trimStart()
-        }
-        return rows
-    }
-    var pageNumber = 1
-    var page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
-    var canvas = page.canvas
-    var y = margin
-    fun finishPage() {
-        canvas.drawText("JAC Diagnostic Lab $appVersion  ·  solo lectura  ·  no autoriza a circular", margin, pageHeight - 28f, footer)
-        canvas.drawText(pageNumber.toString(), pageWidth - margin - 10f, pageHeight - 28f, footer)
-        document.finishPage(page)
-    }
-    fun ensure(height: Float) {
-        if (y + height <= pageHeight - 48f) return
-        finishPage()
-        pageNumber += 1
-        page = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
-        canvas = page.canvas
-        y = margin
-    }
-    wrap(heading, title).forEach { row ->
-        ensure(22f)
-        canvas.drawText(row, margin, y + 16f, heading)
-        y += 22f
-    }
-    y += 8f
-    lines.forEach { line ->
-        wrap(body, line).forEach { row ->
-            val height = if (row.isEmpty()) 8f else 16f
-            ensure(height)
-            if (row.isNotEmpty()) canvas.drawText(row, margin, y + 11f, body)
-            y += height
-        }
-    }
-    finishPage()
-    val output = ByteArrayOutputStream()
-    document.writeTo(output)
-    document.close()
-    return output.toByteArray()
-}
+private fun stamp(ms: Long = System.currentTimeMillis()) = java.text.SimpleDateFormat("dd-MM-yyyy HH:mm", java.util.Locale.ROOT).format(java.util.Date(ms))
+
+/** Siempre el generador profesional con sello C4A: en vivo con el informe completo; sesión guardada con el texto dentro del mismo marco. */
+private fun professionalPdf(model: DiagnosticViewModel, live: Boolean, title: String, lines: List<String>, appVersion: String): ByteArray =
+    if (live) app.jac.diagnosticlab.report.WorkshopPdf.render(app.jac.diagnosticlab.report.WorkshopReport.buildDoc(model.workshopInput()))
+    else app.jac.diagnosticlab.report.WorkshopPdf.renderPlain(title, lines, appVersion, stamp())
+
+/** Copia privada de la app (no visible a otras apps) con manifiesto SHA-256. */
+internal fun vaultSave(context: Context, session: String, files: Map<String, ByteArray>): String =
+    app.jac.diagnosticlab.evidence.ReportVault(File(context.filesDir, "vault")).save(session, files).name
 
 data class PlainReading(
     val title: String,

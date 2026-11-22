@@ -5,8 +5,10 @@ import app.jac.diagnosticlab.analysis.HealthStatus
 import app.jac.diagnosticlab.dynamic.TestResult
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ResponseKind
+import app.jac.diagnosticlab.evidence.ManualInspection
 import app.jac.diagnosticlab.evidence.ReadingReportDocument
 import app.jac.diagnosticlab.evidence.sha256Hex
+import app.jac.diagnosticlab.profile.JacT8Catalog
 import app.jac.diagnosticlab.obd.DtcCategory
 import app.jac.diagnosticlab.obd.DtcReadResult
 import app.jac.diagnosticlab.obd.FreezeNote
@@ -54,6 +56,8 @@ data class WorkshopInput(
     val exchanges: List<Exchange>,
     val errors: List<String>,
     val tests: List<TestResult> = emptyList(),
+    val catalogVersion: String = JacT8Catalog.v1.version,
+    val manualInspection: ManualInspection? = null,
 )
 
 /* ───────── Documento estructurado: lo dibuja WorkshopPdf y se aplana a texto para la huella ───────── */
@@ -391,6 +395,19 @@ object WorkshopReport {
             add(Para("Cada comando con sus bytes exactos está en el JSON de la sesión, junto a este PDF.", Tone.MUTED))
         })
 
+        if (i.manualInspection != null) {
+            val m = i.manualInspection
+            sections += Section(++n, "Inspección física guiada", buildList {
+                add(KeyValues(buildList {
+                    m.odometerKm?.let { add("Odómetro manual" to "${num(it)} km") }
+                    m.horometerHours?.let { add("Horómetro manual" to "${num(it)} h") }
+                    if (m.visualCondition.isNotBlank()) add("Estado visual" to m.visualCondition)
+                    if (m.inspector.isNotBlank()) add("Registrado por" to m.inspector)
+                }))
+                m.observations.filter { it.isNotBlank() }.forEach { obs -> add(Para("• $obs")) }
+            })
+        }
+
         sections += Section(++n, "Origen de los datos y alcance", listOf(
             Para("Valores, códigos, monitores, Mode 06 y cuadro congelado: respuesta de la ECU de motor por OBD-II (SAE J1979) en esta sesión. Solo lectura: no se borró ningún código ni se escribió en la ECU."),
             Para("Descripciones de códigos: definición genérica SAE J2012, no texto JAC. Rangos ATENCIÓN/REVISAR: referencia genérica de la app."),
@@ -403,7 +420,9 @@ object WorkshopReport {
             subtitle = "${i.declaredModel.ifBlank { "Vehículo" }} ${i.declaredYear}".trim() + " · OBD-II solo lectura",
             meta = listOf(
                 "VIN" to (i.vin ?: "—"), "Fecha" to t(i.generatedAtMs), "Sesión" to i.sessionId.ifBlank { "—" },
-                "ECU" to (i.vehicleInfo?.calibrationIds?.joinToString()?.ifBlank { null } ?: "—"), "App" to "JAC Diagnostic Lab ${i.appVersion}",
+                "ECU" to (i.vehicleInfo?.calibrationIds?.joinToString()?.ifBlank { null } ?: "—"),
+                "App" to "JAC Diagnostic Lab ${i.appVersion}",
+                "Catálogo" to i.catalogVersion,
             ),
             summary = summary,
             sections = sections,
@@ -422,12 +441,12 @@ object WorkshopReport {
         // Motor recién arrancado: frío no es falla.
         if (s.key == "05" && (runtime ?: 9999.0) < 1200 && (s.value ?: 99.0) < 70) return null
         val st = Present.gaugeStatus(s.key, s.value, running)
-        return if (st == HealthStatus.NO_DATA) null else st
+        return if (st == HealthStatus.NO_DATA || st == HealthStatus.UNVERIFIED) null else st
     }
 
     fun tone(s: HealthStatus) = when (s) {
         HealthStatus.CHECK -> Tone.CHECK; HealthStatus.ATTENTION -> Tone.ATTENTION; HealthStatus.OK -> Tone.OK
-        HealthStatus.INFO -> Tone.INFO; HealthStatus.NO_DATA -> Tone.MUTED
+        HealthStatus.INFO -> Tone.INFO; HealthStatus.NO_DATA, HealthStatus.UNVERIFIED -> Tone.MUTED
     }
     private fun statusText(s: ResolutionStatus) = when (s) {
         ResolutionStatus.IDENTIFIED -> "identificado"; ResolutionStatus.SUPPLIER_ONLY -> "solo proveedor"
