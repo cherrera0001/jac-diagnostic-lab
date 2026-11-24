@@ -3,7 +3,9 @@ package app.jac.diagnosticlab.report
 import app.jac.diagnosticlab.analysis.HealthItem
 import app.jac.diagnosticlab.analysis.HealthStatus
 import app.jac.diagnosticlab.dynamic.GuidedTests
+import app.jac.diagnosticlab.bt.LinkOutage
 import app.jac.diagnosticlab.dynamic.TestResult
+import app.jac.diagnosticlab.dynamic.TraceFrame
 import app.jac.diagnosticlab.elm.Exchange
 import app.jac.diagnosticlab.elm.ResponseKind
 import app.jac.diagnosticlab.evidence.ManualInspection
@@ -59,6 +61,10 @@ data class WorkshopInput(
     val tests: List<TestResult> = emptyList(),
     val catalogVersion: String = JacT8Catalog.v1.version,
     val manualInspection: ManualInspection? = null,
+    /** SPEC-035: muestras de la última captura (cronología y gráficos), cortes de enlace y relato del conductor. */
+    val traceFrames: List<TraceFrame> = emptyList(),
+    val linkOutages: List<LinkOutage> = emptyList(),
+    val narrative: DriverNarrative? = null,
 )
 
 /* ───────── Documento estructurado: lo dibuja WorkshopPdf y se aplana a texto para la huella ───────── */
@@ -72,6 +78,8 @@ data class Table(val headers: List<String>, val weights: List<Float>, val rows: 
 data class Finding(val tone: Tone, val label: String, val title: String, val detail: String)
 data class Findings(val items: List<Finding>) : Block
 data class Steps(val title: String, val items: List<String>) : Block
+data class ChartSeries(val name: String, val unit: String, val points: List<Pair<Float, Float>>)
+data class Chart(val title: String, val series: List<ChartSeries>) : Block
 data class Section(val number: Int, val title: String, val blocks: List<Block>)
 data class SummaryBox(val verdict: String, val tone: Tone, val counts: List<Pair<String, Tone>>, val codes: List<Pair<String, Tone>>, val lines: List<String>)
 data class WorkshopDoc(
@@ -95,6 +103,7 @@ data class WorkshopDoc(
                     is Table -> { add(b.headers.joinToString(" | ")); b.rows.forEach { add(it.joinToString(" | ")) } }
                     is Findings -> b.items.forEach { add("• ${it.label} ${it.title}. ${it.detail}") }
                     is Steps -> { add(b.title); b.items.forEachIndexed { i, t -> add("  ${i + 1}. $t") } }
+                    is Chart -> { add("Gráfico: ${b.title}"); b.series.forEach { sr -> add("  ${sr.name} (${sr.unit}): ${sr.points.size} puntos" + (sr.points.minOfOrNull { it.second }?.let { mn -> " · mín ${"%.1f".format(Locale.ROOT, mn)} · máx ${"%.1f".format(Locale.ROOT, sr.points.maxOf { it.second })}" } ?: "")) } }
                 }
             }
         }
@@ -262,7 +271,9 @@ object WorkshopReport {
         val railDropEvents = allEvents.filter { it.kind == "CAÍDA PRESIÓN RIEL" }
         val voltDropEvents = allEvents.filter { it.kind == "CAÍDA DE TENSIÓN" }
 
+        val railMinTests = i.tests.flatMap { it.metrics }.filter { it.name.startsWith("Presión riel mínima") }.mapNotNull { it.value }.minOrNull()
         val railDropObserved = railCodes.isNotEmpty() ||
+            (railMinTests != null && railMinTests < 15_000.0) ||
             railDropEvents.isNotEmpty() ||
             (rail23Live != null && (rpmLive ?: 0.0) >= 500.0 && rail23Live < 15_000.0) ||
             (rail23Freeze != null && rail23Freeze < 15_000.0)
@@ -283,6 +294,7 @@ object WorkshopReport {
                 volt42Freeze?.let { add("cuadro congelado %.2f V".format(Locale.ROOT, it)) }
             }.joinToString(" / ").ifBlank { "no capturado" }
             add("Presión de riel (PID 0x23): $railFact · Tensión ECU (PID 0x42): $voltFact.")
+            railMinTests?.let { add("Presión de riel mínima registrada en la captura: %.0f kPa%s.".format(Locale.ROOT, it, if (it < 15_000.0) " (por debajo de 15 000 kPa: compatible con motor detenido o en arranque)" else "")) }
             if (rpmLive != null || pedalDLive != null || torqueLive != null) {
                 add("Lecturas en vivo: RPM=${rpmLive?.let { "%.0f".format(Locale.ROOT, it) } ?: "—"}, Pedal D (0x49)=${pedalDLive?.let { "%.1f%%".format(Locale.ROOT, it) } ?: "—"}, Par real (0x62)=${torqueLive?.let { "%.1f%%".format(Locale.ROOT, it) } ?: "—"}.")
             }
@@ -309,7 +321,7 @@ object WorkshopReport {
                 railDropObserved && voltDropObserved ->
                     append("Evidencia compatible con apagado total de motor por pérdida combinada de presión de riel (PID 0x23 / ${railCodes.joinToString().ifBlank { "caída medida" }}) y caída de tensión ECU (PID 0x42 / ${voltCodes.joinToString().ifBlank { "caída medida" }}). ")
                 railDropObserved ->
-                    append("Evidencia compatible con apagado total de motor por caída de presión de riel de combustible (PID 0x23 ${railCodes.joinToString().ifBlank { "bajo umbral" }}), diferenciable de un recorte electrónico por freno porque el riel colapsa antes o junto con las RPM (0x0C). ")
+                    append("Evidencia compatible con apagado total de motor por caída de presión de riel de combustible (PID 0x23 ${railCodes.joinToString().ifBlank { "bajo umbral" }}${railMinTests?.let { ", mínima registrada %.0f kPa".format(Locale.ROOT, it) }.orEmpty()}), diferenciable de un recorte electrónico por freno porque el riel colapsa antes o junto con las RPM (0x0C). ")
                 voltDropObserved ->
                     append("Evidencia compatible con apagado total de motor o reinicio de ECU por caída de tensión de alimentación (PID 0x42 ${voltCodes.joinToString().ifBlank { "< 11,5 V" }}), diferenciable de brake override por pérdida eléctrica en bornes/masas/relé principal. ")
                 stallEvents.isNotEmpty() ->
@@ -533,12 +545,43 @@ object WorkshopReport {
                 i.mode06.map { if (it.passed) null else Tone.CHECK }),
         ))
 
+        i.narrative?.takeIf { it.hasContent }?.let { nar ->
+            sections += Section(++n, "Relato del conductor", listOf(
+                KeyValues(nar.rows()),
+                Para("Es testimonio del conductor, no una medición; sirve para orientar qué revisar.", Tone.MUTED),
+            ))
+        }
+
+        val timelineEvents = i.tests.flatMap { it.events }.distinctBy { it.atMs to it.kind }
+        if (timelineEvents.isNotEmpty()) {
+            val rows = EventTimeline.rows(i.traceFrames, timelineEvents)
+            fun f0(v: Double?) = v?.let { "%.0f".format(Locale.ROOT, it) } ?: "—"
+            sections += Section(++n, "Cronología de eventos", buildList {
+                add(Para("${timelineEvents.size} evento(s); se muestran ${rows.size}. Cada valor es el último leído hasta 2 s antes del evento («—» = no se leyó en ese margen).", Tone.MUTED))
+                add(Table(listOf("Hora", "Evento", "km/h", "RPM", "Pedal D %", "Pedal E %", "Riel kPa"), listOf(1.1f, 2.4f, 0.7f, 0.8f, 0.9f, 0.9f, 1f),
+                    rows.map { r -> listOf(t(r.atMs).takeLast(8), r.kind, f0(r.speedKmh), f0(r.rpm), f0(r.pedalD), f0(r.pedalE), f0(r.railKpa)) }))
+                if (i.traceFrames.isNotEmpty()) {
+                    rows.take(6).forEach { r ->
+                        val ev = timelineEvents.first { it.atMs == r.atMs && it.kind == r.kind }
+                        val w = EventTimeline.window(i.traceFrames, ev)
+                        val names = mapOf("0C" to ("RPM" to "rpm"), "49" to ("Pedal D" to "%"), "4A" to ("Pedal E" to "%"), "23" to ("Riel" to "kPa"), "0D" to ("Velocidad" to "km/h"))
+                        val series = EventTimeline.CHART_KEYS.mapNotNull { k -> w.series[k]?.takeIf { it.isNotEmpty() }?.let { pts -> ChartSeries(names.getValue(k).first, names.getValue(k).second, pts) } }
+                        if (series.isNotEmpty()) add(Chart("${r.kind} · ${t(r.atMs).takeLast(8)} (−6 s a +4 s)", series))
+                    }
+                }
+            })
+        }
+
         if (i.tests.isNotEmpty()) sections += Section(++n, "Pruebas dinámicas", i.tests.flatMap { r ->
             listOf(
                 Para("${r.title} — ${t(r.startedAtMs)} · ${r.frames} muestras · ${"%.1f".format(Locale.ROOT, r.effectiveHz)} Hz", tone(r.verdict), bold = true),
                 Para(r.summary),
                 Table(listOf("Medida", "Valor", "Estado", "Nota"), listOf(2f, 1.2f, 1f, 3f),
-                    r.metrics.map { listOf(it.name, it.value?.let { v -> "${num(v)} ${it.unit}".trim() } ?: "—", it.status.label, it.note) }, r.metrics.map { tone(it.status) }),
+                    r.metrics.map { m ->
+                        val outside = m.value == null && ValueValidity.outOfProfile(r.testId, m.name)
+                        listOf(m.name, m.value?.let { v -> "${num(v)} ${m.unit}".trim() } ?: "—", if (outside) "FUERA DE PERFIL" else m.status.label, if (outside) ValueValidity.profileNote() else m.note)
+                    },
+                    r.metrics.map { m -> if (m.value == null && ValueValidity.outOfProfile(r.testId, m.name)) Tone.MUTED else tone(m.status) }),
             )
         })
 
@@ -549,6 +592,13 @@ object WorkshopReport {
                 "Latencia" to if (i.exchanges.isEmpty()) "—" else "mediana ${median(i.exchanges.map { it.elapsedMs })} ms · máxima ${i.exchanges.maxOf { it.elapsedMs }} ms",
                 "Escaneo" to (i.scanAtMs?.let { t(it) } ?: "no realizado"),
             )))
+            if (i.linkOutages.isNotEmpty()) {
+                val rec = i.linkOutages.count { it.recovered }
+                add(Para("Cortes de enlace: ${i.linkOutages.size} (recuperados: $rec). La captura se reanudó sola; el hueco no se rellena con datos inventados.", if (rec == i.linkOutages.size) Tone.INFO else Tone.ATTENTION, bold = true))
+                add(Table(listOf("Inicio", "Duración", "Intentos", "Resultado"), listOf(1.3f, 1f, 0.8f, 1.6f),
+                    i.linkOutages.map { o -> listOf(t(o.startMs).takeLast(8), "%.1f s".format(Locale.ROOT, o.durationMs / 1000.0), "${o.reconnectAttempts}", if (o.recovered) "recuperado" else "sin recuperar") },
+                    i.linkOutages.map { o -> if (o.recovered) null else Tone.CHECK }))
+            }
             val fails = i.exchanges.filter { it.kind != ResponseKind.OBD_DATA && it.kind != ResponseKind.RECOGNIZED }.takeLast(30)
             if (fails.isNotEmpty()) add(Table(listOf("Hora", "Comando", "Resultado", "ms"), listOf(1.2f, 1.2f, 3f, 0.6f),
                 fails.map { listOf(t(it.atEpochMs).takeLast(8), it.command, "${it.kind} ${it.raw.trim().replace("\n", " ").take(40)}", "${it.elapsedMs}") }))
@@ -616,7 +666,7 @@ object WorkshopReport {
     private fun originText(o: String) = when (o) {
         "ECU_MODE09" -> "respuesta Mode 09 de la ECU"; "ECU_LABEL_TYPED" -> "etiqueta escrita por el usuario"; else -> o
     }
-    private fun show(s: Signal) = (s.text ?: (num(s.value) + if (s.unit.isNotBlank()) " ${s.unit}" else "")).trim()
+    private fun show(s: Signal) = ValueValidity.display(s, (s.text ?: (num(s.value) + if (s.unit.isNotBlank()) " ${s.unit}" else "")).trim())
     private fun label(c: DtcCategory) = when (c) { DtcCategory.STORED -> "almacenado"; DtcCategory.PENDING -> "pendiente"; DtcCategory.PERMANENT -> "permanente" }
     private fun short(c: DtcCategory) = when (c) { DtcCategory.STORED -> "ALM"; DtcCategory.PENDING -> "PEND"; DtcCategory.PERMANENT -> "PERM" }
     private fun plural(c: DtcCategory) = label(c) + "s"

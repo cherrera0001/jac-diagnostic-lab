@@ -255,6 +255,7 @@ object WorkshopPdf {
                     }
                 }
                 is Table -> table(b)
+                is Chart -> chart(b)
                 is Findings -> b.items.forEach { f ->
                     val inner = W - 2 * M - 74f
                     val tl = wrap(f.title, inner, font(9f, true))
@@ -287,6 +288,45 @@ object WorkshopPdf {
                     }
                 }
             }
+        }
+
+
+        /** Línea de tiempo: cada serie normalizada a su propio rango (se rotula mín–máx); línea vertical = evento (t = 0). */
+        fun chart(c: Chart) {
+            val h = 92f
+            ensure(h + 24f)
+            text(c.title, 8.2f, true, BRAND)
+            val left = M + 4f; val right = W - M - 4f; val top = y + 2f; val bottom = y + h - 14f
+            val cv = canvas
+            val allX = c.series.flatMap { it.points.map { p -> p.first } }
+            val xMin = (allX.minOrNull() ?: -6f).coerceAtMost(-0.5f); val xMax = (allX.maxOrNull() ?: 4f).coerceAtLeast(0.5f)
+            fun px(x: Float) = left + (x - xMin) / (xMax - xMin) * (right - left)
+            cv?.let {
+                it.drawRect(left, top, right, bottom, font(1f, c = ZEBRA))
+                val zero = px(0f)
+                val pen = font(1f, c = 0xFFC62828.toInt()); pen.style = Paint.Style.STROKE; pen.strokeWidth = 0.8f
+                it.drawLine(zero, top, zero, bottom, pen)
+            }
+            val palette = intArrayOf(0xFF12324A.toInt(), 0xFFC62828.toInt(), 0xFFE08600.toInt(), 0xFF2E7D32.toInt(), 0xFF6B7684.toInt())
+            var lx = left
+            c.series.forEachIndexed { idx, sr ->
+                val col = palette[idx % palette.size]
+                val mn = sr.points.minOf { it.second }; val mx = sr.points.maxOf { it.second }
+                val span = (mx - mn).takeIf { it > 1e-6f } ?: 1f
+                cv?.let {
+                    val line = font(1f, c = col); line.style = Paint.Style.STROKE; line.strokeWidth = 1f
+                    val path = android.graphics.Path()
+                    sr.points.forEachIndexed { k, pt ->
+                        val x = px(pt.first); val yy = bottom - (pt.second - mn) / span * (bottom - top - 4f) - 2f
+                        if (k == 0) path.moveTo(x, yy) else path.lineTo(x, yy)
+                    }
+                    it.drawPath(path, line)
+                    val label = "${sr.name} ${"%.0f".format(java.util.Locale.ROOT, mn)}–${"%.0f".format(java.util.Locale.ROOT, mx)} ${sr.unit}"
+                    it.drawText(label, lx, y + h - 3f, font(6.4f, true, col))
+                    lx += font(6.4f, true).measureText(label) + 10f
+                }
+            }
+            y += h + 4f
         }
 
         fun table(t: Table) {

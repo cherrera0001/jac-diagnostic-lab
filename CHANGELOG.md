@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.20.0 — 2026-11-24 (JAC Diagnostic Lab) — SPEC-035: captura resiliente e informe fiable (Fase 1)
+
+Origen: revisión crítica del informe `jac-informe-1.pdf`. Especificación en `specs/035-capture-resilience-and-report/spec.md`.
+
+- **R1/R2 — Captura resiliente (`bt/LinkRecoveryPolicy.kt`, `LabController.kt`):** antes la prueba terminaba a las 5 rondas sin respuesta y la reconexión nunca se usaba dentro de la captura (29 `DISCONNECTED` seguidos). Ahora, tras 3 rondas perdidas se reabre el transporte y se reinicializa el ELM sin salir de la prueba, con espera creciente (2→10 s), hasta 10 intentos fallidos o 5 min de corte. Cada corte se registra con hora, motivo, duración, intentos y resultado (evento `ENLACE` en CSV/cronología/informe); el hueco no se rellena. La reconexión manual y la de la captura comparten `relink()`.
+- **R3 — Sin contradicciones:** la presión de riel mínima de la captura entra en el diferencial; con 3290 kPa deja de decir «sin caída confirmada de riel».
+- **R4/R5 — Cronología y gráficos:** tabla de eventos (hora, km/h, RPM, pedal D/E, riel; último valor ≤ 2 s antes) y línea de tiempo de −6 s a +4 s por evento (hasta 6) en el PDF (`report/EventTimeline.kt`, bloque `Chart`).
+- **R6/R7 — Valores no válidos y límites del perfil (`report/ValueValidity.kt`):** PID 61/62 con byte 0 (−125 %) se rotula «no válido»; las medidas que el perfil de 8 PIDs no lee salen «FUERA DE PERFIL», no como falla.
+- **R8 — Relato del conductor (`report/DriverNarrative.kt`, pestaña Informe):** marcha, embrague, temperatura, síntoma y notas; opcional, persistente y solo aparece en el informe si se llena.
+- **Pruebas:** 22 nuevas (`LinkRecoveryPolicyTest`, `EventTimelineTest`, `ValueValidityTest`, `WorkshopReportPhase1Test`); 221 en total, 0 fallos. Lint: 0 errores, 45 avisos preexistentes. Versión `1.20.0` (`versionCode` 41).
+- **Pendiente de validar en vehículo:** la recuperación del enlace usa el stack Bluetooth real y el dibujo de los gráficos del PDF usa `android.graphics`; ninguno se puede ejercitar en pruebas JVM. SHA-256: `999221fa962af79e720f3bb09aa58b8d5167656b117e5e5ad9e99c9d7a3c4e4a`
+
 ## v1.19.4 — 2026-11-24 (JAC Diagnostic Lab) — Android Auto: tablero de una sola fila
 
 - **`car/CarDashboardModel.glanceTiles` + `JacCarDashboardScreen`:** la grilla del auto muestra 3 mosaicos en una fila (Motor, Refrigerante con la tensión ECU en su línea de estado, Estado/DTC) para que no se corte la segunda fila en pantallas de poca altura. Si el DPF está regenerando, «DPF regenera · No apagar» reemplaza al de refrigerante. Turbo/riel, DPF y temperaturas siguen en la vista de detalle (clic en Motor o Refrigerante).

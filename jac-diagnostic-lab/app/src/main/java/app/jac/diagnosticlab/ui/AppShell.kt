@@ -97,6 +97,7 @@ class ShellActions(
     val stopTest: () -> Unit,
     val mark: () -> Unit,
     val markFullTank: () -> Unit = {},
+    val saveNarrative: (app.jac.diagnosticlab.report.DriverNarrative) -> Unit = {},
 )
 
 @Composable
@@ -154,7 +155,7 @@ fun AppShell(
                 2 -> TestsTab(state, actions)
                 3 -> DataTab(state)
                 4 -> SignalsHubTab()
-                else -> ReportTab(exportSection, advancedSection, actions)
+                else -> ReportTab(state, exportSection, advancedSection, actions)
             }
             Spacer(Modifier.height(12.dp))
         }
@@ -901,10 +902,12 @@ private fun KeyValue(k: String, v: String?) {
 
 @Composable
 private fun ReportTab(
+    state: LabState,
     exportSection: @Composable ColumnScope.() -> Unit,
     advancedSection: @Composable ColumnScope.() -> Unit,
     actions: ShellActions,
 ) {
+    NarrativeCard(state.driverNarrative, actions.saveNarrative)
     SectionTitle("Exportar")
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Panel).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         exportSection()
@@ -917,6 +920,36 @@ private fun ReportTab(
         }
     }
     OutlinedButton(onClick = actions.reset, modifier = Modifier.fillMaxWidth()) { Text("Reiniciar conexión") }
+}
+
+/** SPEC-035 R8: relato opcional del conductor. Es testimonio, no medición; sale en el informe si se llena. */
+@Composable
+private fun NarrativeCard(saved: app.jac.diagnosticlab.report.DriverNarrative, onSave: (app.jac.diagnosticlab.report.DriverNarrative) -> Unit) {
+    var gear by remember(saved) { mutableStateOf(saved.gear) }
+    var clutch by remember(saved) { mutableStateOf(saved.clutch) }
+    var temp by remember(saved) { mutableStateOf(saved.temperature) }
+    var symptom by remember(saved) { mutableStateOf(saved.symptom) }
+    var notes by remember(saved) { mutableStateOf(saved.notes) }
+    var open by rememberSaveable { mutableStateOf(false) }
+    OutlinedButton(onClick = { open = !open }, modifier = Modifier.fillMaxWidth()) {
+        Text(if (open) "Ocultar relato del conductor" else if (saved.hasContent) "Relato del conductor (guardado)" else "Relato del conductor (opcional)")
+    }
+    if (open) {
+        Card(colors = CardDefaults.cardColors(containerColor = Panel)) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Cuéntale al taller qué pasa. Va en el informe como testimonio, no como medición.", color = Text2, fontSize = 12.sp)
+                OutlinedTextField(value = gear, onValueChange = { gear = it }, label = { Text("Marcha (ej. 3ª, neutro)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = clutch, onValueChange = { clutch = it }, label = { Text("Embrague (pisado / suelto)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = temp, onValueChange = { temp = it }, label = { Text("Temperatura del motor (frío / caliente)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = symptom, onValueChange = { symptom = it }, label = { Text("Síntoma (ej. se apaga al frenar)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = notes, onValueChange = { notes = it }, label = { Text("Notas") }, modifier = Modifier.fillMaxWidth())
+                Button(
+                    onClick = { onSave(app.jac.diagnosticlab.report.DriverNarrative(gear.trim(), clutch.trim(), temp.trim(), symptom.trim(), notes.trim())) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Guardar relato") }
+            }
+        }
+    }
 }
 
 /* ─────────────────────────── Piezas comunes ─────────────────────────── */

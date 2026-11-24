@@ -119,6 +119,7 @@ class DiagnosticViewModel(app: Application) : AndroidViewModel(app) {
     fun stopPoll() = lab.stopPoll()
     fun startOrderedMonitor() = lab.startOrderedMonitor()
     fun reconnectAndResumeMonitor() = lab.reconnectAndResumeMonitor()
+    fun setDriverNarrative(n: app.jac.diagnosticlab.report.DriverNarrative) = lab.setDriverNarrative(n)
     fun forceResetAll() = lab.forceResetAll()
     fun captureSnapshot(phase: String) = lab.captureSnapshot(phase)
     fun clearSnapshots() = lab.clearSnapshots()
@@ -194,6 +195,7 @@ fun JacApp(model: DiagnosticViewModel = viewModel()) {
                 if (bluetoothReady(context)) model.startAutodiag() else permissions()
             },
             reconnect = { model.reconnectAndResumeMonitor() },
+            saveNarrative = { model.setDriverNarrative(it) },
             fullScan = { model.fullScan() },
             reset = { model.forceResetAll() },
             startTest = { model.startGuidedTest(it) },

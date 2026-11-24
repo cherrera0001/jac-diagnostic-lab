@@ -84,6 +84,11 @@ import app.jac.diagnosticlab.analysis.HealthAssessment
 import app.jac.diagnosticlab.analysis.HealthInput
 import app.jac.diagnosticlab.analysis.HealthItem
 import app.jac.diagnosticlab.analysis.TripGuidanceSummary
+import app.jac.diagnosticlab.bt.LinkOutage
+import app.jac.diagnosticlab.bt.LinkOutageLog
+import app.jac.diagnosticlab.bt.LinkRecoveryPolicy
+import app.jac.diagnosticlab.bt.RecoveryAction
+import app.jac.diagnosticlab.report.DriverNarrative
 import app.jac.diagnosticlab.dynamic.GuidedTests
 import app.jac.diagnosticlab.dynamic.TestResult
 import app.jac.diagnosticlab.dynamic.TraceEvent
@@ -203,6 +208,10 @@ data class LabState(
     val testCue: String? = null,
     val testEvents: List<TraceEvent> = emptyList(),
     val testResults: List<TestResult> = emptyList(),
+    /** SPEC-035: cortes de enlace de la última captura, muestras para cronología/gráficos y relato del conductor. */
+    val linkOutages: List<LinkOutage> = emptyList(),
+    val lastTraceFrames: List<TraceFrame> = emptyList(),
+    val driverNarrative: DriverNarrative = DriverNarrative(),
     /** Últimas rondas para mini-gráficos (En vivo / prueba en curso). */
     val testHistory: List<TraceFrame> = emptyList(),
     // SPEC-034 R6 — Modo Tablero / Tablet Hands-Free y asistencia de conducción segura
@@ -234,6 +243,8 @@ class LabController(private val app: Application) {
     private val errors = mutableListOf<String>()
     /** Reconexiones automáticas tras enlace BLE bloqueado (el clon v2.1 se cuelga cada pocos minutos). */
     private var autoReconnects = 0
+    private val linkPolicy = LinkRecoveryPolicy()
+    private var outageLog = LinkOutageLog()
     private var startedAt = System.currentTimeMillis()
     private var sessionId = newId()
     private val vehicleNote =
@@ -249,8 +260,14 @@ class LabController(private val app: Application) {
         val savedAnchorMs = prefs.getLong("fuelAnchorMs", -1L)
         val savedConsumed = prefs.getFloat("fuelConsumedL", 0f).toDouble().coerceAtLeast(0.0)
         val savedAnchor = if (savedAnchorMs > 0L) FullTankAnchor(savedAnchorMs, savedCap) else null
+        val savedNarrative = DriverNarrative(
+            gear = prefs.getString("narGear", "").orEmpty(), clutch = prefs.getString("narClutch", "").orEmpty(),
+            temperature = prefs.getString("narTemp", "").orEmpty(), symptom = prefs.getString("narSymptom", "").orEmpty(),
+            notes = prefs.getString("narNotes", "").orEmpty(),
+        )
         state.update {
             it.copy(
+                driverNarrative = savedNarrative,
                 tankCapacityLiters = savedCap,
                 fullTankAnchor = savedAnchor,
                 fuelConsumedSinceAnchorLiters = savedConsumed,
@@ -1114,20 +1131,11 @@ class LabController(private val app: Application) {
         }
     }
 
-    private suspend fun reconnectKeepEvidence() {
-        stopPoll()
-        trace("RECONEXIÓN sin borrar evidencia (muestras=${samples.size})")
-        state.update {
-            it.copy(
-                busy = true,
-                error = null,
-                statusLine = "Reconectando dongle (clásico → BLE)…",
-            )
-        }
-        if (missingPermissions().isNotEmpty()) {
-            explain("Sin permisos Bluetooth no se puede reconectar.")
-            return
-        }
+    /**
+     * Reabre el dongle (clásico → BLE) y reinicializa el ELM sin tocar muestras ni DTC. SPEC-035 R1:
+     * la usan tanto la reconexión manual como la recuperación dentro de una captura.
+     */
+    private suspend fun relink(): Boolean {
         disconnectQuiet()
         refresh()
         val bonded = repo.bonded()
@@ -1172,6 +1180,24 @@ class LabController(private val app: Application) {
                 }
             }
         }
+        return linked
+    }
+
+    private suspend fun reconnectKeepEvidence() {
+        stopPoll()
+        trace("RECONEXIÓN sin borrar evidencia (muestras=${samples.size})")
+        state.update {
+            it.copy(
+                busy = true,
+                error = null,
+                statusLine = "Reconectando dongle (clásico → BLE)…",
+            )
+        }
+        if (missingPermissions().isNotEmpty()) {
+            explain("Sin permisos Bluetooth no se puede reconectar.")
+            return
+        }
+        val linked = relink()
         state.update { it.copy(busy = false) }
         if (linked && session != null) {
             state.update { it.copy(statusLine = "Reconectado. Reanudando monitor…") }
@@ -1419,6 +1445,9 @@ class LabController(private val app: Application) {
             errors = errors.toList(),
             tests = st.testResults,
             catalogVersion = JacT8Catalog.v1.version,
+            traceFrames = st.lastTraceFrames,
+            linkOutages = st.linkOutages,
+            narrative = st.driverNarrative.takeIf { it.hasContent },
         )
     }
 
@@ -1476,15 +1505,18 @@ class LabController(private val app: Application) {
 
     fun startGuidedTest(id: String) {
         val test = runCatching { GuidedTests.byId(id) }.getOrNull() ?: return explain("Prueba desconocida: $id")
-        val current = session ?: return explain("No hay adaptador en sesión. Pulse Leer la camioneta o Reconectar antes de la prueba.")
+        var current = session ?: return explain("No hay adaptador en sesión. Pulse Leer la camioneta o Reconectar antes de la prueba.")
         if (!autodiagGate.compareAndSet(false, true)) return state.update { it.copy(statusLine = "Espere: hay una lectura en curso.") }
         stopPoll()
         val supported = state.value.supported
         val pids = test.pids.filter { supported.isEmpty() || it in supported }
         testFrames = mutableListOf()
         testManual = mutableListOf()
+        outageLog = LinkOutageLog()
         testJob = scope.launch {
             var started = false
+            var failedReconnects = 0
+            var outageStartMs = 0L
             try {
                 val first = sampleRound(current, pids)
                 if (first == null) {
@@ -1531,16 +1563,53 @@ class LabController(private val app: Application) {
                     val frame = sampleRound(current, roundPids)
                     if (frame == null) {
                         misses++
+                        val now = System.currentTimeMillis()
+                        if (!outageLog.isOpen) {
+                            outageLog.begin(now); outageStartMs = now; failedReconnects = 0
+                            val why = current.exchanges.lastOrNull()?.let { "${it.command} → ${it.kind}" } ?: "sin respuesta"
+                            trace("ENLACE caída detectada ${java.time.Instant.ofEpochMilli(now)} · motivo: $why")
+                            val ev = TraceEvent(now, "ENLACE", "Sin respuesta de la ECU ($why). Se intenta reconectar sin cerrar la captura.")
+                            testManual += ev
+                            state.update { it.copy(testEvents = (it.testEvents + ev).sortedBy { e -> e.atMs }, linkOutages = outageLog.outages) }
+                        }
                         // SPEC-034 R6/R8: ante microcortes BT no se borra la sesión; se marca RECONECTANDO y se actualiza la notificación.
                         state.update { it.copy(liveLinkStatus = DashboardLinkStatus.RECONNECTING) }
                         if (misses == 1) promote()
-                        if (misses >= 5) {
-                            explain("Enlace perdido durante la prueba (5 rondas sin respuesta). Se guarda lo capturado.")
-                            break
+                        when (linkPolicy.decide(misses, failedReconnects, now - outageStartMs)) {
+                            RecoveryAction.KEEP_TRYING -> continue
+                            RecoveryAction.GIVE_UP -> {
+                                explain("Enlace perdido durante la prueba: ${failedReconnects} reconexión(es) fallida(s) en ${(now - outageStartMs) / 1000} s. Se guarda lo capturado.")
+                                outageLog.endUnrecovered(now)
+                                state.update { it.copy(linkOutages = outageLog.outages) }
+                                break
+                            }
+                            RecoveryAction.RECONNECT -> {
+                                trace("ENLACE reconexión #${failedReconnects + 1} dentro de la prueba (muestras acumuladas=${testFrames.size})")
+                                val ok = runCatching { relink() }.getOrElse { e -> trace("ENLACE relink falló: ${e.message}"); false }
+                                outageLog.reconnectAttempt(ok)
+                                val fresh = session
+                                if (ok && fresh != null) {
+                                    current = fresh
+                                    misses = 0
+                                } else {
+                                    failedReconnects++
+                                    delay(linkPolicy.backoffMs(failedReconnects))
+                                }
+                                state.update { it.copy(busy = false) }
+                                continue
+                            }
                         }
-                        continue
                     }
-                    val recoveredFromMiss = misses > 0
+                    val recoveredFromMiss = misses > 0 || outageLog.isOpen
+                    if (outageLog.isOpen) {
+                        val now = System.currentTimeMillis()
+                        outageLog.end(now)
+                        val last = outageLog.outages.last()
+                        trace("ENLACE recuperado tras ${last.durationMs} ms y ${last.reconnectAttempts} intento(s)")
+                        val ev = TraceEvent(now, "ENLACE", "Enlace recuperado tras ${"%.1f".format(java.util.Locale.ROOT, last.durationMs / 1000.0)} s. Hueco de datos: no se rellena.")
+                        testManual += ev
+                        state.update { it.copy(testEvents = (it.testEvents + ev).sortedBy { e -> e.atMs }, linkOutages = outageLog.outages) }
+                    }
                     misses = 0
                     val prevFrame = testFrames.lastOrNull()
                     testFrames += frame
@@ -1577,6 +1646,7 @@ class LabController(private val app: Application) {
                 }
             } finally {
                 withContext(NonCancellable) {
+                    if (outageLog.isOpen) outageLog.endUnrecovered(System.currentTimeMillis())
                     if (started) finishTest(test.id)
                     autodiagGate.set(false)
                     state.update { it.copy(activeTest = null, testCue = null, busy = false, liveLinkStatus = DashboardLinkStatus.PAUSED) }
@@ -1588,6 +1658,13 @@ class LabController(private val app: Application) {
     fun stopGuidedTest() {
         testJob?.cancel()
         testJob = null
+    }
+
+    /** SPEC-035 R8: relato opcional del conductor; persiste entre sesiones y viaja en el informe. */
+    fun setDriverNarrative(n: DriverNarrative) {
+        prefs.edit().putString("narGear", n.gear).putString("narClutch", n.clutch).putString("narTemp", n.temperature)
+            .putString("narSymptom", n.symptom).putString("narNotes", n.notes).apply()
+        state.update { it.copy(driverNarrative = n) }
     }
 
     fun markEvent(label: String = "Marcado por el acompañante") {
@@ -1605,6 +1682,8 @@ class LabController(private val app: Application) {
             state.update {
                 it.copy(
                     lastTripSummary = tripSummary,
+                    lastTraceFrames = testFrames.toList(),
+                    linkOutages = outageLog.outages,
                     liveLinkStatus = DashboardLinkStatus.PAUSED,
                     statusLine = "Vista en vivo detenida. ${testFrames.size} rondas guardadas en CSV.",
                 )
@@ -1626,6 +1705,8 @@ class LabController(private val app: Application) {
             it.copy(
                 testResults = (it.testResults + result).takeLast(20),
                 lastTripSummary = tripSummary,
+                lastTraceFrames = testFrames.toList(),
+                linkOutages = outageLog.outages,
                 statusLine = "Prueba terminada: ${result.title} → ${result.verdict.label}. ${result.summary}",
             )
         }
