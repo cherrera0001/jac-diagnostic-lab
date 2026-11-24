@@ -1,14 +1,19 @@
 package app.jac.diagnosticlab.car
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.car.app.CarAppService
 import androidx.car.app.CarContext
 import androidx.car.app.CarToast
 import androidx.car.app.Screen
 import androidx.car.app.Session
+import androidx.car.app.SessionInfo
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
+import androidx.car.app.model.CarIcon
 import androidx.car.app.model.GridItem
 import androidx.car.app.model.GridTemplate
 import androidx.car.app.model.ItemList
@@ -18,10 +23,13 @@ import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.validation.HostValidator
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import app.jac.diagnosticlab.JacApplication
 import app.jac.diagnosticlab.LabController
+import app.jac.diagnosticlab.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -46,7 +54,34 @@ class JacCarAppService : CarAppService() {
         }
     }
 
-    override fun onCreateSession(): Session = JacCarSession()
+    override fun onCreateSession(sessionInfo: SessionInfo): Session = JacCarSession()
+}
+
+private fun hasBluetoothPermissions(carContext: CarContext): Boolean {
+    if (Build.VERSION.SDK_INT < 31) return true
+    return ContextCompat.checkSelfPermission(carContext, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED &&
+        ContextCompat.checkSelfPermission(carContext, Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+}
+
+private fun triggerCarPrimaryAction(carContext: CarContext, lab: LabController, snap: CarDashboardSnapshot) {
+    when {
+        !snap.connected -> {
+            if (!hasBluetoothPermissions(carContext)) {
+                CarToast.makeText(carContext, "Autoriza permisos Bluetooth en el teléfono.", CarToast.LENGTH_LONG).show()
+                return
+            }
+            lab.startAutodiag()
+            CarToast.makeText(carContext, "Buscando adaptador OBD…", CarToast.LENGTH_SHORT).show()
+        }
+        snap.liveRunning -> {
+            lab.stopGuidedTest()
+            CarToast.makeText(carContext, "Lectura en vivo pausada.", CarToast.LENGTH_SHORT).show()
+        }
+        else -> {
+            lab.startGuidedTest("LIVE")
+            CarToast.makeText(carContext, "Iniciando lectura en vivo…", CarToast.LENGTH_SHORT).show()
+        }
+    }
 }
 
 class JacCarSession : Session() {
@@ -95,21 +130,7 @@ class JacCarDashboardScreen(
     }
 
     private fun onPrimaryAction() {
-        val snap = snapshot
-        when {
-            !snap.connected -> {
-                lab.startAutodiag()
-                CarToast.makeText(carContext, "Buscando adaptador OBD…", CarToast.LENGTH_SHORT).show()
-            }
-            snap.liveRunning -> {
-                lab.stopGuidedTest()
-                CarToast.makeText(carContext, "Lectura en vivo pausada.", CarToast.LENGTH_SHORT).show()
-            }
-            else -> {
-                lab.startGuidedTest("LIVE")
-                CarToast.makeText(carContext, "Iniciando lectura en vivo…", CarToast.LENGTH_SHORT).show()
-            }
-        }
+        triggerCarPrimaryAction(carContext, lab, snapshot)
         snapshot = CarDashboardModel.from(lab.state.value)
         invalidate()
     }
@@ -120,8 +141,8 @@ class JacCarDashboardScreen(
         snap.tiles.forEach { tile ->
             listBuilder.addItem(
                 GridItem.Builder()
-                    .setTitle(tile.title)
-                    .setText(tile.subtitle)
+                    .setTitle(tile.title.ifBlank { "—" })
+                    .setText(tile.subtitle.ifBlank { "—" })
                     .setImage(CarTileRenderer.iconFor(tile), GridItem.IMAGE_TYPE_LARGE)
                     .setOnClickListener {
                         when (tile.target) {
@@ -133,23 +154,28 @@ class JacCarDashboardScreen(
             )
         }
 
+        // ACTIONS_CONSTRAINTS_SIMPLE permite máximo 2 acciones y solo 1 con título de texto:
+        // la segunda acción (Estado/DTC) debe ser solo ícono para evitar IllegalArgumentException.
+        val statusIcon = CarIcon.Builder(
+            IconCompat.createWithResource(carContext, R.drawable.ic_car_status),
+        ).build()
         val strip = ActionStrip.Builder()
             .addAction(
                 Action.Builder()
-                    .setTitle(snap.primaryActionLabel)
+                    .setTitle(snap.primaryActionLabel.ifBlank { "OBD" })
                     .setOnClickListener { onPrimaryAction() }
                     .build(),
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Estado")
+                    .setIcon(statusIcon)
                     .setOnClickListener { screenManager.push(JacCarStatusScreen(carContext, lab)) }
                     .build(),
             )
             .build()
 
         return GridTemplate.Builder()
-            .setTitle(snap.headerTitle)
+            .setTitle(snap.headerTitle.ifBlank { "JAC T8" })
             .setHeaderAction(Action.APP_ICON)
             .setActionStrip(strip)
             .setSingleList(listBuilder.build())
@@ -197,17 +223,16 @@ class JacCarDetailScreen(
         val snap = snapshot
         val pane = Pane.Builder()
         snap.detailRows.take(4).forEach { r ->
-            val rb = Row.Builder().setTitle(r.title).addText(r.line1)
-            r.line2?.let { rb.addText(it) }
+            val rb = Row.Builder().setTitle(r.title.ifBlank { "—" })
+            if (r.line1.isNotBlank()) rb.addText(r.line1)
+            r.line2?.takeIf { it.isNotBlank() }?.let { rb.addText(it) }
             pane.addRow(rb.build())
         }
         pane.addAction(
             Action.Builder()
-                .setTitle(snap.primaryActionLabel)
+                .setTitle(snap.primaryActionLabel.ifBlank { "OBD" })
                 .setOnClickListener {
-                    if (!snap.connected) lab.startAutodiag()
-                    else if (snap.liveRunning) lab.stopGuidedTest()
-                    else lab.startGuidedTest("LIVE")
+                    triggerCarPrimaryAction(carContext, lab, snap)
                     snapshot = CarDashboardModel.from(lab.state.value)
                     invalidate()
                 }
@@ -260,8 +285,9 @@ class JacCarStatusScreen(
         val snap = snapshot
         val list = ItemList.Builder()
         snap.statusRows.take(6).forEach { r ->
-            val rb = Row.Builder().setTitle(r.title).addText(r.line1)
-            r.line2?.let { rb.addText(it) }
+            val rb = Row.Builder().setTitle(r.title.ifBlank { "—" })
+            if (r.line1.isNotBlank()) rb.addText(r.line1)
+            r.line2?.takeIf { it.isNotBlank() }?.let { rb.addText(it) }
             list.addItem(rb.build())
         }
         val strip = ActionStrip.Builder()

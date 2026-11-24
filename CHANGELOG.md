@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.19.1 — 2026-11-24 (JAC Diagnostic Lab) — Auditoría y corrección de compatibilidad con Android Auto
+
+- **`AndroidManifest.xml`:** la clave de metadatos era incorrecta (`androidx.car.app.minCarAppApiLevel`); ahora es `androidx.car.app.minCarApiLevel` (valor `1`). El servicio declara `android:icon` y la app usa `@mipmap/ic_launcher` (nuevos íconos adaptativos y `ic_car_status`).
+- **`build.gradle.kts`:** agrega `androidx.car.app:app-projected:1.7.0`, necesario para proyectar en Android Auto.
+- **`JacCarAppService`:** `onCreateSession(SessionInfo)`; la tira de acciones de la grilla tiene una sola acción con título y la segunda solo con ícono (`ACTIONS_CONSTRAINTS_SIMPLE` lanzaba `IllegalArgumentException` con dos títulos); textos vacíos protegidos; la acción «Conectar» comprueba `BLUETOOTH_CONNECT`/`BLUETOOTH_SCAN` y avisa en la pantalla del auto si faltan.
+- **Verificado sin cambios:** `automotive_app_desc.xml` con `<uses name="template" />`, categoría `IOT`, `createHostValidator()` (todos los hosts en debug, lista de hosts conocidos en release). No se requiere `ACCESS_SURFACE` (la app no usa superficie).
+- **Pruebas:** `r25` ampliada y regresión de la tira de acciones; `:app:testDebugUnitTest` y `:app:assembleDebug` en verde. Versión `1.19.1` (`versionCode` 37).
+- **Uso:** en Android Auto activar Opciones de desarrollador y «Fuentes desconocidas» para que la app aparezca en el selector.
+- SHA-256: `446c795c374db9b2bd86a1294bdb5cbffb26c37d1decddf1b2486dfd65f9aa76`
+
 ## v1.19.0 — 2026-11-22 (JAC Diagnostic Lab) — SPEC-034 R7–R11: Combustible estimado, captura continua en segundo plano, Set Crítico de 8 PIDs y Diagnóstico Diferencial
 
 - **Trazabilidad GitHub Issues / Projects:** revisión de `#1 (SAFE-001)` (OPEN, `P0/diag/safety`, Project #22 `JAC T8 / C4A Automotive Security`) y mapeo formal en `specs/034-evidence-engine-mvp/spec.md`.

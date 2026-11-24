@@ -125,4 +125,14 @@ class CarDashboardModelTest {
         assertEquals("↑ 3ª", carSnap.tiles[0].unitText)
         assertTrue(carSnap.tiles[0].subtitle.contains("Subir a 3ª"))
     }
+
+    @Test fun carGridActionStripKeepsOnlyOneTitledAction() {
+        // ACTIONS_CONSTRAINTS_SIMPLE (Car App Library) admite 2 acciones y solo 1 con título;
+        // las plantillas no se pueden construir en JVM sin Robolectric, así que se valida el código fuente.
+        val src = java.io.File("src/main/java/app/jac/diagnosticlab/car/JacCarAppService.kt").readText()
+        val strip = src.substringAfter("val strip = ActionStrip.Builder()").substringBefore(".build()\n\n        return GridTemplate")
+        assertEquals("Una sola acción con título en el ActionStrip de la grilla", 1, Regex("setTitle\\(").findAll(strip).count())
+        assertTrue("La segunda acción debe ser solo ícono", strip.contains(".setIcon(statusIcon)"))
+        assertTrue(src.contains("override fun onCreateSession(sessionInfo: SessionInfo)"))
+    }
 }

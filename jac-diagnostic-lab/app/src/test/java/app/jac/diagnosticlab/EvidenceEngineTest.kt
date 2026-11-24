@@ -618,14 +618,17 @@ class EvidenceEngineTest {
     fun r25_androidAutoCarAppServiceAndManifestDeclareGlanceableReadOnlyDashboard() {
         val gradle = java.io.File("build.gradle.kts").readText()
         assertTrue("Debe incluir androidx.car.app:app", gradle.contains("androidx.car.app:app:"))
+        assertTrue("Debe incluir androidx.car.app:app-projected para Android Auto", gradle.contains("androidx.car.app:app-projected:"))
 
         val manifest = java.io.File("src/main/AndroidManifest.xml").readText()
         assertTrue(manifest.contains("com.google.android.gms.car.application"))
         assertTrue(manifest.contains("@xml/automotive_app_desc"))
-        assertTrue(manifest.contains("androidx.car.app.minCarAppApiLevel"))
+        assertTrue("Debe declarar la clave exacta androidx.car.app.minCarApiLevel", manifest.contains("androidx.car.app.minCarApiLevel"))
+        assertFalse("No debe usar la clave errónea minCarAppApiLevel", manifest.contains("androidx.car.app.minCarAppApiLevel"))
         assertTrue(manifest.contains(".car.JacCarAppService"))
         assertTrue(manifest.contains("androidx.car.app.CarAppService"))
         assertTrue(manifest.contains("androidx.car.app.category.IOT"))
+        assertTrue("Debe usar icono mipmap compatible con Android Auto", manifest.contains("@mipmap/ic_launcher"))
 
         val carDesc = java.io.File("src/main/res/xml/automotive_app_desc.xml").readText()
         assertTrue(carDesc.contains("<automotiveApp>"))

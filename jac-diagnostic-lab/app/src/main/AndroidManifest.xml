@@ -29,7 +29,7 @@
     <application
         android:name=".JacApplication"
         android:allowBackup="false"
-        android:icon="@drawable/ic_launcher"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.JacDiagnosticLab">
@@ -52,11 +52,12 @@
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
         <meta-data
-            android:name="androidx.car.app.minCarAppApiLevel"
+            android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
         <service
             android:name=".car.JacCarAppService"
             android:exported="true"
+            android:icon="@mipmap/ic_launcher"
             android:label="@string/app_name">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />

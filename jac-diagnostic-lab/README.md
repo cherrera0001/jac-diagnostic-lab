@@ -2,7 +2,7 @@
 
 Aplicación Android de diagnóstico **solo lectura** para una **JAC T8** (unidad declarada 2023, diésel) con adaptador **ELM327 Mini Bluetooth** (`OBDII` clásico / `OBDBLE` BLE).
 
-**Versión actual: 1.19.0** (`versionCode` 36), 22-11-2026, instalada en Xiaomi `2512BPNDAG` (base **validada en la unidad real** con ECU Delphi DCM6.2; ver `research/validation/2026-11-18-unidad-real.md`). Integra **SPEC-034 R7–R11**: estimación de combustible sin mirar el tablero (`PID 0x2F` o respaldo `0x5E`/MAF `0x10` desde «Estanque lleno», siempre etiquetada `ESTIMACIÓN/INFERENCIA`), captura continua en segundo plano (`ForegroundService` con notificación persistente), **Android Auto nativo** en solo lectura (tablero 3×2 + detalle + combustible estimado), **Perfil de Captura Rápida de Falla** (Set Crítico de 8 PIDs: `0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) y **Diagnóstico Diferencial** en informe PDF (`WorkshopReport`/`WorkshopPdf`) con recomendación automática del Set Crítico. APK: [release v1.19.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0).
+**Versión actual: 1.19.1** (`versionCode` 37), 24-11-2026 (corrige la compatibilidad con Android Auto; ver CHANGELOG), instalada en Xiaomi `2512BPNDAG` (base **validada en la unidad real** con ECU Delphi DCM6.2; ver `research/validation/2026-11-18-unidad-real.md`). Integra **SPEC-034 R7–R11**: estimación de combustible sin mirar el tablero (`PID 0x2F` o respaldo `0x5E`/MAF `0x10` desde «Estanque lleno», siempre etiquetada `ESTIMACIÓN/INFERENCIA`), captura continua en segundo plano (`ForegroundService` con notificación persistente), **Android Auto nativo** en solo lectura (tablero 3×2 + detalle + combustible estimado), **Perfil de Captura Rápida de Falla** (Set Crítico de 8 PIDs: `0x49, 0x4A, 0x04, 0x62, 0x0C, 0x0D, 0x23, 0x42`) y **Diagnóstico Diferencial** en informe PDF (`WorkshopReport`/`WorkshopPdf`) con recomendación automática del Set Crítico. APK: [release v1.19.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0).
 
 Versión 1.10.0 (`versionCode` 23): Informe para el taller generado después de leer todo, con detalle por código, cuadro congelado completo y registro de comunicación (SPEC-033). APK: [release v1.10.0](https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.10.0) · `dist/jac-diagnostic-lab-1.10.0-debug.apk`.
 
@@ -19,8 +19,8 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 | Qué | Dónde |
 | --- | --- |
 | Release + APK | https://github.com/cherrera0001/jac-diagnostic-lab/releases/tag/v1.19.0 |
-| Archivo | `jac-diagnostic-lab-1.19.0-debug.apk` (con su `.sha256` y copia en `dist/`) |
-| SHA-256 (v1.19.0) | `fad3f334714eb368cb9c05f07346d74db56ccab169bd31e8ed4deba7fd3d2d5b` |
+| Archivo | `jac-diagnostic-lab-1.19.1-debug.apk` (con su `.sha256` y copia en `dist/`) |
+| SHA-256 (v1.19.1) | `446c795c374db9b2bd86a1294bdb5cbffb26c37d1decddf1b2486dfd65f9aa76` |
 | Issue abierto | `#1 (SAFE-001)` · Project #22 (`JAC T8 / C4A Automotive Security`) |
 
 ### Antes de instalar
@@ -32,12 +32,12 @@ Licencia: [Apache-2.0](../LICENSE). Uso, aviso de seguridad y datos que no se su
 
 ### Instalar
 
-1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.19.0-debug.apk.sha256`.
+1. Descargue la APK del release y compruebe la huella: `sha256sum -c jac-diagnostic-lab-1.19.1-debug.apk.sha256`.
 2. En Android permita instalar desde esa fuente (archivos o navegador).
 3. O por USB:
 
 ```text
-adb install -r jac-diagnostic-lab-1.19.0-debug.apk
+adb install -r jac-diagnostic-lab-1.19.1-debug.apk
 ```
 
 ## Pantallas y modos (v1.19.0)
