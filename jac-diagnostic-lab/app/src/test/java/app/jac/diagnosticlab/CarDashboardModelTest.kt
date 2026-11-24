@@ -135,4 +135,18 @@ class CarDashboardModelTest {
         assertTrue("La segunda acción debe ser solo ícono", strip.contains(".setIcon(statusIcon)"))
         assertTrue(src.contains("override fun onCreateSession(sessionInfo: SessionInfo)"))
     }
+
+    @Test fun glanceTilesKeepsSingleRowOfThreeWithShortLabels() {
+        val glance = CarDashboardModel.glanceTiles(CarDashboardModel.from(LabState()).tiles)
+        assertEquals(listOf("RPM", "ECT", "DTC"), glance.map { it.id })
+        glance.forEach { assertTrue("Título corto: ${it.title}", it.title.substringBefore(" /").length <= 14) }
+    }
+
+    @Test fun glanceTilesReplacesCoolantWithDpfRegenWarning() {
+        val base = CarDashboardModel.from(LabState()).tiles
+        val regen = base.map { if (it.id == "DPF") it.copy(valueText = "REGEN") else it }
+        val glance = CarDashboardModel.glanceTiles(regen)
+        assertEquals(listOf("RPM", "DPF", "DTC"), glance.map { it.id })
+        assertEquals("No apagar", glance[1].subtitle)
+    }
 }

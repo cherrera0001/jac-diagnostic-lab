@@ -54,6 +54,29 @@ object CarDashboardModel {
     private fun parseVoltageText(raw: String): Double? =
         voltRegex.find(raw)?.groupValues?.getOrNull(1)?.replace(',', '.')?.toDoubleOrNull()
 
+    /**
+     * Vista de una sola fila (3 mosaicos) para pantallas de poca altura: sin segunda fila cortada ni scroll.
+     * Motor · Refrigerante (con la tensión ECU en su línea de estado) · Estado/DTC.
+     * Si el DPF está en regeneración activa, ese aviso («no apagar») reemplaza al de refrigerante.
+     * Turbo/riel, DPF y temperaturas siguen en la vista de detalle (clic en Motor o Refrigerante).
+     */
+    fun glanceTiles(tiles: List<CarTile>): List<CarTile> {
+        fun byId(id: String) = tiles.firstOrNull { it.id == id }
+        val motor = byId("RPM")
+        val ect = byId("ECT")
+        val volt = byId("VOLT")
+        val dpf = byId("DPF")
+        val status = byId("DTC")
+        val middle = when {
+            dpf != null && dpf.valueText == "REGEN" -> dpf.copy(title = "DPF regenera", subtitle = "No apagar")
+            ect != null -> ect.copy(
+                subtitle = volt?.valueText?.takeIf { it != "—" }?.let { "$it V" } ?: ect.subtitle,
+            )
+            else -> null
+        }
+        return listOfNotNull(motor, middle, status)
+    }
+
     fun from(state: LabState): CarDashboardSnapshot {
         val scanMap = state.scanSignals.associate { it.key to it.value }
         val liveMap = state.testLive?.values.orEmpty()

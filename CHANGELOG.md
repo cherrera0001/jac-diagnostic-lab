@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.19.4 — 2026-11-24 (JAC Diagnostic Lab) — Android Auto: tablero de una sola fila
+
+- **`car/CarDashboardModel.glanceTiles` + `JacCarDashboardScreen`:** la grilla del auto muestra 3 mosaicos en una fila (Motor, Refrigerante con la tensión ECU en su línea de estado, Estado/DTC) para que no se corte la segunda fila en pantallas de poca altura. Si el DPF está regenerando, «DPF regenera · No apagar» reemplaza al de refrigerante. Turbo/riel, DPF y temperaturas siguen en la vista de detalle (clic en Motor o Refrigerante).
+- Pruebas nuevas en `CarDashboardModelTest`. Versión `1.19.4` (`versionCode` 40). Instalada en el teléfono; **pendiente de validar visualmente en DHU y en la JAC T8**. SHA-256: `2d6c87a6ba67b16d911618922e0509a9e8487c3b7459fb7b078f3123480deee4`
+
+## v1.19.3 — 2026-11-24 (JAC Diagnostic Lab) — Android Auto: rediseño del tablero
+
+- **Hallazgo con el Desktop Head Unit:** con la categoría `POI` (v1.19.2) y «Fuentes desconocidas» activa, Android Auto detecta `JacCarAppService` (`GH.AppNotifier: Posting notification for new app`) y la app abre.
+- **Mosaicos (`car/CarTileRenderer.kt`):** tarjeta de 256 px con valor grande, unidad y estado dentro de la imagen (se recorta con «…»); el título pasa a una palabra (`Motor`, `Refrigerante`, `Turbo`…) y se elimina el subtítulo, así las 2 filas caben sin desplazar y nada se trunca.
+- **Ícono de app:** manómetro ámbar sobre fondo oscuro en lugar del rectángulo amarillo; se ve en la cabecera y en el dock de Android Auto.
+- Versión `1.19.3` (`versionCode` 39). Pendiente de validar en la pantalla de la JAC T8. SHA-256: `c5e4de0a0f913bb6aeec381d5ff6a0fbee04d4e2c331ae638bb631613306d822`
+
+## v1.19.2 — 2026-11-24 (JAC Diagnostic Lab) — Android Auto: categoría POI
+
+- **`AndroidManifest.xml`:** el `CarAppService` pasa de la categoría `androidx.car.app.category.IOT` a `androidx.car.app.category.POI`. Con la v1.19.1 Android Auto 18.1 ya listaba el paquete pero la app no aparecía en el selector del vehículo.
+- Prueba `r25` actualizada. Versión `1.19.2` (`versionCode` 38). Pendiente de validar en la pantalla de la JAC T8.
+
 ## v1.19.1 — 2026-11-24 (JAC Diagnostic Lab) — Auditoría y corrección de compatibilidad con Android Auto
 
 - **`AndroidManifest.xml`:** la clave de metadatos era incorrecta (`androidx.car.app.minCarAppApiLevel`); ahora es `androidx.car.app.minCarApiLevel` (valor `1`). El servicio declara `android:icon` y la app usa `@mipmap/ic_launcher` (nuevos íconos adaptativos y `ic_car_status`).

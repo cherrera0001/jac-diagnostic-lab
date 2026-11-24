@@ -138,11 +138,10 @@ class JacCarDashboardScreen(
     override fun onGetTemplate(): Template {
         val snap = snapshot
         val listBuilder = ItemList.Builder()
-        snap.tiles.forEach { tile ->
+        CarDashboardModel.glanceTiles(snap.tiles).forEach { tile ->
             listBuilder.addItem(
                 GridItem.Builder()
-                    .setTitle(tile.title.ifBlank { "—" })
-                    .setText(tile.subtitle.ifBlank { "—" })
+                    .setTitle(tile.title.substringBefore(" /").ifBlank { "—" })
                     .setImage(CarTileRenderer.iconFor(tile), GridItem.IMAGE_TYPE_LARGE)
                     .setOnClickListener {
                         when (tile.target) {

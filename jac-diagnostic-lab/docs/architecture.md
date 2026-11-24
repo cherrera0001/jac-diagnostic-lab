@@ -5,7 +5,7 @@ La aplicación es un módulo Android. El protocolo OBD no importa clases de Andr
 ```text
 AppShell Compose (Estado / En vivo / Pruebas / Datos / Señales / Informe)
     ├ Herramientas avanzadas: Hoy / Monitor / Taller / Avisos / Copia
-    ├ car/ (Android Auto · androidx.car.app:app:1.7.0, categoría IOT, sin foco de audio)
+    ├ car/ (Android Auto · androidx.car.app:app:1.7.0, categoría POI, sin foco de audio)
     │   ├ JacCarAppService / JacCarSession (GridTemplate 3×2 · PaneTemplate · ListTemplate)
     │   ├ CarTileRenderer (mosaicos 160×160 cacheados)
     │   └ CarDashboardModel (puro JVM, comparte LabController y DrivingGuidanceEngine)

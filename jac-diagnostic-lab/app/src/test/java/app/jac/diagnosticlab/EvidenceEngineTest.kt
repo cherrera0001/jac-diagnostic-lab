@@ -627,7 +627,7 @@ class EvidenceEngineTest {
         assertFalse("No debe usar la clave errónea minCarAppApiLevel", manifest.contains("androidx.car.app.minCarAppApiLevel"))
         assertTrue(manifest.contains(".car.JacCarAppService"))
         assertTrue(manifest.contains("androidx.car.app.CarAppService"))
-        assertTrue(manifest.contains("androidx.car.app.category.IOT"))
+        assertTrue(manifest.contains("androidx.car.app.category.POI"))
         assertTrue("Debe usar icono mipmap compatible con Android Auto", manifest.contains("@mipmap/ic_launcher"))
 
         val carDesc = java.io.File("src/main/res/xml/automotive_app_desc.xml").readText()
